@@ -392,6 +392,38 @@ class _ScheduleViewState extends State<ScheduleView> {
         }
         await _refreshShifts();
       },
+      onMoveShift: (shift, newDay, newEmployeeId) async {
+        // Move shift to a new day and/or employee
+        // Calculate the shift duration to preserve time
+        final duration = shift.end.difference(shift.start);
+        final newStart = DateTime(
+          newDay.year, newDay.month, newDay.day,
+          shift.start.hour, shift.start.minute,
+        );
+        final newEnd = newStart.add(duration);
+        
+        if (shift.id != null) {
+          // Update existing shift with new employee and times
+          final updated = Shift(
+            id: shift.id,
+            employeeId: newEmployeeId,
+            startTime: newStart,
+            endTime: newEnd,
+            label: shift.text,
+          );
+          await _shiftDao.update(updated);
+        } else {
+          // Insert as new (shouldn't happen for drag, but handle it)
+          final newShift = Shift(
+            employeeId: newEmployeeId,
+            startTime: newStart,
+            endTime: newEnd,
+            label: shift.text,
+          );
+          await _shiftDao.insert(newShift);
+        }
+        await _refreshShifts();
+      },
       );
     }
 
@@ -512,6 +544,7 @@ class WeeklyScheduleView extends StatefulWidget {
   final void Function(ShiftPlaceholder oldShift, DateTime newStart, DateTime newEnd)? onUpdateShift;
   final void Function(ShiftPlaceholder shift)? onCopyShift;
   final void Function(DateTime day, int employeeId)? onPasteTarget;
+  final void Function(ShiftPlaceholder shift, DateTime newDay, int newEmployeeId)? onMoveShift;
   final bool clipboardAvailable;
 
   const WeeklyScheduleView({
@@ -522,6 +555,7 @@ class WeeklyScheduleView extends StatefulWidget {
     this.onUpdateShift,
     this.onCopyShift,
     this.onPasteTarget,
+    this.onMoveShift,
     this.clipboardAvailable = false,
   });
 
@@ -533,6 +567,9 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
   ShiftPlaceholder? _selectedShift;
   DateTime? _selectedTargetDay;
   int? _selectedTargetEmployeeId;
+  // Drag & drop state
+  DateTime? _dragHoverDay;
+  int? _dragHoverEmployeeId;
   late ScrollController _scrollController;
   final EmployeeAvailabilityDao _availabilityDao = EmployeeAvailabilityDao();
   final TimeOffDao _timeOffDao = TimeOffDao();
@@ -837,71 +874,114 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                       _selectedTargetDay == d && 
                                       _selectedTargetEmployeeId == e.id;
                                   final clipboardAvailable = widget.clipboardAvailable;
+                                  final isDragHover = _dragHoverDay != null &&
+                                      _dragHoverDay == d &&
+                                      _dragHoverEmployeeId == e.id;
 
-                                  return GestureDetector(
-                                    onTap: () {
-                                      if (widget.clipboardAvailable && widget.onPasteTarget != null) {
-                                        // Paste if clipboard has data
-                                        widget.onPasteTarget!(d, e.id!);
-                                      } else {
-                                        // Otherwise just select the cell
-                                        setState(() {
-                                          _selectedTargetDay = d;
-                                          _selectedTargetEmployeeId = e.id;
-                                          _selectedShift = null;
-                                        });
+                                  return DragTarget<ShiftPlaceholder>(
+                                    onWillAcceptWithDetails: (details) {
+                                      // Accept drops from other cells (not the same cell)
+                                      final draggedShift = details.data;
+                                      final isSameCell = draggedShift.employeeId == e.id &&
+                                          draggedShift.start.year == d.year &&
+                                          draggedShift.start.month == d.month &&
+                                          draggedShift.start.day == d.day;
+                                      return !isSameCell;
+                                    },
+                                    onAcceptWithDetails: (details) {
+                                      setState(() {
+                                        _dragHoverDay = null;
+                                        _dragHoverEmployeeId = null;
+                                      });
+                                      if (widget.onMoveShift != null) {
+                                        widget.onMoveShift!(details.data, d, e.id!);
                                       }
                                     },
-                                    onDoubleTap: () async {
-                                      // Create a new shift on double-click with availability check
-                                      await _showAddShiftDialogWithAvailability(context, d, e.id!);
+                                    onMove: (details) {
+                                      setState(() {
+                                        _dragHoverDay = d;
+                                        _dragHoverEmployeeId = e.id;
+                                      });
                                     },
-                                    onLongPress: () {
-                                      if (widget.clipboardAvailable && widget.onPasteTarget != null) {
-                                        widget.onPasteTarget!(d, e.id!);
-                                      } else {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('No shift copied to paste')),
-                                        );
-                                      }
+                                    onLeave: (data) {
+                                      setState(() {
+                                        _dragHoverDay = null;
+                                        _dragHoverEmployeeId = null;
+                                      });
                                     },
-                                    onSecondaryTapDown: (details) {
-                                      _showEmptyCellContextMenu(context, d, e.id!, position: details.globalPosition);
-                                    },
-                                    child: FutureBuilder<Map<String, dynamic>>(
-                                      future: _checkAvailability(e.id!, d),
-                                      builder: (context, snapshot) {
-                                        bool showDash = false;
-                                        if (snapshot.hasData) {
-                                          final type = snapshot.data!['type'] as String;
-                                          final available = snapshot.data!['available'] as bool;
-                                          if (type == 'time-off' || !available) {
-                                            showDash = true;
+                                    builder: (context, candidateData, rejectedData) {
+                                      return GestureDetector(
+                                        onTap: () {
+                                          if (widget.clipboardAvailable && widget.onPasteTarget != null) {
+                                            // Paste if clipboard has data
+                                            widget.onPasteTarget!(d, e.id!);
+                                          } else {
+                                            // Otherwise just select the cell
+                                            setState(() {
+                                              _selectedTargetDay = d;
+                                              _selectedTargetEmployeeId = e.id;
+                                              _selectedShift = null;
+                                            });
                                           }
-                                        }
+                                        },
+                                        onDoubleTap: () async {
+                                          // Create a new shift on double-click with availability check
+                                          await _showAddShiftDialogWithAvailability(context, d, e.id!);
+                                        },
+                                        onLongPress: () {
+                                          if (widget.clipboardAvailable && widget.onPasteTarget != null) {
+                                            widget.onPasteTarget!(d, e.id!);
+                                          } else {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('No shift copied to paste')),
+                                            );
+                                          }
+                                        },
+                                        onSecondaryTapDown: (details) {
+                                          _showEmptyCellContextMenu(context, d, e.id!, position: details.globalPosition);
+                                        },
+                                        child: FutureBuilder<Map<String, dynamic>>(
+                                          future: _checkAvailability(e.id!, d),
+                                          builder: (context, snapshot) {
+                                            bool showDash = false;
+                                            if (snapshot.hasData) {
+                                              final type = snapshot.data!['type'] as String;
+                                              final available = snapshot.data!['available'] as bool;
+                                              if (type == 'time-off' || !available) {
+                                                showDash = true;
+                                              }
+                                            }
 
-                                        return Container(
-                                          height: 60,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            border: Border.all(
-                                              color: isTargetSelected 
-                                                ? Colors.blue 
-                                                : Theme.of(context).dividerColor,
-                                              width: isTargetSelected ? 2.5 : 1,
-                                            ),
-                                            color: isTargetSelected 
-                                              ? Colors.blue.withAlpha(13) 
-                                              : null,
-                                          ),
-                                          child: clipboardAvailable && isTargetSelected 
-                                          ? Icon(Icons.content_paste, color: Colors.blue.withAlpha(128), size: 20)
-                                            : showDash
-                                              ? const Text('-', style: TextStyle(fontSize: 24, color: Colors.grey))
-                                              : null,
-                                        );
-                                      },
-                                    ),
+                                            return Container(
+                                              height: 60,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                border: Border.all(
+                                                  color: isDragHover
+                                                    ? Colors.green
+                                                    : isTargetSelected 
+                                                      ? Colors.blue 
+                                                      : Theme.of(context).dividerColor,
+                                                  width: isDragHover ? 3 : (isTargetSelected ? 2.5 : 1),
+                                                ),
+                                                color: isDragHover
+                                                  ? Colors.green.withAlpha(30)
+                                                  : isTargetSelected 
+                                                    ? Colors.blue.withAlpha(13) 
+                                                    : null,
+                                              ),
+                                              child: isDragHover
+                                                ? const Icon(Icons.add_circle_outline, color: Colors.green, size: 24)
+                                                : clipboardAvailable && isTargetSelected 
+                                                  ? Icon(Icons.content_paste, color: Colors.blue.withAlpha(128), size: 20)
+                                                  : showDash
+                                                    ? const Text('-', style: TextStyle(fontSize: 24, color: Colors.grey))
+                                                    : null,
+                                            );
+                                          },
+                                        ),
+                                      );
+                                    },
                                   );
                                 }
 
@@ -912,57 +992,103 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                     _selectedShift!.employeeId == s.employeeId && 
                                     _selectedShift!.start == s.start;
 
-                                return GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedShift = s;
-                                      _selectedTargetDay = null;
-                                      _selectedTargetEmployeeId = null;
-                                    });
-                                  },
-                                  onDoubleTap: () async {
-                                    final res = await _showEditDialog(context, d, s);
-                                    if (res != null && widget.onUpdateShift != null) {
-                                      widget.onUpdateShift!(s, res[0], res[1]);
-                                    }
-                                  },
-                                  onLongPress: () {
-                                    setState(() {
-                                      _selectedShift = s;
-                                      _selectedTargetDay = null;
-                                      _selectedTargetEmployeeId = null;
-                                    });
-                                    _showShiftContextMenu(context, s);
-                                  },
-                                  onSecondaryTapDown: (details) {
-                                    setState(() {
-                                      _selectedShift = s;
-                                      _selectedTargetDay = null;
-                                      _selectedTargetEmployeeId = null;
-                                    });
-                                    _showShiftContextMenu(context, s, position: details.globalPosition);
-                                  },
-                                  child: Container(
+                                // Wrap in Draggable for drag & drop support
+                                return Draggable<ShiftPlaceholder>(
+                                  data: s,
+                                  feedback: Material(
+                                    elevation: 4,
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Container(
+                                      width: cellWidth - 4,
+                                      height: 56,
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: Colors.blue, width: 2),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          _isLabelOnly(s.text)
+                                            ? _labelText(s.text)
+                                            : '$startLabel - $endLabel',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  childWhenDragging: Container(
                                     height: 60,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: isShiftSelected ? Colors.blue : Theme.of(context).dividerColor,
-                                        width: isShiftSelected ? 2.5 : 1,
+                                        color: Colors.grey.shade300,
+                                        width: 1,
+                                        style: BorderStyle.solid,
                                       ),
-                                      color: isShiftSelected ? Colors.blue.withAlpha(38) : null,
+                                      color: Colors.grey.shade200,
                                     ),
-                                    child: Center(
-                                      child: Text(
-                                        _isLabelOnly(s.text)
-                                          ? _labelText(s.text)
-                                          : '$startLabel - $endLabel',
-                                        style: TextStyle(
-                                          fontWeight: isShiftSelected ? FontWeight.bold : FontWeight.normal,
-                                          color: Theme.of(context).brightness == Brightness.dark 
-                                            ? Colors.white 
-                                            : Colors.black87,
-                                          fontSize: 12,
+                                    child: const Text(
+                                      'Moving...',
+                                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                                    ),
+                                  ),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedShift = s;
+                                        _selectedTargetDay = null;
+                                        _selectedTargetEmployeeId = null;
+                                      });
+                                    },
+                                    onDoubleTap: () async {
+                                      final res = await _showEditDialog(context, d, s);
+                                      if (res != null && widget.onUpdateShift != null) {
+                                        widget.onUpdateShift!(s, res[0], res[1]);
+                                      }
+                                    },
+                                    onLongPress: () {
+                                      setState(() {
+                                        _selectedShift = s;
+                                        _selectedTargetDay = null;
+                                        _selectedTargetEmployeeId = null;
+                                      });
+                                      _showShiftContextMenu(context, s);
+                                    },
+                                    onSecondaryTapDown: (details) {
+                                      setState(() {
+                                        _selectedShift = s;
+                                        _selectedTargetDay = null;
+                                        _selectedTargetEmployeeId = null;
+                                      });
+                                      _showShiftContextMenu(context, s, position: details.globalPosition);
+                                    },
+                                    child: Container(
+                                      height: 60,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: isShiftSelected ? Colors.blue : Theme.of(context).dividerColor,
+                                          width: isShiftSelected ? 2.5 : 1,
+                                        ),
+                                        color: isShiftSelected ? Colors.blue.withAlpha(38) : null,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          _isLabelOnly(s.text)
+                                            ? _labelText(s.text)
+                                            : '$startLabel - $endLabel',
+                                          style: TextStyle(
+                                            fontWeight: isShiftSelected ? FontWeight.bold : FontWeight.normal,
+                                            color: Theme.of(context).brightness == Brightness.dark 
+                                              ? Colors.white 
+                                              : Colors.black87,
+                                            fontSize: 12,
+                                          ),
                                         ),
                                       ),
                                     ),
