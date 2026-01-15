@@ -5,9 +5,11 @@ import '../../database/time_off_dao.dart';
 import '../../database/employee_availability_dao.dart';
 import '../../database/shift_template_dao.dart';
 import '../../database/job_code_settings_dao.dart';
+import '../../database/shift_dao.dart';
 import '../../models/employee.dart';
 import '../../models/time_off_entry.dart';
 import '../../models/shift_template.dart';
+import '../../models/shift.dart';
 
 // Custom intents for keyboard shortcuts
 class CopyIntent extends Intent {
@@ -50,9 +52,9 @@ class _ScheduleViewState extends State<ScheduleView> {
   late ScheduleMode _mode;
   final EmployeeDao _employeeDao = EmployeeDao();
   final TimeOffDao _timeOffDao = TimeOffDao();
+  final ShiftDao _shiftDao = ShiftDao();
   List<Employee> _employees = [];
   List<ShiftPlaceholder> _shifts = [];
-  List<ShiftPlaceholder> _manualShifts = []; // Shifts added through UI, not from database
 
   // simple in-memory clipboard for copy/paste: stores start TimeOfDay, duration, and text
   Map<String, Object?>? _clipboard;
@@ -87,13 +89,36 @@ class _ScheduleViewState extends State<ScheduleView> {
     }).toList();
   }
 
+  List<ShiftPlaceholder> _shiftsToPlaceholders(List<Shift> shifts) {
+    return shifts.map((s) => ShiftPlaceholder(
+      id: s.id,
+      employeeId: s.employeeId,
+      start: s.startTime,
+      end: s.endTime,
+      text: s.label ?? '',
+    )).toList();
+  }
+
   Future<void> _refreshShifts() async {
+    // Load time-off entries
     final timeOffEntries = await _timeOffDao.getAllTimeOff();
     final timeOffShifts = _timeOffToShifts(timeOffEntries);
+    
+    // Load actual shifts from database based on current view
+    List<Shift> dbShifts;
+    if (_mode == ScheduleMode.monthly) {
+      dbShifts = await _shiftDao.getByMonth(_date.year, _date.month);
+    } else if (_mode == ScheduleMode.weekly) {
+      dbShifts = await _shiftDao.getByWeek(_date);
+    } else {
+      dbShifts = await _shiftDao.getByDate(_date);
+    }
+    final workShifts = _shiftsToPlaceholders(dbShifts);
+    
     if (!mounted) return;
     setState(() {
-      // Combine database time-off shifts with manually added shifts
-      _shifts = [...timeOffShifts, ..._manualShifts];
+      // Combine database time-off shifts with work shifts from database
+      _shifts = [...timeOffShifts, ...workShifts];
     });
   }
 
@@ -243,7 +268,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           _clipboard = {'start': TimeOfDay(hour: s.start.hour, minute: s.start.minute), 'duration': s.end.difference(s.start), 'text': s.text};
         });
       },
-      onPasteTarget: (day, employeeId) {
+      onPasteTarget: (day, employeeId) async {
         if (_clipboard == null) {
           return;
         }
@@ -253,35 +278,48 @@ class _ScheduleViewState extends State<ScheduleView> {
         // times with hour 0 or 1 are next-day
         if (tod.hour == 0 || tod.hour == 1) start = start.add(const Duration(days: 1));
         final end = start.add(dur);
-        setState(() {
-          final newShift = ShiftPlaceholder(employeeId: employeeId, start: start, end: end, text: _clipboard!['text'] as String);
-          _manualShifts.add(newShift);
-          _shifts.add(newShift);
-          _clipboard = null; // Clear clipboard after pasting
-        });
+        
+        // Save to database
+        final shift = Shift(
+          employeeId: employeeId,
+          startTime: start,
+          endTime: end,
+          label: _clipboard!['text'] as String,
+        );
+        await _shiftDao.insert(shift);
+        _clipboard = null;
+        await _refreshShifts();
       },
-      onUpdateShift: (oldShift, newStart, newEnd) {
-        setState(() {
-          // Check if it's a manual shift
-          final manualIdx = _manualShifts.indexWhere((s) => s == oldShift);
-          final shiftsIdx = _shifts.indexWhere((s) => s == oldShift);
-          
-          if (newStart == newEnd) {
-            // Delete
-            if (manualIdx >= 0) _manualShifts.removeAt(manualIdx);
-            if (shiftsIdx >= 0) _shifts.removeAt(shiftsIdx);
-          } else {
-            // Update or add
-            final newShift = ShiftPlaceholder(employeeId: oldShift.employeeId, start: newStart, end: newEnd, text: oldShift.text);
-            if (manualIdx >= 0) {
-              _manualShifts[manualIdx] = newShift;
-              if (shiftsIdx >= 0) _shifts[shiftsIdx] = newShift;
-            } else {
-              _manualShifts.add(newShift);
-              _shifts.add(newShift);
-            }
+      onUpdateShift: (oldShift, newStart, newEnd) async {
+        if (newStart == newEnd) {
+          // Delete
+          if (oldShift.id != null) {
+            await _shiftDao.delete(oldShift.id!);
           }
-        });
+        } else {
+          // Update or add
+          if (oldShift.id != null) {
+            // Update existing
+            final updated = Shift(
+              id: oldShift.id,
+              employeeId: oldShift.employeeId,
+              startTime: newStart,
+              endTime: newEnd,
+              label: oldShift.text,
+            );
+            await _shiftDao.update(updated);
+          } else {
+            // Insert new
+            final newShift = Shift(
+              employeeId: oldShift.employeeId,
+              startTime: newStart,
+              endTime: newEnd,
+              label: oldShift.text,
+            );
+            await _shiftDao.insert(newShift);
+          }
+        }
+        await _refreshShifts();
       },
       );
     }
@@ -290,28 +328,36 @@ class _ScheduleViewState extends State<ScheduleView> {
       date: _date,
       employees: _employees,
       shifts: _shifts,
-      onUpdateShift: (oldShift, newStart, newEnd) {
-        setState(() {
-          // Check if it's a manual shift
-          final manualIdx = _manualShifts.indexWhere((s) => s == oldShift);
-          final shiftsIdx = _shifts.indexWhere((s) => s == oldShift);
-          
-          if (newStart == newEnd) {
-            // Delete
-            if (manualIdx >= 0) _manualShifts.removeAt(manualIdx);
-            if (shiftsIdx >= 0) _shifts.removeAt(shiftsIdx);
-          } else {
-            // Update or add
-            final newShift = ShiftPlaceholder(employeeId: oldShift.employeeId, start: newStart, end: newEnd, text: oldShift.text);
-            if (manualIdx >= 0) {
-              _manualShifts[manualIdx] = newShift;
-              if (shiftsIdx >= 0) _shifts[shiftsIdx] = newShift;
-            } else {
-              _manualShifts.add(newShift);
-              _shifts.add(newShift);
-            }
+      onUpdateShift: (oldShift, newStart, newEnd) async {
+        if (newStart == newEnd) {
+          // Delete
+          if (oldShift.id != null) {
+            await _shiftDao.delete(oldShift.id!);
           }
-        });
+        } else {
+          // Update or add
+          if (oldShift.id != null) {
+            // Update existing
+            final updated = Shift(
+              id: oldShift.id,
+              employeeId: oldShift.employeeId,
+              startTime: newStart,
+              endTime: newEnd,
+              label: oldShift.text,
+            );
+            await _shiftDao.update(updated);
+          } else {
+            // Insert new
+            final newShift = Shift(
+              employeeId: oldShift.employeeId,
+              startTime: newStart,
+              endTime: newEnd,
+              label: oldShift.text,
+            );
+            await _shiftDao.insert(newShift);
+          }
+        }
+        await _refreshShifts();
       },
     );
   }
@@ -1741,11 +1787,31 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
 // Public simple shift placeholder for rendering
 class ShiftPlaceholder {
+  final int? id;  // Database ID (null for time-off entries)
   final int employeeId;
   final DateTime start;
   final DateTime end;
   final String text;
 
-  ShiftPlaceholder({required this.employeeId, required this.start, required this.end, required this.text});
+  ShiftPlaceholder({
+    this.id,
+    required this.employeeId,
+    required this.start,
+    required this.end,
+    required this.text,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ShiftPlaceholder &&
+        other.id == id &&
+        other.employeeId == employeeId &&
+        other.start == start &&
+        other.end == end;
+  }
+
+  @override
+  int get hashCode => id.hashCode ^ employeeId.hashCode ^ start.hashCode ^ end.hashCode;
 }
 

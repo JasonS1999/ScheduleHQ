@@ -90,6 +90,25 @@ Future<void> _onCreate(Database db, int version) async {
     )
   ''');
 
+  await db.execute('''
+    CREATE TABLE shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employeeId INTEGER NOT NULL,
+      startTime TEXT NOT NULL,
+      endTime TEXT NOT NULL,
+      label TEXT,
+      notes TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      FOREIGN KEY (employeeId) REFERENCES employees(id) ON DELETE CASCADE
+    )
+  ''');
+
+  await db.execute('''
+    CREATE INDEX IF NOT EXISTS idx_shifts_employee_date 
+    ON shifts(employeeId, startTime)
+  ''');
+
   log("✅ Schema created", name: 'AppDatabase');
 } 
 
@@ -122,7 +141,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -157,6 +176,26 @@ class AppDatabase {
               startTime TEXT NOT NULL,
               FOREIGN KEY(jobCode) REFERENCES job_code_settings(code)
             )
+          ''');
+        }
+        if (oldVersion < 5) {
+          // Add shifts table for persistent schedule storage
+          await db.execute('''
+            CREATE TABLE shifts (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              employeeId INTEGER NOT NULL,
+              startTime TEXT NOT NULL,
+              endTime TEXT NOT NULL,
+              label TEXT,
+              notes TEXT,
+              createdAt TEXT NOT NULL,
+              updatedAt TEXT NOT NULL,
+              FOREIGN KEY (employeeId) REFERENCES employees(id) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_shifts_employee_date 
+            ON shifts(employeeId, startTime)
           ''');
         }
       },
