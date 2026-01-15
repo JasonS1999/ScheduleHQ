@@ -268,6 +268,167 @@ class _ScheduleViewState extends State<ScheduleView> {
     }
   }
 
+  Future<void> _handleWeekAction(String action) async {
+    // Get current week start (Sunday)
+    final weekStart = _date.subtract(Duration(days: _date.weekday % 7));
+    final weekStartDate = DateTime(weekStart.year, weekStart.month, weekStart.day);
+    
+    if (action == 'copyWeekToNext') {
+      final nextWeekStart = weekStartDate.add(const Duration(days: 7));
+      await _copyWeekTo(weekStartDate, nextWeekStart);
+    } else if (action == 'copyWeekToDate') {
+      final targetDate = await _showWeekPicker(context, weekStartDate);
+      if (targetDate != null) {
+        await _copyWeekTo(weekStartDate, targetDate);
+      }
+    } else if (action == 'clearWeek') {
+      await _clearWeek(weekStartDate);
+    }
+  }
+
+  Future<void> _copyWeekTo(DateTime sourceWeekStart, DateTime targetWeekStart) async {
+    // Get all shifts from source week
+    final sourceShifts = await _shiftDao.getByWeek(sourceWeekStart);
+    
+    if (sourceShifts.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No shifts to copy from this week')),
+        );
+      }
+      return;
+    }
+    
+    // Confirm the copy
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Copy Week'),
+        content: Text(
+          'Copy ${sourceShifts.length} shift(s) from week of '
+          '${sourceWeekStart.month}/${sourceWeekStart.day} '
+          'to week of ${targetWeekStart.month}/${targetWeekStart.day}?'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Copy'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm != true) return;
+    
+    // Calculate the offset between weeks
+    final dayOffset = targetWeekStart.difference(sourceWeekStart).inDays;
+    
+    // Create new shifts for the target week
+    final newShifts = sourceShifts.map((s) {
+      return Shift(
+        employeeId: s.employeeId,
+        startTime: s.startTime.add(Duration(days: dayOffset)),
+        endTime: s.endTime.add(Duration(days: dayOffset)),
+        label: s.label,
+        notes: s.notes,
+      );
+    }).toList();
+    
+    // Insert all new shifts
+    await _shiftDao.insertAll(newShifts);
+    
+    // Navigate to target week and refresh
+    setState(() {
+      _date = targetWeekStart;
+    });
+    await _refreshShifts();
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Copied ${newShifts.length} shift(s) to new week')),
+      );
+    }
+  }
+
+  Future<void> _clearWeek(DateTime weekStart) async {
+    final weekEnd = weekStart.add(const Duration(days: 7));
+    
+    // Count shifts to clear
+    final shifts = await _shiftDao.getByWeek(weekStart);
+    
+    if (shifts.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No shifts to clear in this week')),
+        );
+      }
+      return;
+    }
+    
+    // Confirm the clear
+    if (!mounted) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Clear Week'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete ${shifts.length} shift(s) from this week?\n\n'
+          'This action cannot be undone.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm != true) return;
+    
+    // Delete all shifts in the week
+    await _shiftDao.deleteByDateRange(weekStart, weekEnd);
+    await _refreshShifts();
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cleared ${shifts.length} shift(s) from this week')),
+      );
+    }
+  }
+
+  Future<DateTime?> _showWeekPicker(BuildContext context, DateTime currentWeek) async {
+    return showDatePicker(
+      context: context,
+      initialDate: currentWeek.add(const Duration(days: 7)),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      helpText: 'Select the start of the target week (any day in the week)',
+    ).then((selected) {
+      if (selected != null) {
+        // Normalize to Sunday of that week
+        return selected.subtract(Duration(days: selected.weekday % 7));
+      }
+      return null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -441,6 +602,44 @@ class _ScheduleViewState extends State<ScheduleView> {
             ),
           ],
         ),
+        if (_mode == ScheduleMode.weekly)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            tooltip: 'More Options',
+            onSelected: (value) => _handleWeekAction(value),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'copyWeekToNext',
+                child: Row(
+                  children: [
+                    Icon(Icons.content_copy, size: 20),
+                    SizedBox(width: 8),
+                    Text('Copy Week to Next Week'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'copyWeekToDate',
+                child: Row(
+                  children: [
+                    Icon(Icons.date_range, size: 20),
+                    SizedBox(width: 8),
+                    Text('Copy Week to Date...'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'clearWeek',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_sweep, size: 20, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Clear This Week', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
       ],
     );
   }
