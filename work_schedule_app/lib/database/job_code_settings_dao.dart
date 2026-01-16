@@ -8,11 +8,11 @@ class JobCodeSettingsDao {
   Future<Database> get _db async => AppDatabase.instance.db;
 
   // ------------------------------------------------------------
-  // GET ALL
+  // GET ALL (sorted by sortOrder)
   // ------------------------------------------------------------
   Future<List<JobCodeSettings>> getAll() async {
     final db = await _db;
-    final result = await db.query(tableName, orderBy: 'code ASC');
+    final result = await db.query(tableName, orderBy: 'sortOrder ASC, code ASC');
     return result.map((m) => JobCodeSettings.fromMap(m)).toList();
   }
 
@@ -40,11 +40,20 @@ class JobCodeSettingsDao {
 
     final defaults = [
       JobCodeSettings(
+        code: 'gm',
+        hasPTO: true,
+        defaultScheduledHours: 40,
+        defaultVacationDays: 10,
+        colorHex: '#8E24AA',
+        sortOrder: 1,
+      ),
+      JobCodeSettings(
         code: 'assistant',
         hasPTO: true,
         defaultScheduledHours: 40,
         defaultVacationDays: 5,
         colorHex: '#4285F4',
+        sortOrder: 2,
       ),
       JobCodeSettings(
         code: 'swing',
@@ -52,13 +61,7 @@ class JobCodeSettingsDao {
         defaultScheduledHours: 40,
         defaultVacationDays: 5,
         colorHex: '#DB4437',
-      ),
-      JobCodeSettings(
-        code: 'gm',
-        hasPTO: true,
-        defaultScheduledHours: 40,
-        defaultVacationDays: 10,
-        colorHex: '#8E24AA',
+        sortOrder: 3,
       ),
       JobCodeSettings(
         code: 'mit',
@@ -66,6 +69,7 @@ class JobCodeSettingsDao {
         defaultScheduledHours: 40,
         defaultVacationDays: 5,
         colorHex: '#009688',
+        sortOrder: 4,
       ),
       JobCodeSettings(
         code: 'breakfast mgr',
@@ -73,6 +77,7 @@ class JobCodeSettingsDao {
         defaultScheduledHours: 40,
         defaultVacationDays: 5,
         colorHex: '#F4B400',
+        sortOrder: 5,
       ),
     ];
 
@@ -181,5 +186,32 @@ class JobCodeSettingsDao {
 
       return updated;
     });
+  }
+
+  // ------------------------------------------------------------
+  // UPDATE SORT ORDERS
+  // ------------------------------------------------------------
+  Future<void> updateSortOrders(List<JobCodeSettings> orderedCodes) async {
+    final db = await _db;
+    await db.transaction((txn) async {
+      for (int i = 0; i < orderedCodes.length; i++) {
+        await txn.update(
+          tableName,
+          {'sortOrder': i + 1},
+          where: 'code = ?',
+          whereArgs: [orderedCodes[i].code],
+        );
+      }
+    });
+  }
+
+  // ------------------------------------------------------------
+  // GET NEXT SORT ORDER (for new job codes)
+  // ------------------------------------------------------------
+  Future<int> getNextSortOrder() async {
+    final db = await _db;
+    final result = await db.rawQuery('SELECT MAX(sortOrder) as maxOrder FROM $tableName');
+    final maxOrder = result.first['maxOrder'] as int? ?? 0;
+    return maxOrder + 1;
   }
 }

@@ -3,7 +3,8 @@ class JobCodeSettings {
   final bool hasPTO;
   final int defaultScheduledHours;
   final int defaultVacationDays;
-  final String colorHex; // NEW
+  final String colorHex;
+  final int sortOrder;
 
   JobCodeSettings({
     required this.code,
@@ -11,6 +12,7 @@ class JobCodeSettings {
     required this.defaultScheduledHours,
     required this.defaultVacationDays,
     required this.colorHex,
+    this.sortOrder = 0,
   });
 
   JobCodeSettings copyWith({
@@ -18,6 +20,7 @@ class JobCodeSettings {
     int? defaultScheduledHours,
     int? defaultVacationDays,
     String? colorHex,
+    int? sortOrder,
   }) {
     return JobCodeSettings(
       code: code,
@@ -27,6 +30,7 @@ class JobCodeSettings {
       defaultVacationDays:
           defaultVacationDays ?? this.defaultVacationDays,
       colorHex: colorHex ?? this.colorHex,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
   }
 
@@ -37,6 +41,7 @@ class JobCodeSettings {
       'defaultScheduledHours': defaultScheduledHours,
       'defaultVacationDays': defaultVacationDays,
       'colorHex': colorHex,
+      'sortOrder': sortOrder,
     };
   }
 
@@ -47,6 +52,7 @@ class JobCodeSettings {
       defaultScheduledHours: map['defaultScheduledHours'],
       defaultVacationDays: map['defaultVacationDays'],
       colorHex: map['colorHex'] ?? '#4285F4',
+      sortOrder: map['sortOrder'] ?? 0,
     );
   }
 }

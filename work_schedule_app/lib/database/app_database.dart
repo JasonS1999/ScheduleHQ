@@ -63,7 +63,8 @@ Future<void> _onCreate(Database db, int version) async {
       hasPTO INTEGER NOT NULL,
       defaultScheduledHours INTEGER NOT NULL,
       defaultVacationDays INTEGER NOT NULL,
-      colorHex TEXT NOT NULL
+      colorHex TEXT NOT NULL,
+      sortOrder INTEGER NOT NULL DEFAULT 0
     )
   ''');
 
@@ -159,7 +160,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -237,6 +238,12 @@ class AppDatabase {
           await db.execute('ALTER TABLE time_off ADD COLUMN isAllDay INTEGER NOT NULL DEFAULT 1');
           await db.execute('ALTER TABLE time_off ADD COLUMN startTime TEXT');
           await db.execute('ALTER TABLE time_off ADD COLUMN endTime TEXT');
+        }
+        if (oldVersion < 8) {
+          // Add sortOrder column to job_code_settings for custom ordering
+          await db.execute('ALTER TABLE job_code_settings ADD COLUMN sortOrder INTEGER NOT NULL DEFAULT 0');
+          // Initialize sort order based on current defaults
+          await db.execute("UPDATE job_code_settings SET sortOrder = CASE code WHEN 'gm' THEN 1 WHEN 'assistant' THEN 2 WHEN 'swing' THEN 3 WHEN 'mit' THEN 4 WHEN 'breakfast mgr' THEN 5 ELSE 99 END");
         }
       },
     );

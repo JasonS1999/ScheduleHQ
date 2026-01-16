@@ -12,6 +12,7 @@ import '../../models/time_off_entry.dart';
 import '../../models/shift_template.dart';
 import '../../models/shift.dart';
 import '../../models/schedule_note.dart';
+import '../../models/job_code_settings.dart';
 import '../../services/schedule_pdf_service.dart';
 import '../../services/schedule_undo_manager.dart';
 
@@ -58,10 +59,12 @@ class _ScheduleViewState extends State<ScheduleView> {
   final TimeOffDao _timeOffDao = TimeOffDao();
   final ShiftDao _shiftDao = ShiftDao();
   final ScheduleNoteDao _noteDao = ScheduleNoteDao();
+  final JobCodeSettingsDao _jobCodeSettingsDao = JobCodeSettingsDao();
   List<Employee> _employees = [];
   List<Employee> _filteredEmployees = [];
   List<ShiftPlaceholder> _shifts = [];
   Map<DateTime, ScheduleNote> _notes = {};
+  List<JobCodeSettings> _jobCodeSettings = [];
 
   // Filter state
   String _filterType = 'all'; // 'all', 'jobCode', 'employee'
@@ -160,6 +163,8 @@ class _ScheduleViewState extends State<ScheduleView> {
   }
 
   Future<void> _loadEmployees() async {
+    // Load job code settings first for proper sorting
+    _jobCodeSettings = await _jobCodeSettingsDao.getAll();
     final list = await _employeeDao.getEmployees();
     debugPrint('ScheduleView: loaded ${list.length} employee(s) from DB');
     if (!mounted) return;
@@ -195,14 +200,11 @@ class _ScheduleViewState extends State<ScheduleView> {
   }
 
   List<Employee> _sortEmployeesByJobCode(List<Employee> employees) {
-    // Job code hierarchy: GM > Assistant > Swing > MIT > Breakfast Mgr
-    const hierarchy = {
-      'gm': 1,
-      'assistant': 2,
-      'swing': 3,
-      'mit': 4,
-      'breakfast mgr': 5,
-    };
+    // Build hierarchy from job code settings (sorted by sortOrder)
+    final hierarchy = <String, int>{};
+    for (int i = 0; i < _jobCodeSettings.length; i++) {
+      hierarchy[_jobCodeSettings[i].code.toLowerCase()] = _jobCodeSettings[i].sortOrder;
+    }
 
     final sorted = List<Employee>.from(employees);
     sorted.sort((a, b) {
@@ -513,7 +515,6 @@ class _ScheduleViewState extends State<ScheduleView> {
   }
 
   final ShiftTemplateDao _templateDao = ShiftTemplateDao();
-  final JobCodeSettingsDao _jobCodeSettingsDao = JobCodeSettingsDao();
 
   Future<void> _autoFillFromTemplates(DateTime weekStart) async {
     // Get all templates
