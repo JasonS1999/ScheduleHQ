@@ -45,7 +45,8 @@ class _JobCodesTabState extends State<JobCodesTab> {
                       const Text('You must reassign those employees first:'),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: selectedReplacement,
+                        key: ValueKey(selectedReplacement),
+                        initialValue: selectedReplacement,
                         items: otherCodes
                             .map((jc) => DropdownMenuItem(value: jc.code, child: Text(jc.code)))
                             .toList(),

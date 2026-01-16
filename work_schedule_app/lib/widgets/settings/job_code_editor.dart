@@ -15,6 +15,8 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
   late JobCodeSettings _settings;
   final JobCodeSettingsDao _dao = JobCodeSettingsDao();
 
+  List<JobCodeSettings> _allCodes = [];
+
   late TextEditingController _hoursController;
   late TextEditingController _maxHoursController;
   late TextEditingController _codeController;
@@ -25,6 +27,8 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
     super.initState();
     _settings = widget.settings;
 
+    _loadAllCodes();
+
     _hoursController = TextEditingController(
       text: _settings.defaultDailyHours.toString(),
     );
@@ -32,6 +36,114 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
       text: _settings.maxHoursPerWeek.toString(),
     );
     _codeController = TextEditingController(text: _settings.code);
+  }
+
+  Future<void> _loadAllCodes() async {
+    final codes = await _dao.getAll();
+    if (!mounted) return;
+    setState(() => _allCodes = codes);
+  }
+
+  Future<void> _deleteThisJobCode() async {
+    final usage = await _dao.getUsageCounts(_settings.code);
+    final employeeCount = usage['employees'] ?? 0;
+    final templateCount = usage['templates'] ?? 0;
+
+    final otherCodes = _allCodes
+        .where((c) => c.code.toLowerCase() != _settings.code.toLowerCase())
+        .toList();
+    String? selectedReplacement = otherCodes.isNotEmpty ? otherCodes.first.code : null;
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Delete job code "${_settings.code}"?'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('This cannot be undone.'),
+                    const SizedBox(height: 8),
+                    Text('Employees using it: $employeeCount'),
+                    Text('Shift templates tied to it: $templateCount (will be deleted)'),
+                    if (employeeCount > 0) ...[
+                      const SizedBox(height: 12),
+                      const Text('You must reassign those employees first:'),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey(selectedReplacement),
+                        initialValue: selectedReplacement,
+                        items: otherCodes
+                            .map((jc) => DropdownMenuItem(value: jc.code, child: Text(jc.code)))
+                            .toList(),
+                        onChanged: otherCodes.isEmpty
+                            ? null
+                            : (v) => setDialogState(() => selectedReplacement = v),
+                        decoration: const InputDecoration(labelText: 'Reassign employees to'),
+                      ),
+                      if (otherCodes.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Add another job code first before deleting this one.',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: (employeeCount > 0 && otherCodes.isEmpty)
+                      ? null
+                      : () => Navigator.pop(context, true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final reassigned = await _dao.deleteJobCode(
+      _settings.code,
+      reassignEmployeesTo: employeeCount > 0 ? selectedReplacement : null,
+    );
+
+    if (!mounted) return;
+    if (reassigned == -1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Job code no longer exists.')),
+      );
+      Navigator.pop(context);
+      return;
+    }
+    if (reassigned == -2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot delete: employees still assigned and no reassignment selected.')),
+      );
+      return;
+    }
+
+    final msg = reassigned > 0
+        ? 'Deleted. Reassigned $reassigned employee(s).'
+        : 'Deleted.';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    Navigator.pop(context);
   }
 
   @override
@@ -260,6 +372,18 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                 navigator.pop();
               },
               child: const Text("Save"),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Delete Button
+            TextButton.icon(
+              onPressed: _deleteThisJobCode,
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              label: const Text(
+                'Delete Job Code',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             ),
 
             const SizedBox(height: 20),
