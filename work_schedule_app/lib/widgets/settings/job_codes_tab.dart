@@ -13,6 +13,12 @@ class JobCodesTab extends StatefulWidget {
 class _JobCodesTabState extends State<JobCodesTab> {
   final JobCodeSettingsDao _dao = JobCodeSettingsDao();
   List<JobCodeSettings> _codes = [];
+  bool _orderDirty = false;
+
+  String _formatHours(double hours) {
+    if (hours % 1 == 0) return hours.toInt().toString();
+    return hours.toString();
+  }
 
   Future<void> _deleteJobCode(JobCodeSettings codeToDelete) async {
     final usage = await _dao.getUsageCounts(codeToDelete.code);
@@ -119,12 +125,20 @@ class _JobCodesTabState extends State<JobCodesTab> {
   @override
   void initState() {
     super.initState();
-    _loadCodes();
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _dao.insertDefaultsIfMissing();
+    await _loadCodes();
   }
 
   Future<void> _loadCodes() async {
     final list = await _dao.getAll();
-    setState(() => _codes = list);
+    setState(() {
+      _codes = list;
+      _orderDirty = false;
+    });
   }
 
   Future<void> _addJobCode() async {
@@ -153,7 +167,7 @@ class _JobCodesTabState extends State<JobCodesTab> {
                 final newCode = JobCodeSettings(
                   code: code.trim(),
                   hasPTO: false,
-                  defaultDailyHours: 8,
+                  defaultDailyHours: 8.0,
                   maxHoursPerWeek: 40,
                   colorHex: '#4285F4',
                   sortOrder: nextOrder,
@@ -181,10 +195,17 @@ class _JobCodesTabState extends State<JobCodesTab> {
     setState(() {
       final item = _codes.removeAt(oldIndex);
       _codes.insert(newIndex, item);
+      _orderDirty = true;
     });
-    
-    // Save the new order to database
+  }
+
+  Future<void> _saveOrder() async {
     await _dao.updateSortOrders(_codes);
+    if (!mounted) return;
+    setState(() => _orderDirty = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Saved job code order.')),
+    );
   }
 
   void _edit(JobCodeSettings settings) async {
@@ -206,18 +227,25 @@ class _JobCodesTabState extends State<JobCodesTab> {
     return Column(
       children: [
         const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 16,
+          runSpacing: 8,
           children: [
             ElevatedButton.icon(
               onPressed: _addJobCode,
               icon: const Icon(Icons.add),
               label: const Text("Add Job Code"),
             ),
-            const SizedBox(width: 16),
-            const Text(
-              "Drag to reorder",
-              style: TextStyle(color: Colors.grey, fontSize: 12),
+            ElevatedButton.icon(
+              onPressed: _orderDirty ? _saveOrder : null,
+              icon: const Icon(Icons.save),
+              label: const Text('Save'),
+            ),
+            Text(
+              _orderDirty ? 'Reordered (not saved yet)' : 'Drag to reorder',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
             ),
           ],
         ),
@@ -255,7 +283,7 @@ class _JobCodesTabState extends State<JobCodesTab> {
                 title: Text(jc.code),
                 subtitle: Text(
                   "PTO: ${jc.hasPTO ? 'Yes' : 'No'} • "
-                  "Daily: ${jc.defaultDailyHours}h • "
+                  "Daily: ${_formatHours(jc.defaultDailyHours)}h • "
                   "Max/Week: ${jc.maxHoursPerWeek}h",
                 ),
                 trailing: Row(

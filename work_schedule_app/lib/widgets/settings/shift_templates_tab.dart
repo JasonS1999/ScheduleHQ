@@ -268,7 +268,7 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
                         orElse: () => JobCodeSettings(
                           code: template.jobCode,
                           hasPTO: true,
-                          defaultDailyHours: 8,
+                          defaultDailyHours: 8.0,
                           maxHoursPerWeek: 40,
                           colorHex: '#000000',
                         ),
@@ -278,13 +278,13 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
                       final startHour = int.parse(startParts[0]);
                       final startMin = int.parse(startParts[1]);
                       final endTime = DateTime(2000, 1, 1, startHour, startMin)
-                          .add(Duration(hours: duration));
+                          .add(Duration(minutes: (duration * 60).round()));
                       final endTimeStr = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
 
                       return Card(
                         child: ListTile(
                           title: Text(template.templateName),
-                          subtitle: Text('${template.startTime} - $endTimeStr ($duration hours)'),
+                          subtitle: Text('${template.startTime} - $endTimeStr (${duration % 1 == 0 ? duration.toInt() : duration} hours)'),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

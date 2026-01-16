@@ -23,7 +23,7 @@ class JobCodeSettingsDao {
     final db = await _db;
     final result = await db.query(
       tableName,
-      where: 'code = ?',
+      where: 'code = ? COLLATE NOCASE',
       whereArgs: [code],
       limit: 1,
     );
@@ -42,7 +42,7 @@ class JobCodeSettingsDao {
       JobCodeSettings(
         code: 'gm',
         hasPTO: true,
-        defaultDailyHours: 8,
+        defaultDailyHours: 8.0,
         maxHoursPerWeek: 40,
         colorHex: '#8E24AA',
         sortOrder: 1,
@@ -50,7 +50,7 @@ class JobCodeSettingsDao {
       JobCodeSettings(
         code: 'assistant',
         hasPTO: true,
-        defaultDailyHours: 8,
+        defaultDailyHours: 8.0,
         maxHoursPerWeek: 40,
         colorHex: '#4285F4',
         sortOrder: 2,
@@ -58,7 +58,7 @@ class JobCodeSettingsDao {
       JobCodeSettings(
         code: 'swing',
         hasPTO: true,
-        defaultDailyHours: 8,
+        defaultDailyHours: 8.0,
         maxHoursPerWeek: 40,
         colorHex: '#DB4437',
         sortOrder: 3,
@@ -66,7 +66,7 @@ class JobCodeSettingsDao {
       JobCodeSettings(
         code: 'mit',
         hasPTO: true,
-        defaultDailyHours: 8,
+        defaultDailyHours: 8.0,
         maxHoursPerWeek: 40,
         colorHex: '#009688',
         sortOrder: 4,
@@ -74,19 +74,89 @@ class JobCodeSettingsDao {
       JobCodeSettings(
         code: 'breakfast mgr',
         hasPTO: true,
-        defaultDailyHours: 8,
+        defaultDailyHours: 8.0,
         maxHoursPerWeek: 40,
         colorHex: '#F4B400',
         sortOrder: 5,
       ),
     ];
 
-    for (final jc in defaults) {
-      await db.insert(
-        tableName,
-        jc.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.ignore,
-      );
+    await db.transaction((txn) async {
+      // Always dedupe case-only duplicates so the UI doesn't show "GM" + "gm".
+      await _mergeAllCaseOnlyDuplicates(txn);
+
+      // Only seed defaults on a truly empty table (first-run). This prevents
+      // deleted defaults from reappearing just because another page calls this.
+      final countRes = await txn.rawQuery('SELECT COUNT(*) as c FROM $tableName');
+      final count = (countRes.first['c'] as int?) ?? 0;
+      if (count > 0) return;
+
+      for (final jc in defaults) {
+        await txn.insert(
+          tableName,
+          jc.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+      }
+    });
+  }
+
+  Future<void> _mergeAllCaseOnlyDuplicates(Transaction txn) async {
+    final rows = await txn.query(tableName, columns: ['code']);
+    if (rows.length <= 1) return;
+
+    final byLower = <String, List<String>>{};
+    for (final r in rows) {
+      final code = (r['code'] as String);
+      byLower.putIfAbsent(code.toLowerCase(), () => []).add(code);
+    }
+
+    for (final entry in byLower.entries) {
+      final keys = entry.value;
+      if (keys.length <= 1) continue;
+
+      // Choose canonical key: prefer the one most referenced by employees/templates.
+      String canonical = keys.first;
+      int bestScore = -1;
+      for (final k in keys) {
+        final empRes = await txn.rawQuery(
+          'SELECT COUNT(*) as c FROM employees WHERE jobCode = ? COLLATE BINARY',
+          [k],
+        );
+        final tplRes = await txn.rawQuery(
+          'SELECT COUNT(*) as c FROM shift_templates WHERE jobCode = ? COLLATE BINARY',
+          [k],
+        );
+        final empCount = (empRes.first['c'] as int?) ?? 0;
+        final tplCount = (tplRes.first['c'] as int?) ?? 0;
+        final score = empCount + tplCount;
+        if (score > bestScore) {
+          bestScore = score;
+          canonical = k;
+        }
+      }
+
+      for (final k in keys) {
+        if (k == canonical) continue;
+
+        await txn.update(
+          'employees',
+          {'jobCode': canonical},
+          where: 'jobCode = ? COLLATE BINARY',
+          whereArgs: [k],
+        );
+        await txn.update(
+          'shift_templates',
+          {'jobCode': canonical},
+          where: 'jobCode = ? COLLATE BINARY',
+          whereArgs: [k],
+        );
+        await txn.delete(
+          tableName,
+          where: 'code = ? COLLATE BINARY',
+          whereArgs: [k],
+        );
+      }
     }
   }
 

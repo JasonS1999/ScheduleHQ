@@ -1,7 +1,7 @@
 class JobCodeSettings {
   final String code;
   final bool hasPTO;
-  final int defaultDailyHours;
+  final double defaultDailyHours;
   final int maxHoursPerWeek;
   final String colorHex;
   final int sortOrder;
@@ -20,7 +20,7 @@ class JobCodeSettings {
 
   JobCodeSettings copyWith({
     bool? hasPTO,
-    int? defaultDailyHours,
+    double? defaultDailyHours,
     int? maxHoursPerWeek,
     String? colorHex,
     int? sortOrder,
@@ -48,10 +48,12 @@ class JobCodeSettings {
   }
 
   factory JobCodeSettings.fromMap(Map<String, dynamic> map) {
+    final raw = map['defaultScheduledHours'];
+    final parsedHours = raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '') ?? 8.0;
     return JobCodeSettings(
       code: map['code'],
       hasPTO: map['hasPTO'] == 1,
-      defaultDailyHours: map['defaultScheduledHours'] ?? 8,
+      defaultDailyHours: parsedHours,
       maxHoursPerWeek: map['maxHoursPerWeek'] ?? 40,
       colorHex: map['colorHex'] ?? '#4285F4',
       sortOrder: map['sortOrder'] ?? 0,

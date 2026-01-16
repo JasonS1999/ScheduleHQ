@@ -30,7 +30,7 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
     _loadAllCodes();
 
     _hoursController = TextEditingController(
-      text: _settings.defaultDailyHours.toString(),
+      text: _formatHours(_settings.defaultDailyHours),
     );
     _maxHoursController = TextEditingController(
       text: _settings.maxHoursPerWeek.toString(),
@@ -159,6 +159,16 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
     super.dispose();
   }
 
+  String _formatHours(double hours) {
+    if (hours % 1 == 0) return hours.toInt().toString();
+    return hours.toString();
+  }
+
+  double _parseHours(String input, double fallback) {
+    final normalized = input.trim().replaceAll(',', '.');
+    return double.tryParse(normalized) ?? fallback;
+  }
+
   Color _colorFromHex(String hex) {
     String clean = hex.replaceAll('#', '');
     if (clean.length == 6) clean = 'FF$clean';
@@ -282,12 +292,12 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
             // Default Daily Hours
             TextField(
               decoration: const InputDecoration(labelText: "Default Daily Hours"),
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               controller: _hoursController,
               onChanged: (v) {
                 setState(() {
                   _settings = _settings.copyWith(
-                    defaultDailyHours: int.tryParse(v) ?? 8,
+                    defaultDailyHours: _parseHours(v, 8.0),
                   );
                 });
               },

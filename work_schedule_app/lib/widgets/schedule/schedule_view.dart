@@ -536,7 +536,7 @@ class _ScheduleViewState extends State<ScheduleView> {
 
     // Get job code settings for default hours
     final jobCodeSettings = await _jobCodeSettingsDao.getAll();
-    final defaultHoursMap = <String, int>{};
+    final defaultHoursMap = <String, double>{};
     for (final setting in jobCodeSettings) {
       defaultHoursMap[setting.code.toLowerCase()] = setting.defaultDailyHours;
     }
@@ -663,7 +663,7 @@ class _ScheduleViewState extends State<ScheduleView> {
       }
       
       // Get default hours for this job code
-      final defaultHours = defaultHoursMap[employee.jobCode.toLowerCase()] ?? 8;
+      final defaultHours = defaultHoursMap[employee.jobCode.toLowerCase()] ?? 8.0;
       
       for (final dayIndex in selectedDays) {
         final day = weekStart.add(Duration(days: dayIndex));
@@ -681,7 +681,7 @@ class _ScheduleViewState extends State<ScheduleView> {
         }
         
         final shiftStart = DateTime(day.year, day.month, day.day, startHour, startMinute);
-        final shiftEnd = shiftStart.add(Duration(hours: defaultHours));
+        final shiftEnd = shiftStart.add(Duration(minutes: (defaultHours * 60).round()));
         
         newShifts.add(Shift(
           employeeId: employee.id!,
@@ -1500,7 +1500,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
       orElse: () => JobCodeSettings(
         code: employee.jobCode,
         hasPTO: false,
-        defaultDailyHours: 8,
+        defaultDailyHours: 8.0,
         maxHoursPerWeek: 40,
         colorHex: '#4285F4',
       ),
@@ -1512,7 +1512,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     required DateTime day,
     required int employeeId,
     required List<ShiftTemplate> templates,
-    required int defaultHours,
+    required double defaultHours,
     required Color bannerColor,
     required String reason,
     required String type,
@@ -1544,7 +1544,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                       final startHour = int.parse(parts[0]);
                       final startMin = int.parse(parts[1]);
                       final endTime = DateTime(2000, 1, 1, startHour, startMin)
-                          .add(Duration(hours: defaultHours));
+                          .add(Duration(minutes: (defaultHours * 60).round()));
                       final endTimeStr = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
 
                       return Padding(
@@ -1561,7 +1561,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                             int startIdx = times.indexWhere((t) => t.hour == startHour && t.minute == startMin);
                             if (startIdx == -1) startIdx = 0;
                             
-                            int endIdx = startIdx + (defaultHours * 4);
+                            int endIdx = startIdx + (defaultHours * 4).round();
                             if (endIdx >= times.length) endIdx = times.length - 1;
 
                             setDialogState(() {
@@ -2291,7 +2291,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
 
     // Load job code settings for duration
     final jobCodeSettings = await _jobCodeDao.getByCode(jobCode);
-    final defaultHours = jobCodeSettings?.defaultDailyHours ?? 8;
+    final defaultHours = jobCodeSettings?.defaultDailyHours ?? 8.0;
 
     // Check availability
     final availability = await _checkAvailability(employeeId, day);
@@ -2705,7 +2705,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                           final startHour = int.parse(parts[0]);
                           final startMin = int.parse(parts[1]);
                           final endTime = DateTime(2000, 1, 1, startHour, startMin)
-                              .add(Duration(hours: defaultHours));
+                              .add(Duration(minutes: (defaultHours * 60).round()));
                           final endTimeStr = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
 
                           return Padding(
@@ -2722,7 +2722,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                 int startIdx = times.indexWhere((t) => t.hour == startHour && t.minute == startMin);
                                 if (startIdx == -1) startIdx = 0;
                                 
-                                int endIdx = startIdx + (defaultHours * 4);
+                                int endIdx = startIdx + (defaultHours * 4).round();
                                 if (endIdx >= times.length) endIdx = times.length - 1;
 
                                 setDialogState(() {
