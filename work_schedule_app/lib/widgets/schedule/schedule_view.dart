@@ -322,6 +322,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           weekStart: weekStart,
           employees: _employees,
           shifts: _shifts,
+          jobCodeSettings: _jobCodeSettings,
         );
         title = 'Schedule - Week of ${weekStart.month}/${weekStart.day}/${weekStart.year}';
         filename = 'schedule_${weekStart.year}_${weekStart.month}_${weekStart.day}.pdf';
@@ -331,6 +332,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           month: _date.month,
           employees: _employees,
           shifts: _shifts,
+          jobCodeSettings: _jobCodeSettings,
         );
         final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         title = 'Schedule - ${monthNames[_date.month - 1]} ${_date.year}';

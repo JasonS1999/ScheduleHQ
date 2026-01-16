@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/employee.dart';
+import '../models/job_code_settings.dart';
 import '../widgets/schedule/schedule_view.dart';
 
 class SchedulePdfService {
@@ -11,6 +12,7 @@ class SchedulePdfService {
     required DateTime weekStart,
     required List<Employee> employees,
     required List<ShiftPlaceholder> shifts,
+    List<JobCodeSettings> jobCodeSettings = const [],
   }) async {
     final pdf = pw.Document();
     
@@ -23,6 +25,8 @@ class SchedulePdfService {
     
     // Generate days for the week
     final days = List.generate(7, (i) => weekStart.add(Duration(days: i)));
+
+    final sortedEmployees = _sortEmployees(employees, jobCodeSettings);
 
     pdf.addPage(
       pw.MultiPage(
@@ -44,7 +48,7 @@ class SchedulePdfService {
           ],
         ),
         build: (context) => [
-          _buildScheduleTable(employees, days, dayNames, shifts),
+          _buildScheduleTable(sortedEmployees, days, dayNames, shifts),
         ],
       ),
     );
@@ -58,6 +62,7 @@ class SchedulePdfService {
     required int month,
     required List<Employee> employees,
     required List<ShiftPlaceholder> shifts,
+    List<JobCodeSettings> jobCodeSettings = const [],
   }) async {
     final pdf = pw.Document();
     
@@ -84,6 +89,8 @@ class SchedulePdfService {
       if (weeks.length >= 6) break;
     }
 
+    final sortedEmployees = _sortEmployees(employees, jobCodeSettings);
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.letter.landscape,
@@ -104,8 +111,12 @@ class SchedulePdfService {
           ],
         ),
         build: (context) => [
-          // Build a compact monthly view
-          _buildMonthlyCalendar(employees, weeks, month, shifts),
+          _buildMonthlyStackedWeeks(
+            employees: sortedEmployees,
+            weeks: weeks,
+            targetMonth: month,
+            shifts: shifts,
+          ),
         ],
       ),
     );
@@ -142,117 +153,226 @@ class SchedulePdfService {
             
             if (dayShifts.isEmpty) return '';
             
-            return dayShifts.map((s) {
-              if (_isLabelOnly(s.text)) {
-                return s.text.toUpperCase();
-              }
-              return '${_formatTime(s.start)}-${_formatTime(s.end)}';
-            }).join('\n');
+            return dayShifts.map((s) => _formatShiftCell(s)).join('\n');
           }),
         ];
       }).toList(),
     );
   }
 
-  static pw.Widget _buildMonthlyCalendar(
-    List<Employee> employees,
-    List<List<DateTime>> weeks,
-    int targetMonth,
-    List<ShiftPlaceholder> shifts,
-  ) {
-    final dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
-    return pw.Column(
-      children: [
-        // Day headers
-        pw.Row(
+  static pw.Widget _buildMonthlyStackedWeeks({
+    required List<Employee> employees,
+    required List<List<DateTime>> weeks,
+    required int targetMonth,
+    required List<ShiftPlaceholder> shifts,
+  }) {
+    final children = <pw.Widget>[];
+
+    for (final week in weeks) {
+      // Skip weeks that are completely outside the target month
+      final hasAnyTargetMonthDay = week.any((d) => d.month == targetMonth);
+      if (!hasAnyTargetMonthDay) continue;
+
+      final weekStart = week.first;
+      final weekEnd = week.last;
+      children.add(
+        pw.Text(
+          '${_formatDate(weekStart)} - ${_formatDate(weekEnd)}',
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+        ),
+      );
+      children.add(pw.SizedBox(height: 4));
+      children.add(
+        _buildWeekTable(
+          employees: employees,
+          week: week,
+          targetMonth: targetMonth,
+          shifts: shifts,
+        ),
+      );
+      children.add(pw.SizedBox(height: 12));
+    }
+
+    return pw.Column(children: children);
+  }
+
+  static pw.Widget _buildWeekTable({
+    required List<Employee> employees,
+    required List<DateTime> week,
+    required int targetMonth,
+    required List<ShiftPlaceholder> shifts,
+  }) {
+    final dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT'];
+
+    final headerStyle = pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7);
+    final cellStyle = const pw.TextStyle(fontSize: 7);
+
+    final colWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FixedColumnWidth(80), // Name
+      1: const pw.FixedColumnWidth(90), // Position (job code)
+      9: const pw.FixedColumnWidth(28), // HRS
+    };
+    // Day columns
+    for (int i = 0; i < 7; i++) {
+      colWidths[2 + i] = const pw.FlexColumnWidth(1);
+    }
+
+    final rows = <pw.TableRow>[];
+
+    // Header row
+    rows.add(
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+        children: [
+          _padCell(pw.Text('Name', style: headerStyle), align: pw.Alignment.centerLeft),
+          _padCell(pw.Text('Position', style: headerStyle), align: pw.Alignment.centerLeft),
+          ...List.generate(7, (i) {
+            final d = week[i];
+            final label = '${dayNames[i]} ${d.month}/${d.day}';
+            return _padCell(pw.Text(label, style: headerStyle), align: pw.Alignment.center);
+          }),
+          _padCell(pw.Text('HRS', style: headerStyle), align: pw.Alignment.center),
+        ],
+      ),
+    );
+
+    String? lastJobCode;
+    for (final emp in employees) {
+      final jobCode = emp.jobCode;
+
+      if (lastJobCode != null && jobCode.toLowerCase() != lastJobCode.toLowerCase()) {
+        // Spacer row between job codes
+        rows.add(
+          pw.TableRow(
+            children: List.generate(10, (_) => pw.SizedBox(height: 6)),
+          ),
+        );
+      }
+      lastJobCode = jobCode;
+
+      final hours = _computeWeekHours(employeeId: emp.id, week: week, shifts: shifts);
+
+      rows.add(
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.white),
           children: [
-            pw.Container(
-              width: 60,
-              child: pw.Text('', style: const pw.TextStyle(fontSize: 8)),
-            ),
-            ...dayNames.map((d) => pw.Expanded(
-              child: pw.Container(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                padding: const pw.EdgeInsets.all(4),
-                child: pw.Center(
-                  child: pw.Text(d, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                ),
-              ),
-            )),
+            _padCell(pw.Text(emp.name, style: cellStyle), align: pw.Alignment.centerLeft),
+            _padCell(pw.Text(jobCode, style: cellStyle), align: pw.Alignment.centerLeft),
+            ...week.map((day) {
+              final dayText = _formatEmployeeDayCell(
+                employeeId: emp.id,
+                day: day,
+                targetMonth: targetMonth,
+                shifts: shifts,
+              );
+              return _padCell(
+                pw.Text(dayText, style: cellStyle, maxLines: 2),
+                align: pw.Alignment.center,
+                bgColor: day.month != targetMonth ? PdfColors.grey100 : null,
+              );
+            }),
+            _padCell(pw.Text(hours == 0 ? '' : hours.toString(), style: cellStyle), align: pw.Alignment.center),
           ],
         ),
-        // Weeks
-        ...weeks.map((week) => pw.Container(
-          decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: PdfColors.grey400),
-          ),
-          child: pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Date column
-              pw.Container(
-                width: 60,
-                padding: const pw.EdgeInsets.all(2),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: week.map((day) => pw.Container(
-                    height: 12,
-                    child: pw.Text(
-                      '${day.month}/${day.day}',
-                      style: pw.TextStyle(
-                        fontSize: 7,
-                        color: day.month != targetMonth ? PdfColors.grey500 : PdfColors.black,
-                      ),
-                    ),
-                  )).toList(),
-                ),
-              ),
-              // Employee data for each day
-              ...week.map((day) => pw.Expanded(
-                child: pw.Container(
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border(left: pw.BorderSide(color: PdfColors.grey300)),
-                    color: day.month != targetMonth ? PdfColors.grey100 : null,
-                  ),
-                  padding: const pw.EdgeInsets.all(2),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: employees.take(5).map((emp) {
-                      final dayShifts = shifts.where((s) =>
-                        s.employeeId == emp.id &&
-                        s.start.year == day.year &&
-                        s.start.month == day.month &&
-                        s.start.day == day.day
-                      ).toList();
-                      
-                      String shiftText = '-';
-                      if (dayShifts.isNotEmpty) {
-                        final s = dayShifts.first;
-                        if (_isLabelOnly(s.text)) {
-                          shiftText = s.text.toUpperCase();
-                        } else {
-                          shiftText = '${_formatTimeShort(s.start)}-${_formatTimeShort(s.end)}';
-                        }
-                      }
-                      
-                      return pw.Container(
-                        height: 12,
-                        child: pw.Text(
-                          '${emp.name.split(' ').first}: $shiftText',
-                          style: const pw.TextStyle(fontSize: 5),
-                          maxLines: 1,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              )),
-            ],
-          ),
-        )),
-      ],
+      );
+    }
+
+    return pw.Table(
+      columnWidths: colWidths,
+      border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+      defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
+      children: rows,
     );
+  }
+
+  static pw.Widget _padCell(
+    pw.Widget child, {
+    pw.Alignment align = pw.Alignment.center,
+    PdfColor? bgColor,
+  }) {
+    return pw.Container(
+      alignment: align,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      color: bgColor,
+      child: child,
+    );
+  }
+
+  static String _formatEmployeeDayCell({
+    required int? employeeId,
+    required DateTime day,
+    required int targetMonth,
+    required List<ShiftPlaceholder> shifts,
+  }) {
+    if (employeeId == null) return '';
+    final dayShifts = shifts
+        .where((s) =>
+            s.employeeId == employeeId &&
+            s.start.year == day.year &&
+            s.start.month == day.month &&
+            s.start.day == day.day)
+        .toList();
+
+    if (dayShifts.isEmpty) return '';
+    return dayShifts.map((s) => _formatShiftCell(s)).join('\n');
+  }
+
+  static String _formatShiftCell(ShiftPlaceholder s) {
+    if (_isLabelOnly(s.text)) {
+      return s.text.toUpperCase();
+    }
+
+    final range = '${_formatHourMinCompact(s.start)}-${_formatHourMinCompact(s.end)}';
+    final label = s.text.trim();
+    if (label.isEmpty) return range;
+    return '$range $label';
+  }
+
+  static int _computeWeekHours({
+    required int? employeeId,
+    required List<DateTime> week,
+    required List<ShiftPlaceholder> shifts,
+  }) {
+    if (employeeId == null) return 0;
+    double total = 0;
+    for (final day in week) {
+      final dayShifts = shifts
+          .where((s) =>
+              s.employeeId == employeeId &&
+              s.start.year == day.year &&
+              s.start.month == day.month &&
+              s.start.day == day.day)
+          .toList();
+      for (final s in dayShifts) {
+        if (_isLabelOnly(s.text)) continue;
+        total += s.end.difference(s.start).inMinutes / 60.0;
+      }
+    }
+    return total.round();
+  }
+
+  static List<Employee> _sortEmployees(
+    List<Employee> employees,
+    List<JobCodeSettings> jobCodeSettings,
+  ) {
+    final orderByCode = <String, int>{};
+    for (final s in jobCodeSettings) {
+      orderByCode[s.code.toLowerCase()] = s.sortOrder;
+    }
+
+    final list = [...employees];
+    list.sort((a, b) {
+      final ao = orderByCode[a.jobCode.toLowerCase()] ?? 999999;
+      final bo = orderByCode[b.jobCode.toLowerCase()] ?? 999999;
+      final byOrder = ao.compareTo(bo);
+      if (byOrder != 0) return byOrder;
+
+      final byCode = a.jobCode.toLowerCase().compareTo(b.jobCode.toLowerCase());
+      if (byCode != 0) return byCode;
+
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
   }
 
   static bool _isLabelOnly(String text) {
@@ -264,15 +384,10 @@ class SchedulePdfService {
   
   static String _formatDateTime(DateTime d) => 
     '${d.month}/${d.day}/${d.year} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
-  
-  static String _formatTime(DateTime d) {
+
+  static String _formatHourMinCompact(DateTime d) {
     final hour = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
-    final ampm = d.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:${d.minute.toString().padLeft(2, '0')}$ampm';
-  }
-  
-  static String _formatTimeShort(DateTime d) {
-    final hour = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
+    if (d.minute == 0) return '$hour';
     return '$hour:${d.minute.toString().padLeft(2, '0')}';
   }
 
