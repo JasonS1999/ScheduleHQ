@@ -49,7 +49,12 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
     final employeeCount = usage['employees'] ?? 0;
     final templateCount = usage['templates'] ?? 0;
 
-    final otherCodes = _allCodes
+    final codes = _allCodes.isNotEmpty ? _allCodes : await _dao.getAll();
+    if (_allCodes.isEmpty && mounted) {
+      setState(() => _allCodes = codes);
+    }
+
+    final otherCodes = codes
         .where((c) => c.code.toLowerCase() != _settings.code.toLowerCase())
         .toList();
     String? selectedReplacement = otherCodes.isNotEmpty ? otherCodes.first.code : null;
@@ -328,62 +333,63 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
 
             const SizedBox(height: 20),
 
-            // Save Button
-            ElevatedButton(
-              onPressed: () async {
-                final oldCode = widget.settings.code;
-                final newCode = _settings.code.trim();
+            // Save / Delete actions (keep both visible without scrolling)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton.icon(
+                  onPressed: _deleteThisJobCode,
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.redAccent),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final oldCode = widget.settings.code;
+                    final newCode = _settings.code.trim();
 
-                // Build the final settings record to store
-                final finalSettings = JobCodeSettings(
-                  code: newCode,
-                  hasPTO: _settings.hasPTO,
-                  defaultDailyHours: _settings.defaultDailyHours,
-                  maxHoursPerWeek: _settings.maxHoursPerWeek,
-                  colorHex: _settings.colorHex,
-                  sortOrder: _settings.sortOrder,
-                );
+                    // Build the final settings record to store
+                    final finalSettings = JobCodeSettings(
+                      code: newCode,
+                      hasPTO: _settings.hasPTO,
+                      defaultDailyHours: _settings.defaultDailyHours,
+                      maxHoursPerWeek: _settings.maxHoursPerWeek,
+                      colorHex: _settings.colorHex,
+                      sortOrder: _settings.sortOrder,
+                    );
 
-                final messenger = ScaffoldMessenger.of(context);
-                final navigator = Navigator.of(context);
+                    final messenger = ScaffoldMessenger.of(context);
+                    final navigator = Navigator.of(context);
 
-                int updated = 0;
-                if (newCode != oldCode) {
-                  updated = await _dao.renameCode(oldCode, finalSettings);
-                } else {
-                  await _dao.upsert(finalSettings);
-                }
+                    int updated = 0;
+                    if (newCode != oldCode) {
+                      updated = await _dao.renameCode(oldCode, finalSettings);
+                    } else {
+                      await _dao.upsert(finalSettings);
+                    }
 
-                if (!mounted) return;
-                if (updated == -1) {
-                  messenger.showSnackBar(
-                    const SnackBar(content: Text('A job code with that name already exists')),
-                  );
-                  return;
-                }
+                    if (!mounted) return;
+                    if (updated == -1) {
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('A job code with that name already exists')),
+                      );
+                      return;
+                    }
 
-                // Provide feedback to the user about how many employee assignments were updated
-                String message = 'Saved.';
-                if (updated > 0) {
-                  message = 'Saved. Updated $updated employee(s) to the new job code.';
-                }
-                messenger.showSnackBar(SnackBar(content: Text(message)));
+                    // Provide feedback to the user about how many employee assignments were updated
+                    String message = 'Saved.';
+                    if (updated > 0) {
+                      message = 'Saved. Updated $updated employee(s) to the new job code.';
+                    }
+                    messenger.showSnackBar(SnackBar(content: Text(message)));
 
-                navigator.pop();
-              },
-              child: const Text("Save"),
-            ),
-
-            const SizedBox(height: 12),
-
-            // Delete Button
-            TextButton.icon(
-              onPressed: _deleteThisJobCode,
-              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-              label: const Text(
-                'Delete Job Code',
-                style: TextStyle(color: Colors.redAccent),
-              ),
+                    navigator.pop();
+                  },
+                  child: const Text("Save"),
+                ),
+              ],
             ),
 
             const SizedBox(height: 20),
