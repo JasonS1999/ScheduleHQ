@@ -214,4 +214,85 @@ class JobCodeSettingsDao {
     final maxOrder = result.first['maxOrder'] as int? ?? 0;
     return maxOrder + 1;
   }
+
+  // ------------------------------------------------------------
+  // USAGE COUNTS (employees + templates)
+  // ------------------------------------------------------------
+  Future<Map<String, int>> getUsageCounts(String code) async {
+    final db = await _db;
+    final employeesResult = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM employees WHERE jobCode = ? COLLATE NOCASE',
+      [code],
+    );
+    final templatesResult = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM shift_templates WHERE jobCode = ? COLLATE NOCASE',
+      [code],
+    );
+
+    final employeesCount = (employeesResult.first['c'] as int?) ?? 0;
+    final templatesCount = (templatesResult.first['c'] as int?) ?? 0;
+    return {
+      'employees': employeesCount,
+      'templates': templatesCount,
+    };
+  }
+
+  // ------------------------------------------------------------
+  // DELETE JOB CODE
+  // - If employees reference the code, you must pass reassignEmployeesTo.
+  // - Shift templates for the deleted code are always deleted.
+  // Returns:
+  //  -1 if job code doesn't exist
+  //  -2 if employees exist and no reassignment was provided
+  //  >=0 number of employees reassigned
+  // ------------------------------------------------------------
+  Future<int> deleteJobCode(
+    String code, {
+    String? reassignEmployeesTo,
+  }) async {
+    final db = await _db;
+    return db.transaction<int>((txn) async {
+      final existing = await txn.query(
+        tableName,
+        where: 'code = ? COLLATE NOCASE',
+        whereArgs: [code],
+        limit: 1,
+      );
+      if (existing.isEmpty) return -1;
+
+      final employeesResult = await txn.rawQuery(
+        'SELECT COUNT(*) as c FROM employees WHERE jobCode = ? COLLATE NOCASE',
+        [code],
+      );
+      final employeesCount = (employeesResult.first['c'] as int?) ?? 0;
+      if (employeesCount > 0 && (reassignEmployeesTo == null || reassignEmployeesTo.trim().isEmpty)) {
+        return -2;
+      }
+
+      int reassigned = 0;
+      if (employeesCount > 0) {
+        reassigned = await txn.update(
+          'employees',
+          {'jobCode': reassignEmployeesTo},
+          where: 'jobCode = ? COLLATE NOCASE',
+          whereArgs: [code],
+        );
+      }
+
+      // Always delete templates for this job code (prevents orphaned templates)
+      await txn.delete(
+        'shift_templates',
+        where: 'jobCode = ? COLLATE NOCASE',
+        whereArgs: [code],
+      );
+
+      await txn.delete(
+        tableName,
+        where: 'code = ? COLLATE NOCASE',
+        whereArgs: [code],
+      );
+
+      return reassigned;
+    });
+  }
 }
