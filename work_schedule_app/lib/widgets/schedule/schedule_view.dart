@@ -1277,9 +1277,12 @@ class _ScheduleViewState extends State<ScheduleView> {
           // Shift Runner table on the right side
           ShiftRunnerTable(
             weekStart: normalizedWeekStart,
-            onChanged: () => setState(() {
-              _shiftRunnerRefreshKey++;
-            }),
+            onChanged: () async {
+              await _refreshShifts();
+              setState(() {
+                _shiftRunnerRefreshKey++;
+              });
+            },
           ),
         ],
       );
