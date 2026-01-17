@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../database/shift_runner_dao.dart';
+import '../../database/shift_runner_color_dao.dart';
 import '../../database/employee_dao.dart';
 import '../../models/shift_runner.dart';
+import '../../models/shift_runner_color.dart';
 import '../../models/employee.dart';
 
 class ShiftRunnerTable extends StatefulWidget {
@@ -20,10 +22,12 @@ class ShiftRunnerTable extends StatefulWidget {
 
 class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
   final ShiftRunnerDao _dao = ShiftRunnerDao();
+  final ShiftRunnerColorDao _colorDao = ShiftRunnerColorDao();
   final EmployeeDao _employeeDao = EmployeeDao();
   
   List<ShiftRunner> _runners = [];
   List<Employee> _employees = [];
+  Map<String, String> _colors = {};
   bool _isExpanded = true;
 
   @override
@@ -44,11 +48,13 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
     final weekEnd = widget.weekStart.add(const Duration(days: 6));
     final runners = await _dao.getForDateRange(widget.weekStart, weekEnd);
     final employees = await _employeeDao.getEmployees();
+    final colors = await _colorDao.getColorMap();
     
     if (mounted) {
       setState(() {
         _runners = runners;
         _employees = employees;
+        _colors = colors;
       });
     }
   }
@@ -292,18 +298,9 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
   }
 
   Color _getShiftColor(String shiftType) {
-    switch (shiftType) {
-      case 'open':
-        return Colors.orange;
-      case 'lunch':
-        return Colors.blue;
-      case 'dinner':
-        return Colors.purple;
-      case 'close':
-        return Colors.teal;
-      default:
-        return Colors.grey;
-    }
+    final hex = _colors[shiftType] ?? ShiftRunnerColor.defaultColors[shiftType] ?? '#808080';
+    final cleanHex = hex.replaceFirst('#', '');
+    return Color(int.parse('FF$cleanHex', radix: 16));
   }
 
   String _dayAbbr(int weekday) {

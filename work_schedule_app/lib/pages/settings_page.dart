@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/settings/pto_rules_tab.dart';
 import '../widgets/settings/job_codes_tab.dart';
-import '../widgets/settings/vacation_defaults_tab.dart';
+import '../widgets/settings/shift_runner_colors_tab.dart';
 import '../widgets/settings/schedule_settings_tab.dart';
 import '../widgets/settings/shift_templates_tab.dart';
 import '../services/theme_service.dart';
@@ -67,7 +67,7 @@ class _SettingsPageState extends State<SettingsPage>
             Tab(text: "PTO Rules"),
             Tab(text: "Job Codes"),
             Tab(text: "Shift Templates"),
-            Tab(text: "TBD"),
+            Tab(text: "Shift Runner"),
             Tab(text: "Schedule"),
           ],
         ),
@@ -81,7 +81,7 @@ class _SettingsPageState extends State<SettingsPage>
                 PtoRulesTab(),
                 JobCodesTab(),
                 ShiftTemplatesTab(),
-                VacationDefaultsTab(),
+                ShiftRunnerColorsTab(),
                 ScheduleSettingsTab(),
               ],
             ),

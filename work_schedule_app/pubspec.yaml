@@ -25,6 +25,7 @@ dependencies:
 
   # UI
   cupertino_icons: ^1.0.8
+  flutter_colorpicker: ^1.1.0
 
   # PDF/Printing
   pdf: ^3.11.0

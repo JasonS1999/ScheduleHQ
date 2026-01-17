@@ -143,6 +143,13 @@ Future<void> _onCreate(Database db, int version) async {
     ON shift_runners(date)
   ''');
 
+  await db.execute('''
+    CREATE TABLE shift_runner_colors (
+      shiftType TEXT PRIMARY KEY,
+      colorHex TEXT NOT NULL
+    )
+  ''');
+
   log("✅ Schema created", name: 'AppDatabase');
 } 
 
@@ -175,7 +182,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -308,6 +315,16 @@ class AppDatabase {
           await db.execute('''
             CREATE INDEX IF NOT EXISTS idx_shift_runners_date 
             ON shift_runners(date)
+          ''');
+        }
+
+        if (oldVersion < 13) {
+          // Add shift_runner_colors table for customizable colors
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS shift_runner_colors (
+              shiftType TEXT PRIMARY KEY,
+              colorHex TEXT NOT NULL
+            )
           ''');
         }
       },
