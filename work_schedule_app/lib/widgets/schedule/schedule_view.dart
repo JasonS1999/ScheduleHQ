@@ -1648,7 +1648,17 @@ class DailyScheduleView extends StatelessWidget {
     );
   }
 
-  String _formatTimeOfDay(TimeOfDay t) {
+  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false}) {
+    // Special cases for cell display
+    if (forCell) {
+      if (t.hour == 4 && t.minute == 30) return 'Op';
+      if (t.hour == 1 && t.minute == 0) return 'CL';
+      // Show just hour, or hour:minute if not on the hour
+      final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+      if (t.minute == 0) return '$h';
+      return '$h:${t.minute.toString().padLeft(2, '0')}';
+    }
+    // Full format for dropdowns/dialogs
     final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
     final mm = t.minute.toString().padLeft(2, '0');
     final suffix = t.period == DayPeriod.am ? 'AM' : 'PM';
@@ -2537,12 +2547,14 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                       hour: s.start.hour,
                                       minute: s.start.minute,
                                     ),
+                                    forCell: true,
                                   );
                                   final endLabel = _formatTimeOfDay(
                                     TimeOfDay(
                                       hour: s.end.hour,
                                       minute: s.end.minute,
                                     ),
+                                    forCell: true,
                                   );
                                   final isShiftSelected =
                                       _selectedShift != null &&
@@ -2865,7 +2877,17 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     return DateTime(day.year, day.month, day.day, tod.hour, tod.minute);
   }
 
-  String _formatTimeOfDay(TimeOfDay t) {
+  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false}) {
+    // Special cases for cell display
+    if (forCell) {
+      if (t.hour == 4 && t.minute == 30) return 'Op';
+      if (t.hour == 1 && t.minute == 0) return 'CL';
+      // Show just hour, or hour:minute if not on the hour
+      final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+      if (t.minute == 0) return '$h';
+      return '$h:${t.minute.toString().padLeft(2, '0')}';
+    }
+    // Full format for dropdowns/dialogs
     final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
     final suffix = t.period == DayPeriod.am ? 'AM' : 'PM';
     if (t.minute == 0) {
@@ -3576,7 +3598,17 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     return weeks;
   }
 
-  String _formatTimeOfDay(TimeOfDay t) {
+  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false}) {
+    // Special cases for cell display
+    if (forCell) {
+      if (t.hour == 4 && t.minute == 30) return 'Op';
+      if (t.hour == 1 && t.minute == 0) return 'CL';
+      // Show just hour, or hour:minute if not on the hour
+      final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
+      if (t.minute == 0) return '$h';
+      return '$h:${t.minute.toString().padLeft(2, '0')}';
+    }
+    // Full format for dropdowns/dialogs
     final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
     final mm = t.minute.toString().padLeft(2, '0');
     final suffix = t.period == DayPeriod.am ? 'AM' : 'PM';
@@ -4205,12 +4237,14 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                           hour: shift.start.hour,
                           minute: shift.start.minute,
                         ),
+                        forCell: true,
                       );
                       final endLabel = _formatTimeOfDay(
                         TimeOfDay(
                           hour: shift.end.hour,
                           minute: shift.end.minute,
                         ),
+                        forCell: true,
                       );
 
                       return Draggable<ShiftPlaceholder>(
