@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../database/shift_runner_dao.dart';
 import '../../database/shift_type_dao.dart';
+import '../../database/shift_dao.dart';
 import '../../database/employee_dao.dart';
 import '../../database/time_off_dao.dart';
 import '../../database/employee_availability_dao.dart';
 import '../../models/shift_runner.dart';
 import '../../models/shift_type.dart';
+import '../../models/shift.dart';
 import '../../models/employee.dart';
 
 class ShiftRunnerTable extends StatefulWidget {
@@ -21,6 +23,7 @@ class ShiftRunnerTable extends StatefulWidget {
 class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
   final ShiftRunnerDao _dao = ShiftRunnerDao();
   final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
+  final ShiftDao _shiftDao = ShiftDao();
   final EmployeeDao _employeeDao = EmployeeDao();
   final TimeOffDao _timeOffDao = TimeOffDao();
   final EmployeeAvailabilityDao _availabilityDao = EmployeeAvailabilityDao();
@@ -117,6 +120,45 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
       if (result.isEmpty) {
         await _dao.clear(day, shiftType);
       } else {
+        // Find the employee by name
+        final employee = _employees.cast<Employee?>().firstWhere(
+          (e) => e?.name == result,
+          orElse: () => null,
+        );
+        
+        // Create shift with default times if employee doesn't have a shift for this day
+        if (employee != null) {
+          final existingShifts = await _shiftDao.getByEmployeeAndDateRange(
+            employee.id!,
+            day,
+            day.add(const Duration(days: 1)),
+          );
+          
+          if (existingShifts.isEmpty) {
+            // Parse the default shift times
+            final startParts = startTime.split(':');
+            final endParts = endTime.split(':');
+            final shiftStart = DateTime(
+              day.year, day.month, day.day,
+              int.parse(startParts[0]), int.parse(startParts[1]),
+            );
+            var shiftEnd = DateTime(
+              day.year, day.month, day.day,
+              int.parse(endParts[0]), int.parse(endParts[1]),
+            );
+            // Handle overnight shifts (end time before start time)
+            if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart)) {
+              shiftEnd = shiftEnd.add(const Duration(days: 1));
+            }
+            
+            await _shiftDao.insert(Shift(
+              employeeId: employee.id!,
+              startTime: shiftStart,
+              endTime: shiftEnd,
+            ));
+          }
+        }
+        
         await _dao.upsert(
           ShiftRunner(date: day, shiftType: shiftType, runnerName: result),
         );
