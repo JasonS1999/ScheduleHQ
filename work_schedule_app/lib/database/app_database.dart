@@ -178,15 +178,39 @@ Future<void> _onCreate(Database db, int version) async {
   await db.execute('''
     CREATE TABLE store_hours (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      openTime TEXT NOT NULL,
-      closeTime TEXT NOT NULL
+      sundayOpen TEXT NOT NULL DEFAULT '04:30',
+      sundayClose TEXT NOT NULL DEFAULT '01:00',
+      mondayOpen TEXT NOT NULL DEFAULT '04:30',
+      mondayClose TEXT NOT NULL DEFAULT '01:00',
+      tuesdayOpen TEXT NOT NULL DEFAULT '04:30',
+      tuesdayClose TEXT NOT NULL DEFAULT '01:00',
+      wednesdayOpen TEXT NOT NULL DEFAULT '04:30',
+      wednesdayClose TEXT NOT NULL DEFAULT '01:00',
+      thursdayOpen TEXT NOT NULL DEFAULT '04:30',
+      thursdayClose TEXT NOT NULL DEFAULT '01:00',
+      fridayOpen TEXT NOT NULL DEFAULT '04:30',
+      fridayClose TEXT NOT NULL DEFAULT '01:00',
+      saturdayOpen TEXT NOT NULL DEFAULT '04:30',
+      saturdayClose TEXT NOT NULL DEFAULT '01:00'
     )
   ''');
 
   // Insert default store hours
   await db.insert('store_hours', {
-    'openTime': '04:30',
-    'closeTime': '01:00',
+    'sundayOpen': '04:30',
+    'sundayClose': '01:00',
+    'mondayOpen': '04:30',
+    'mondayClose': '01:00',
+    'tuesdayOpen': '04:30',
+    'tuesdayClose': '01:00',
+    'wednesdayOpen': '04:30',
+    'wednesdayClose': '01:00',
+    'thursdayOpen': '04:30',
+    'thursdayClose': '01:00',
+    'fridayOpen': '04:30',
+    'fridayClose': '01:00',
+    'saturdayOpen': '04:30',
+    'saturdayClose': '01:00',
   });
 
   log("✅ Schema created", name: 'AppDatabase');
@@ -221,7 +245,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 17,
+      version: 18,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -460,6 +484,64 @@ class AppDatabase {
             'openTime': '04:30',
             'closeTime': '01:00',
           });
+        }
+        if (oldVersion < 18) {
+          // Migrate store_hours to per-day schedule
+          // Check if we have the old schema (single openTime/closeTime)
+          final columns = await db.rawQuery("PRAGMA table_info(store_hours)");
+          final columnNames = columns.map((c) => c['name'] as String).toSet();
+          
+          if (columnNames.contains('openTime') && !columnNames.contains('mondayOpen')) {
+            // Get existing values
+            final oldData = await db.query('store_hours', limit: 1);
+            String oldOpen = '04:30';
+            String oldClose = '01:00';
+            
+            if (oldData.isNotEmpty) {
+              oldOpen = oldData.first['openTime'] as String? ?? '04:30';
+              oldClose = oldData.first['closeTime'] as String? ?? '01:00';
+            }
+            
+            // Drop old table and create new
+            await db.execute('DROP TABLE IF EXISTS store_hours');
+            await db.execute('''
+              CREATE TABLE store_hours (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sundayOpen TEXT NOT NULL DEFAULT '04:30',
+                sundayClose TEXT NOT NULL DEFAULT '01:00',
+                mondayOpen TEXT NOT NULL DEFAULT '04:30',
+                mondayClose TEXT NOT NULL DEFAULT '01:00',
+                tuesdayOpen TEXT NOT NULL DEFAULT '04:30',
+                tuesdayClose TEXT NOT NULL DEFAULT '01:00',
+                wednesdayOpen TEXT NOT NULL DEFAULT '04:30',
+                wednesdayClose TEXT NOT NULL DEFAULT '01:00',
+                thursdayOpen TEXT NOT NULL DEFAULT '04:30',
+                thursdayClose TEXT NOT NULL DEFAULT '01:00',
+                fridayOpen TEXT NOT NULL DEFAULT '04:30',
+                fridayClose TEXT NOT NULL DEFAULT '01:00',
+                saturdayOpen TEXT NOT NULL DEFAULT '04:30',
+                saturdayClose TEXT NOT NULL DEFAULT '01:00'
+              )
+            ''');
+            
+            // Insert with old values for all days (preserve user's settings)
+            await db.insert('store_hours', {
+              'sundayOpen': oldOpen,
+              'sundayClose': oldClose,
+              'mondayOpen': oldOpen,
+              'mondayClose': oldClose,
+              'tuesdayOpen': oldOpen,
+              'tuesdayClose': oldClose,
+              'wednesdayOpen': oldOpen,
+              'wednesdayClose': oldClose,
+              'thursdayOpen': oldOpen,
+              'thursdayClose': oldClose,
+              'fridayOpen': oldOpen,
+              'fridayClose': oldClose,
+              'saturdayOpen': oldOpen,
+              'saturdayClose': oldClose,
+            });
+          }
         }
       },
     );

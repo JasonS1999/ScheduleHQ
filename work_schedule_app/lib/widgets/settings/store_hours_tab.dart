@@ -14,6 +14,17 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
   StoreHours? _storeHours;
   bool _isLoading = true;
 
+  // Day names for display
+  static const List<String> _dayNames = [
+    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+  ];
+  
+  // Map day names to DateTime weekday constants
+  static const List<int> _dayValues = [
+    DateTime.sunday, DateTime.monday, DateTime.tuesday, DateTime.wednesday, 
+    DateTime.thursday, DateTime.friday, DateTime.saturday
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -49,34 +60,93 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
     return '$h:$minute $suffix';
   }
 
-  Future<void> _updateOpenTime(String? newTime) async {
-    if (newTime == null || _storeHours == null) return;
-    final updated = _storeHours!.copyWith(openTime: newTime);
-    await _dao.updateStoreHours(updated);
-    setState(() {
-      _storeHours = updated;
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Store open time updated'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+  String _getOpenTimeForDay(int dayIndex) {
+    if (_storeHours == null) return StoreHours.defaultOpenTime;
+    return _storeHours!.getOpenTimeForDay(_dayValues[dayIndex]);
   }
 
-  Future<void> _updateCloseTime(String? newTime) async {
+  String _getCloseTimeForDay(int dayIndex) {
+    if (_storeHours == null) return StoreHours.defaultCloseTime;
+    return _storeHours!.getCloseTimeForDay(_dayValues[dayIndex]);
+  }
+
+  Future<void> _updateTimeForDay(int dayIndex, bool isOpen, String? newTime) async {
     if (newTime == null || _storeHours == null) return;
-    final updated = _storeHours!.copyWith(closeTime: newTime);
+    
+    StoreHours updated;
+    switch (dayIndex) {
+      case 0: // Sunday
+        updated = isOpen 
+            ? _storeHours!.copyWith(sundayOpen: newTime)
+            : _storeHours!.copyWith(sundayClose: newTime);
+        break;
+      case 1: // Monday
+        updated = isOpen 
+            ? _storeHours!.copyWith(mondayOpen: newTime)
+            : _storeHours!.copyWith(mondayClose: newTime);
+        break;
+      case 2: // Tuesday
+        updated = isOpen 
+            ? _storeHours!.copyWith(tuesdayOpen: newTime)
+            : _storeHours!.copyWith(tuesdayClose: newTime);
+        break;
+      case 3: // Wednesday
+        updated = isOpen 
+            ? _storeHours!.copyWith(wednesdayOpen: newTime)
+            : _storeHours!.copyWith(wednesdayClose: newTime);
+        break;
+      case 4: // Thursday
+        updated = isOpen 
+            ? _storeHours!.copyWith(thursdayOpen: newTime)
+            : _storeHours!.copyWith(thursdayClose: newTime);
+        break;
+      case 5: // Friday
+        updated = isOpen 
+            ? _storeHours!.copyWith(fridayOpen: newTime)
+            : _storeHours!.copyWith(fridayClose: newTime);
+        break;
+      case 6: // Saturday
+        updated = isOpen 
+            ? _storeHours!.copyWith(saturdayOpen: newTime)
+            : _storeHours!.copyWith(saturdayClose: newTime);
+        break;
+      default:
+        return;
+    }
+    
     await _dao.updateStoreHours(updated);
-    setState(() {
-      _storeHours = updated;
-    });
+    StoreHours.setCache(updated); // Update cache immediately
+    setState(() => _storeHours = updated);
+  }
+
+  Future<void> _applyToAllDays(String openTime, String closeTime) async {
+    if (_storeHours == null) return;
+    
+    final updated = _storeHours!.copyWith(
+      sundayOpen: openTime,
+      sundayClose: closeTime,
+      mondayOpen: openTime,
+      mondayClose: closeTime,
+      tuesdayOpen: openTime,
+      tuesdayClose: closeTime,
+      wednesdayOpen: openTime,
+      wednesdayClose: closeTime,
+      thursdayOpen: openTime,
+      thursdayClose: closeTime,
+      fridayOpen: openTime,
+      fridayClose: closeTime,
+      saturdayOpen: openTime,
+      saturdayClose: closeTime,
+    );
+    
+    await _dao.updateStoreHours(updated);
+    StoreHours.setCache(updated);
+    setState(() => _storeHours = updated);
+    
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Store close time updated'),
+          content: Text('Applied to all days'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -86,9 +156,9 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
   Future<void> _resetToDefaults() async {
     final defaults = StoreHours.defaults();
     await _dao.updateStoreHours(defaults);
-    setState(() {
-      _storeHours = defaults;
-    });
+    StoreHours.setCache(defaults);
+    setState(() => _storeHours = defaults);
+    
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -130,103 +200,65 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'These times are used to display "Op" (Open) and "CL" (Close) labels in the schedule instead of showing the full time.',
+                    'Set different open/close times for each day. Times are displayed as "Op" (Open) and "CL" (Close) in the schedule.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Colors.grey[600],
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  
+                  // Quick apply row
                   Row(
                     children: [
+                      const Icon(Icons.copy_all, size: 18, color: Colors.grey),
+                      const SizedBox(width: 8),
+                      const Text('Quick apply: ', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                      TextButton(
+                        onPressed: () => _applyToAllDays(
+                          _getOpenTimeForDay(1), // Use Monday's times
+                          _getCloseTimeForDay(1),
+                        ),
+                        child: const Text("Use Monday's hours for all days"),
+                      ),
+                    ],
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  
+                  // Header row
+                  Row(
+                    children: [
+                      const SizedBox(width: 100), // Day name column
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Store Opens',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _storeHours?.openTime,
-                                  isExpanded: true,
-                                  items: timeOptions.map((time) {
-                                    return DropdownMenuItem(
-                                      value: time,
-                                      child: Text(_formatTimeForDisplay(time)),
-                                    );
-                                  }).toList(),
-                                  onChanged: _updateOpenTime,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Displayed as "Op" in schedule cells',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'Opens',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                      const SizedBox(width: 24),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Store Closes',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey.shade300),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _storeHours?.closeTime,
-                                  isExpanded: true,
-                                  items: timeOptions.map((time) {
-                                    return DropdownMenuItem(
-                                      value: time,
-                                      child: Text(_formatTimeForDisplay(time)),
-                                    );
-                                  }).toList(),
-                                  onChanged: _updateCloseTime,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Displayed as "CL" in schedule cells',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          'Closes',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  
+                  // Day rows
+                  ...List.generate(7, (index) => _buildDayRow(index, timeOptions)),
                 ],
               ),
             ),
@@ -248,15 +280,20 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'How times appear in schedule cells:',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                  ),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _buildPreviewCell('Op', _formatTimeForDisplay(_storeHours?.openTime ?? '04:30')),
+                      _buildPreviewCell('Op', 'Store opens'),
                       const SizedBox(width: 16),
                       const Icon(Icons.arrow_forward, color: Colors.grey),
                       const SizedBox(width: 16),
-                      _buildPreviewCell('CL', _formatTimeForDisplay(_storeHours?.closeTime ?? '01:00')),
+                      _buildPreviewCell('CL', 'Store closes'),
                     ],
                   ),
                 ],
@@ -268,7 +305,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
             child: OutlinedButton.icon(
               onPressed: _resetToDefaults,
               icon: const Icon(Icons.restore),
-              label: const Text('Reset to Defaults (4:30 AM - 1:00 AM)'),
+              label: const Text('Reset All to Defaults (4:30 AM - 1:00 AM)'),
             ),
           ),
         ],
@@ -276,13 +313,100 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
     );
   }
 
-  Widget _buildPreviewCell(String label, String time) {
+  Widget _buildDayRow(int dayIndex, List<String> timeOptions) {
+    final openTime = _getOpenTimeForDay(dayIndex);
+    final closeTime = _getCloseTimeForDay(dayIndex);
+    final isWeekend = dayIndex == 0 || dayIndex == 6;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: isWeekend 
+            ? (isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100)
+            : null,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              _dayNames[dayIndex],
+              style: TextStyle(
+                fontWeight: isWeekend ? FontWeight.w500 : FontWeight.normal,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: openTime,
+                  isExpanded: true,
+                  isDense: true,
+                  items: timeOptions.map((time) {
+                    return DropdownMenuItem(
+                      value: time,
+                      child: Text(_formatTimeForDisplay(time), style: const TextStyle(fontSize: 13)),
+                    );
+                  }).toList(),
+                  onChanged: (v) => _updateTimeForDay(dayIndex, true, v),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: closeTime,
+                  isExpanded: true,
+                  isDense: true,
+                  items: timeOptions.map((time) {
+                    return DropdownMenuItem(
+                      value: time,
+                      child: Text(_formatTimeForDisplay(time), style: const TextStyle(fontSize: 13)),
+                    );
+                  }).toList(),
+                  onChanged: (v) => _updateTimeForDay(dayIndex, false, v),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewCell(String label, String description) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(
+          color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+        ),
         borderRadius: BorderRadius.circular(8),
-        color: Colors.grey.shade50,
+        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
       ),
       child: Column(
         children: [
@@ -295,7 +419,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
           ),
           const SizedBox(height: 4),
           Text(
-            time,
+            description,
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey[600],

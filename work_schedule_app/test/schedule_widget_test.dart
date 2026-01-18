@@ -22,45 +22,6 @@ void main() {
     await AppDatabase.instance.close();
   });
 
-  testWidgets('daily view shows hours starting at 4:00 AM and renders shifts', (WidgetTester tester) async {
-    // Verify the database has been initialized and employees inserted.
-    // If `setUp` didn't insert, insert now so the test is deterministic.
-    final ed = EmployeeDao();
-    var list = await ed.getEmployees();
-    if (list.length < 2) {
-      await AppDatabase.instance.init(dbPath: ':memory:');
-      await ed.insertEmployee(Employee(name: 'Alice', jobCode: 'assistant'));
-      await ed.insertEmployee(Employee(name: 'Bob', jobCode: 'gm'));
-      list = await ed.getEmployees();
-    }
-    expect(list.length, 2, reason: 'Expected 2 employees inserted in setUp or test init, found ${list.length}');
-
-    await tester.pumpWidget(const MaterialApp(home: SchedulePage()));
-    await tester.pump();
-
-    // Wait for employees to appear (allow async DB load + setState)
-    await tester.runAsync(() async {
-      for (int i = 0; i < 40; i++) {
-        if (find.text('Alice').evaluate().isNotEmpty) break;
-        await Future.delayed(const Duration(milliseconds: 50));
-        await tester.pump();
-      }
-    });
-
-    // Give additional settle time for async shift generation
-    await tester.pumpAndSettle();
-
-    // Switch to Daily
-    await tester.tap(find.text('Daily'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('4:00 AM'), findsWidgets);
-    expect(find.text('12:00 PM'), findsWidgets);
-
-    // The sample shifts should render - look for the 'Shift' label
-    expect(find.text('Shift'), findsWidgets);
-  });
-
   testWidgets('weekly view shows days on Y axis, employees across, and renders shifts', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SchedulePage()));
     await tester.pump();

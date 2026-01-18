@@ -815,6 +815,491 @@ class _TimeOffPageState extends State<TimeOffPage> {
     }
   }
 
+  Future<void> _showBulkAddDialog() async {
+    Employee? selectedEmployee;
+    final entries = <_BulkTimeOffEntry>[];
+    
+    // Cache job code settings for PTO eligibility check
+    final jobCodeSettings = await _jobCodeSettingsDao.getAll();
+    final jobCodeMap = {for (var jc in jobCodeSettings) jc.code.toLowerCase(): jc};
+    
+    bool hasPtoEnabled(Employee? emp) {
+      if (emp == null) return false;
+      final setting = jobCodeMap[emp.jobCode.toLowerCase()];
+      return setting?.hasPTO ?? false;
+    }
+    
+    int vacationWeeksRemaining(Employee? emp) {
+      if (emp == null) return 0;
+      return emp.vacationWeeksAllowed - emp.vacationWeeksUsed;
+    }
+    
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final canAddPto = hasPtoEnabled(selectedEmployee);
+            final vacWeeksLeft = vacationWeeksRemaining(selectedEmployee);
+            final canAddVacation = vacWeeksLeft > 0;
+            
+            // Determine default type based on eligibility
+            String getDefaultType() {
+              if (canAddPto) return 'pto';
+              if (canAddVacation) return 'vac';
+              return 'sick';
+            }
+            
+            // Get available type options for this employee
+            List<DropdownMenuItem<String>> getTypeOptions() {
+              final items = <DropdownMenuItem<String>>[];
+              if (canAddPto) {
+                items.add(const DropdownMenuItem(value: 'pto', child: Text('PTO')));
+              }
+              if (canAddVacation) {
+                items.add(const DropdownMenuItem(value: 'vac', child: Text('Vacation')));
+              }
+              items.add(const DropdownMenuItem(value: 'sick', child: Text('Requested')));
+              return items;
+            }
+            
+            String formatTime(String? time) {
+              if (time == null) return '';
+              final parts = time.split(':');
+              if (parts.length != 2) return time;
+              final hour = int.tryParse(parts[0]) ?? 0;
+              final minute = parts[1];
+              final h = hour % 12 == 0 ? 12 : hour % 12;
+              final suffix = hour < 12 ? 'AM' : 'PM';
+              return '$h:$minute $suffix';
+            }
+            
+            return AlertDialog(
+              title: const Text('Bulk Add Time Off'),
+              content: SizedBox(
+                width: 550,
+                height: 500,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Employee search/select
+                    const Text('Select Employee:', style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    Autocomplete<Employee>(
+                      displayStringForOption: (e) => e.name,
+                      optionsBuilder: (textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return _employees;
+                        }
+                        return _employees.where((e) =>
+                            e.name.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                      },
+                      onSelected: (employee) {
+                        setDialogState(() {
+                          selectedEmployee = employee;
+                          // Clear entries when employee changes since eligibility may differ
+                          entries.clear();
+                        });
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            hintText: 'Search by name...',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        );
+                      },
+                    ),
+                    if (selectedEmployee != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Chip(
+                            avatar: CircleAvatar(
+                              backgroundColor: _jobCodeColorCache[selectedEmployee!.jobCode] ?? Colors.grey,
+                              child: Text(selectedEmployee!.name[0], style: const TextStyle(color: Colors.white, fontSize: 12)),
+                            ),
+                            label: Text('${selectedEmployee!.name} (${selectedEmployee!.jobCode})'),
+                            deleteIcon: const Icon(Icons.close, size: 16),
+                            onDeleted: () => setDialogState(() {
+                              selectedEmployee = null;
+                              entries.clear();
+                            }),
+                          ),
+                          const SizedBox(width: 12),
+                          // Show eligibility info
+                          Text(
+                            canAddPto ? '✓ PTO' : '✗ No PTO',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: canAddPto ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            canAddVacation ? '✓ $vacWeeksLeft vac wks' : '✗ No vacation',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: canAddVacation ? Colors.green : Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    
+                    // Entries list
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Time Off Entries:', style: TextStyle(fontWeight: FontWeight.w500)),
+                        TextButton.icon(
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Add Entry'),
+                          onPressed: selectedEmployee == null
+                              ? null
+                              : () {
+                                  setDialogState(() {
+                                    entries.add(_BulkTimeOffEntry(
+                                      date: DateTime.now(),
+                                      type: getDefaultType(),
+                                      hours: _settings?.ptoHoursPerRequest ?? 8,
+                                      days: 1,
+                                    ));
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    Expanded(
+                      child: entries.isEmpty
+                          ? Center(
+                              child: Text(
+                                selectedEmployee == null
+                                    ? 'Select an employee first'
+                                    : 'No entries added yet.\nClick "Add Entry" to start.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey[500]),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: entries.length,
+                              itemBuilder: (context, index) {
+                                final entry = entries[index];
+                                
+                                // Validate entry type - if employee became ineligible, switch to allowed type
+                                if (entry.type == 'pto' && !canAddPto) {
+                                  entry.type = canAddVacation ? 'vac' : 'sick';
+                                }
+                                if (entry.type == 'vac' && !canAddVacation) {
+                                  entry.type = canAddPto ? 'pto' : 'sick';
+                                }
+                                
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          children: [
+                                            // Date picker
+                                            Expanded(
+                                              flex: 2,
+                                              child: InkWell(
+                                                onTap: () async {
+                                                  final picked = await showDatePicker(
+                                                    context: context,
+                                                    initialDate: entry.date,
+                                                    firstDate: DateTime(2020),
+                                                    lastDate: DateTime(2030),
+                                                  );
+                                                  if (picked != null) {
+                                                    setDialogState(() => entry.date = picked);
+                                                  }
+                                                },
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.grey),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    '${entry.date.month}/${entry.date.day}/${entry.date.year}',
+                                                    style: const TextStyle(fontSize: 13),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            
+                                            // Type dropdown
+                                            Expanded(
+                                              flex: 2,
+                                              child: DropdownButtonFormField<String>(
+                                                value: entry.type,
+                                                isDense: true,
+                                                isExpanded: true,
+                                                decoration: const InputDecoration(
+                                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                  border: OutlineInputBorder(),
+                                                ),
+                                                items: getTypeOptions(),
+                                                onChanged: (v) {
+                                                  if (v != null) {
+                                                    setDialogState(() {
+                                                      entry.type = v;
+                                                      // Reset values when type changes
+                                                      if (v == 'vac') {
+                                                        entry.days = 1;
+                                                      } else if (v == 'pto') {
+                                                        entry.hours = _settings?.ptoHoursPerRequest ?? 8;
+                                                      } else if (v == 'sick') {
+                                                        entry.isAllDay = true;
+                                                        entry.hours = _settings?.ptoHoursPerRequest ?? 8;
+                                                      }
+                                                    });
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            
+                                            // Hours/Days input based on type
+                                            if (entry.type == 'vac') ...[
+                                              // Vacation: days input
+                                              Expanded(
+                                                flex: 1,
+                                                child: TextField(
+                                                  controller: TextEditingController(text: entry.days.toString()),
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
+                                                    labelText: 'Days',
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                    border: OutlineInputBorder(),
+                                                  ),
+                                                  onChanged: (v) {
+                                                    entry.days = int.tryParse(v) ?? entry.days;
+                                                  },
+                                                ),
+                                              ),
+                                            ] else if (entry.type == 'pto') ...[
+                                              // PTO: hours input
+                                              Expanded(
+                                                flex: 1,
+                                                child: TextField(
+                                                  controller: TextEditingController(text: entry.hours.toString()),
+                                                  keyboardType: TextInputType.number,
+                                                  decoration: const InputDecoration(
+                                                    labelText: 'Hrs',
+                                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                    border: OutlineInputBorder(),
+                                                  ),
+                                                  onChanged: (v) {
+                                                    entry.hours = int.tryParse(v) ?? entry.hours;
+                                                  },
+                                                ),
+                                              ),
+                                            ] else ...[
+                                              // Requested: show time info
+                                              Expanded(
+                                                flex: 1,
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                                  decoration: BoxDecoration(
+                                                    border: Border.all(color: Colors.grey.shade300),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    entry.isAllDay ? 'All Day' : '${entry.hours}h',
+                                                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                            
+                                            // Delete button
+                                            IconButton(
+                                              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                                              onPressed: () {
+                                                setDialogState(() => entries.removeAt(index));
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                        
+                                        // Time range options for "Requested" type
+                                        if (entry.type == 'sick') ...[
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              Checkbox(
+                                                value: entry.isAllDay,
+                                                onChanged: (v) {
+                                                  setDialogState(() {
+                                                    entry.isAllDay = v ?? true;
+                                                    if (!entry.isAllDay) {
+                                                      entry.startTime = '09:00';
+                                                      entry.endTime = '17:00';
+                                                      entry.hours = 8;
+                                                    } else {
+                                                      entry.hours = _settings?.ptoHoursPerRequest ?? 8;
+                                                    }
+                                                  });
+                                                },
+                                              ),
+                                              const Text('All Day', style: TextStyle(fontSize: 13)),
+                                              if (!entry.isAllDay) ...[
+                                                const SizedBox(width: 16),
+                                                const Text('From:', style: TextStyle(fontSize: 13)),
+                                                const SizedBox(width: 4),
+                                                OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    minimumSize: Size.zero,
+                                                  ),
+                                                  onPressed: () async {
+                                                    final parts = (entry.startTime ?? '09:00').split(':');
+                                                    final initial = TimeOfDay(
+                                                      hour: int.tryParse(parts[0]) ?? 9,
+                                                      minute: int.tryParse(parts[1]) ?? 0,
+                                                    );
+                                                    final picked = await showTimePicker(
+                                                      context: context,
+                                                      initialTime: initial,
+                                                    );
+                                                    if (picked != null) {
+                                                      setDialogState(() {
+                                                        entry.startTime = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                                                        // Recalculate hours
+                                                        final endParts = (entry.endTime ?? '17:00').split(':');
+                                                        final endMins = (int.tryParse(endParts[0]) ?? 17) * 60 + (int.tryParse(endParts[1]) ?? 0);
+                                                        final startMins = picked.hour * 60 + picked.minute;
+                                                        entry.hours = ((endMins - startMins) / 60).round().clamp(1, 24);
+                                                      });
+                                                    }
+                                                  },
+                                                  child: Text(formatTime(entry.startTime ?? '09:00'), style: const TextStyle(fontSize: 12)),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                const Text('To:', style: TextStyle(fontSize: 13)),
+                                                const SizedBox(width: 4),
+                                                OutlinedButton(
+                                                  style: OutlinedButton.styleFrom(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    minimumSize: Size.zero,
+                                                  ),
+                                                  onPressed: () async {
+                                                    final parts = (entry.endTime ?? '17:00').split(':');
+                                                    final initial = TimeOfDay(
+                                                      hour: int.tryParse(parts[0]) ?? 17,
+                                                      minute: int.tryParse(parts[1]) ?? 0,
+                                                    );
+                                                    final picked = await showTimePicker(
+                                                      context: context,
+                                                      initialTime: initial,
+                                                    );
+                                                    if (picked != null) {
+                                                      setDialogState(() {
+                                                        entry.endTime = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+                                                        // Recalculate hours
+                                                        final startParts = (entry.startTime ?? '09:00').split(':');
+                                                        final startMins = (int.tryParse(startParts[0]) ?? 9) * 60 + (int.tryParse(startParts[1]) ?? 0);
+                                                        final endMins = picked.hour * 60 + picked.minute;
+                                                        entry.hours = ((endMins - startMins) / 60).round().clamp(1, 24);
+                                                      });
+                                                    }
+                                                  },
+                                                  child: Text(formatTime(entry.endTime ?? '17:00'), style: const TextStyle(fontSize: 12)),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text('(${entry.hours}h)', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: (selectedEmployee == null || entries.isEmpty)
+                      ? null
+                      : () async {
+                          // Save all entries
+                          for (final entry in entries) {
+                            final groupId = const Uuid().v4();
+                            
+                            if (entry.type == 'vac') {
+                              // For vacation, create multiple days based on entry.days
+                              // Each "day" is 8 hours
+                              for (int d = 0; d < entry.days; d++) {
+                                final dayDate = entry.date.add(Duration(days: d));
+                                final timeOffEntry = TimeOffEntry(
+                                  id: null,
+                                  employeeId: selectedEmployee!.id!,
+                                  date: dayDate,
+                                  timeOffType: 'vac',
+                                  hours: 8, // Full day
+                                  vacationGroupId: groupId,
+                                  isAllDay: true,
+                                );
+                                await _timeOffDao.insertTimeOff(timeOffEntry);
+                              }
+                            } else {
+                              // PTO or Requested
+                              final timeOffEntry = TimeOffEntry(
+                                id: null,
+                                employeeId: selectedEmployee!.id!,
+                                date: entry.date,
+                                timeOffType: entry.type,
+                                hours: entry.hours,
+                                vacationGroupId: groupId,
+                                isAllDay: entry.type == 'sick' ? entry.isAllDay : true,
+                                startTime: entry.type == 'sick' && !entry.isAllDay ? entry.startTime : null,
+                                endTime: entry.type == 'sick' && !entry.isAllDay ? entry.endTime : null,
+                              );
+                              await _timeOffDao.insertTimeOff(timeOffEntry);
+                            }
+                          }
+                          if (!mounted) return;
+                          Navigator.pop(context);
+                          await _loadMonthEntries();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Added ${entries.length} time off entries for ${selectedEmployee!.name}'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        },
+                  child: Text('Save ${entries.length} Entries'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_settings == null) {
@@ -828,6 +1313,13 @@ class _TimeOffPageState extends State<TimeOffPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Time Off"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            tooltip: 'Bulk Add Time Off',
+            onPressed: _showBulkAddDialog,
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -1148,4 +1640,25 @@ class _TimeOffPageState extends State<TimeOffPage> {
       ),
     );
   }
+}
+
+/// Helper class for bulk time off entry
+class _BulkTimeOffEntry {
+  DateTime date;
+  String type;
+  int hours;
+  int days; // For vacation entries
+  bool isAllDay; // For requested entries
+  String? startTime; // For partial day requested entries
+  String? endTime;
+
+  _BulkTimeOffEntry({
+    required this.date,
+    required this.type,
+    this.hours = 8,
+    this.days = 1,
+    this.isAllDay = true,
+    this.startTime,
+    this.endTime,
+  });
 }

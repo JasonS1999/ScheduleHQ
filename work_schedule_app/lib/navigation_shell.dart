@@ -4,6 +4,7 @@ import 'pages/time_off_page.dart';
 import 'pages/roster_page.dart';
 import 'package:work_schedule_app/pages/settings_page.dart';
 import 'pages/pto_vac_tracker_page.dart';
+import 'pages/analytics_page.dart';
 
 class NavigationShell extends StatefulWidget {
   const NavigationShell({super.key});
@@ -20,6 +21,7 @@ class _NavigationShellState extends State<NavigationShell> {
     TimeOffPage(),
     RosterPage(),
     PtoVacTrackerPage(),
+    AnalyticsPage(),
     SettingsPage(),
   ];
 
@@ -28,6 +30,7 @@ class _NavigationShellState extends State<NavigationShell> {
     "Time Off",
     "Roster",
     "PTO / VAC Tracker",
+    "Analytics",
     "Settings",
   ];
 
@@ -59,6 +62,10 @@ class _NavigationShellState extends State<NavigationShell> {
                 NavigationRailDestination(
                   icon: Icon(Icons.track_changes),
                   label: Text("PTO / VAC"),
+                ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.analytics),
+                  label: Text("Analytics"),
                 ),
                 NavigationRailDestination(
                   icon: Icon(Icons.settings),
@@ -94,6 +101,10 @@ class _NavigationShellState extends State<NavigationShell> {
                 NavigationDestination(
                   icon: Icon(Icons.track_changes),
                   label: "PTO / VAC",
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.analytics),
+                  label: "Analytics",
                 ),
                 NavigationDestination(
                   icon: Icon(Icons.settings),

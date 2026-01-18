@@ -1,7 +1,21 @@
 class StoreHours {
   final int? id;
-  final String openTime; // Format: HH:mm (e.g., "04:30")
-  final String closeTime; // Format: HH:mm (e.g., "01:00")
+  
+  // Per-day open times (0=Sunday, 1=Monday, ..., 6=Saturday)
+  final String sundayOpen;
+  final String sundayClose;
+  final String mondayOpen;
+  final String mondayClose;
+  final String tuesdayOpen;
+  final String tuesdayClose;
+  final String wednesdayOpen;
+  final String wednesdayClose;
+  final String thursdayOpen;
+  final String thursdayClose;
+  final String fridayOpen;
+  final String fridayClose;
+  final String saturdayOpen;
+  final String saturdayClose;
 
   static const String defaultOpenTime = '04:30';
   static const String defaultCloseTime = '01:00';
@@ -19,43 +33,143 @@ class StoreHours {
 
   StoreHours({
     this.id,
-    required this.openTime,
-    required this.closeTime,
+    required this.sundayOpen,
+    required this.sundayClose,
+    required this.mondayOpen,
+    required this.mondayClose,
+    required this.tuesdayOpen,
+    required this.tuesdayClose,
+    required this.wednesdayOpen,
+    required this.wednesdayClose,
+    required this.thursdayOpen,
+    required this.thursdayClose,
+    required this.fridayOpen,
+    required this.fridayClose,
+    required this.saturdayOpen,
+    required this.saturdayClose,
   });
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'openTime': openTime,
-      'closeTime': closeTime,
+      'sundayOpen': sundayOpen,
+      'sundayClose': sundayClose,
+      'mondayOpen': mondayOpen,
+      'mondayClose': mondayClose,
+      'tuesdayOpen': tuesdayOpen,
+      'tuesdayClose': tuesdayClose,
+      'wednesdayOpen': wednesdayOpen,
+      'wednesdayClose': wednesdayClose,
+      'thursdayOpen': thursdayOpen,
+      'thursdayClose': thursdayClose,
+      'fridayOpen': fridayOpen,
+      'fridayClose': fridayClose,
+      'saturdayOpen': saturdayOpen,
+      'saturdayClose': saturdayClose,
     };
   }
 
   factory StoreHours.fromMap(Map<String, dynamic> map) {
     return StoreHours(
       id: map['id'] as int?,
-      openTime: map['openTime'] as String,
-      closeTime: map['closeTime'] as String,
+      sundayOpen: map['sundayOpen'] as String? ?? defaultOpenTime,
+      sundayClose: map['sundayClose'] as String? ?? defaultCloseTime,
+      mondayOpen: map['mondayOpen'] as String? ?? defaultOpenTime,
+      mondayClose: map['mondayClose'] as String? ?? defaultCloseTime,
+      tuesdayOpen: map['tuesdayOpen'] as String? ?? defaultOpenTime,
+      tuesdayClose: map['tuesdayClose'] as String? ?? defaultCloseTime,
+      wednesdayOpen: map['wednesdayOpen'] as String? ?? defaultOpenTime,
+      wednesdayClose: map['wednesdayClose'] as String? ?? defaultCloseTime,
+      thursdayOpen: map['thursdayOpen'] as String? ?? defaultOpenTime,
+      thursdayClose: map['thursdayClose'] as String? ?? defaultCloseTime,
+      fridayOpen: map['fridayOpen'] as String? ?? defaultOpenTime,
+      fridayClose: map['fridayClose'] as String? ?? defaultCloseTime,
+      saturdayOpen: map['saturdayOpen'] as String? ?? defaultOpenTime,
+      saturdayClose: map['saturdayClose'] as String? ?? defaultCloseTime,
     );
   }
 
   factory StoreHours.defaults() {
     return StoreHours(
-      openTime: defaultOpenTime,
-      closeTime: defaultCloseTime,
+      sundayOpen: defaultOpenTime,
+      sundayClose: defaultCloseTime,
+      mondayOpen: defaultOpenTime,
+      mondayClose: defaultCloseTime,
+      tuesdayOpen: defaultOpenTime,
+      tuesdayClose: defaultCloseTime,
+      wednesdayOpen: defaultOpenTime,
+      wednesdayClose: defaultCloseTime,
+      thursdayOpen: defaultOpenTime,
+      thursdayClose: defaultCloseTime,
+      fridayOpen: defaultOpenTime,
+      fridayClose: defaultCloseTime,
+      saturdayOpen: defaultOpenTime,
+      saturdayClose: defaultCloseTime,
     );
   }
 
   StoreHours copyWith({
     int? id,
-    String? openTime,
-    String? closeTime,
+    String? sundayOpen,
+    String? sundayClose,
+    String? mondayOpen,
+    String? mondayClose,
+    String? tuesdayOpen,
+    String? tuesdayClose,
+    String? wednesdayOpen,
+    String? wednesdayClose,
+    String? thursdayOpen,
+    String? thursdayClose,
+    String? fridayOpen,
+    String? fridayClose,
+    String? saturdayOpen,
+    String? saturdayClose,
   }) {
     return StoreHours(
       id: id ?? this.id,
-      openTime: openTime ?? this.openTime,
-      closeTime: closeTime ?? this.closeTime,
+      sundayOpen: sundayOpen ?? this.sundayOpen,
+      sundayClose: sundayClose ?? this.sundayClose,
+      mondayOpen: mondayOpen ?? this.mondayOpen,
+      mondayClose: mondayClose ?? this.mondayClose,
+      tuesdayOpen: tuesdayOpen ?? this.tuesdayOpen,
+      tuesdayClose: tuesdayClose ?? this.tuesdayClose,
+      wednesdayOpen: wednesdayOpen ?? this.wednesdayOpen,
+      wednesdayClose: wednesdayClose ?? this.wednesdayClose,
+      thursdayOpen: thursdayOpen ?? this.thursdayOpen,
+      thursdayClose: thursdayClose ?? this.thursdayClose,
+      fridayOpen: fridayOpen ?? this.fridayOpen,
+      fridayClose: fridayClose ?? this.fridayClose,
+      saturdayOpen: saturdayOpen ?? this.saturdayOpen,
+      saturdayClose: saturdayClose ?? this.saturdayClose,
     );
+  }
+
+  /// Get open time for a specific day of week (0=Sunday, 6=Saturday)
+  String getOpenTimeForDay(int dayOfWeek) {
+    switch (dayOfWeek) {
+      case DateTime.sunday: return sundayOpen;
+      case DateTime.monday: return mondayOpen;
+      case DateTime.tuesday: return tuesdayOpen;
+      case DateTime.wednesday: return wednesdayOpen;
+      case DateTime.thursday: return thursdayOpen;
+      case DateTime.friday: return fridayOpen;
+      case DateTime.saturday: return saturdayOpen;
+      default: return defaultOpenTime;
+    }
+  }
+
+  /// Get close time for a specific day of week (0=Sunday, 6=Saturday)
+  String getCloseTimeForDay(int dayOfWeek) {
+    switch (dayOfWeek) {
+      case DateTime.sunday: return sundayClose;
+      case DateTime.monday: return mondayClose;
+      case DateTime.tuesday: return tuesdayClose;
+      case DateTime.wednesday: return wednesdayClose;
+      case DateTime.thursday: return thursdayClose;
+      case DateTime.friday: return fridayClose;
+      case DateTime.saturday: return saturdayClose;
+      default: return defaultCloseTime;
+    }
   }
 
   /// Parse time string to hour and minute
@@ -64,14 +178,16 @@ class StoreHours {
     return (int.parse(parts[0]), int.parse(parts[1]));
   }
 
-  /// Check if a given time matches the open time
-  bool isOpenTime(int hour, int minute) {
+  /// Check if a given time matches the open time for a specific day
+  bool isOpenTime(int hour, int minute, {int? dayOfWeek}) {
+    final openTime = dayOfWeek != null ? getOpenTimeForDay(dayOfWeek) : mondayOpen;
     final (openHour, openMinute) = parseTime(openTime);
     return hour == openHour && minute == openMinute;
   }
 
-  /// Check if a given time matches the close time
-  bool isCloseTime(int hour, int minute) {
+  /// Check if a given time matches the close time for a specific day
+  bool isCloseTime(int hour, int minute, {int? dayOfWeek}) {
+    final closeTime = dayOfWeek != null ? getCloseTimeForDay(dayOfWeek) : mondayClose;
     final (closeHour, closeMinute) = parseTime(closeTime);
     return hour == closeHour && minute == closeMinute;
   }

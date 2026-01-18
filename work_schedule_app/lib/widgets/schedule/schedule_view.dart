@@ -32,7 +32,7 @@ class PasteIntent extends Intent {
   const PasteIntent();
 }
 
-enum ScheduleMode { daily, weekly, monthly }
+enum ScheduleMode { weekly, monthly }
 
 bool _isLabelOnly(String text) {
   final t = text.toLowerCase();
@@ -70,6 +70,8 @@ class _ScheduleViewState extends State<ScheduleView> {
   final ShiftDao _shiftDao = ShiftDao();
   final ScheduleNoteDao _noteDao = ScheduleNoteDao();
   final JobCodeSettingsDao _jobCodeSettingsDao = JobCodeSettingsDao();
+  final ShiftRunnerDao _shiftRunnerDao = ShiftRunnerDao();
+  final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
   List<Employee> _employees = [];
   List<Employee> _filteredEmployees = [];
   List<ShiftPlaceholder> _shifts = [];
@@ -142,6 +144,7 @@ class _ScheduleViewState extends State<ScheduleView> {
             start: s.startTime,
             end: s.endTime,
             text: s.label ?? '',
+            notes: s.notes,
           ),
         )
         .toList();
@@ -182,12 +185,12 @@ class _ScheduleViewState extends State<ScheduleView> {
   Future<void> _loadEmployees() async {
     // Load job code settings first for proper sorting
     _jobCodeSettings = await _jobCodeSettingsDao.getAll();
-    
+
     // Load store hours into cache
     final storeHoursDao = StoreHoursDao();
     final storeHours = await storeHoursDao.getStoreHours();
     StoreHours.setCache(storeHours);
-    
+
     final list = await _employeeDao.getEmployees();
     debugPrint('ScheduleView: loaded ${list.length} employee(s) from DB');
     if (!mounted) return;
@@ -247,9 +250,7 @@ class _ScheduleViewState extends State<ScheduleView> {
 
   void _prev() {
     setState(() {
-      if (_mode == ScheduleMode.daily) {
-        _date = _date.subtract(const Duration(days: 1));
-      } else if (_mode == ScheduleMode.weekly) {
+      if (_mode == ScheduleMode.weekly) {
         _date = _date.subtract(const Duration(days: 7));
       } else {
         _date = DateTime(_date.year, _date.month - 1, 1);
@@ -260,9 +261,7 @@ class _ScheduleViewState extends State<ScheduleView> {
 
   void _next() {
     setState(() {
-      if (_mode == ScheduleMode.daily) {
-        _date = _date.add(const Duration(days: 1));
-      } else if (_mode == ScheduleMode.weekly) {
+      if (_mode == ScheduleMode.weekly) {
         _date = _date.add(const Duration(days: 7));
       } else {
         _date = DateTime(_date.year, _date.month + 1, 1);
@@ -337,31 +336,90 @@ class _ScheduleViewState extends State<ScheduleView> {
 
   Future<void> _handlePrintExport(String action) async {
     try {
-      late final Uint8List pdfBytes;
+      late final Uint8List fileBytes;
       late final String title;
       late final String filename;
+      late final String fileType;
 
-      if (_mode == ScheduleMode.weekly || _mode == ScheduleMode.daily) {
+      // Load shift types
+      final shiftTypes = await _shiftTypeDao.getAll();
+
+      if (_mode == ScheduleMode.weekly) {
         // Get week start (Sunday)
         final weekStart = _date.subtract(Duration(days: _date.weekday % 7));
-        pdfBytes = await SchedulePdfService.generateWeeklyPdf(
-          weekStart: weekStart,
-          employees: _employees,
-          shifts: _shifts,
-          jobCodeSettings: _jobCodeSettings,
+        final weekEnd = weekStart.add(const Duration(days: 6));
+
+        // Load shift runners for this week
+        final shiftRunners = await _shiftRunnerDao.getForDateRange(
+          weekStart,
+          weekEnd,
         );
+
+        if (action == 'pdf_manager') {
+          fileBytes = await SchedulePdfService.generateManagerWeeklyPdf(
+            weekStart: weekStart,
+            employees: _employees,
+            shifts: _shifts,
+            jobCodeSettings: _jobCodeSettings,
+            shiftRunners: shiftRunners,
+            shiftTypes: shiftTypes,
+            notes: _notes,
+          );
+          fileType = 'Manager PDF';
+          filename =
+              'manager_schedule_${weekStart.year}_${weekStart.month}_${weekStart.day}.pdf';
+        } else {
+          fileBytes = await SchedulePdfService.generateWeeklyPdf(
+            weekStart: weekStart,
+            employees: _employees,
+            shifts: _shifts,
+            jobCodeSettings: _jobCodeSettings,
+            shiftRunners: shiftRunners,
+            shiftTypes: shiftTypes,
+          );
+          fileType = 'PDF';
+          filename =
+              'schedule_${weekStart.year}_${weekStart.month}_${weekStart.day}.pdf';
+        }
         title =
             'Schedule - Week of ${weekStart.month}/${weekStart.day}/${weekStart.year}';
-        filename =
-            'schedule_${weekStart.year}_${weekStart.month}_${weekStart.day}.pdf';
       } else {
-        pdfBytes = await SchedulePdfService.generateMonthlyPdf(
-          year: _date.year,
-          month: _date.month,
-          employees: _employees,
-          shifts: _shifts,
-          jobCodeSettings: _jobCodeSettings,
+        // Get first and last day of month for shift runners
+        final firstDay = DateTime(_date.year, _date.month, 1);
+        final lastDay = DateTime(_date.year, _date.month + 1, 0);
+
+        // Load shift runners for this month
+        final shiftRunners = await _shiftRunnerDao.getForDateRange(
+          firstDay,
+          lastDay,
         );
+
+        if (action == 'pdf_manager') {
+          fileBytes = await SchedulePdfService.generateManagerMonthlyPdf(
+            year: _date.year,
+            month: _date.month,
+            employees: _employees,
+            shifts: _shifts,
+            jobCodeSettings: _jobCodeSettings,
+            shiftRunners: shiftRunners,
+            shiftTypes: shiftTypes,
+            notes: _notes,
+          );
+          fileType = 'Manager PDF';
+          filename = 'manager_schedule_${_date.year}_${_date.month}.pdf';
+        } else {
+          fileBytes = await SchedulePdfService.generateMonthlyPdf(
+            year: _date.year,
+            month: _date.month,
+            employees: _employees,
+            shifts: _shifts,
+            jobCodeSettings: _jobCodeSettings,
+            shiftRunners: shiftRunners,
+            shiftTypes: shiftTypes,
+          );
+          fileType = 'PDF';
+          filename = 'schedule_${_date.year}_${_date.month}.pdf';
+        }
         final monthNames = [
           'Jan',
           'Feb',
@@ -377,19 +435,25 @@ class _ScheduleViewState extends State<ScheduleView> {
           'Dec',
         ];
         title = 'Schedule - ${monthNames[_date.month - 1]} ${_date.year}';
-        filename = 'schedule_${_date.year}_${_date.month}.pdf';
       }
 
       if (action == 'print') {
-        await SchedulePdfService.printSchedule(pdfBytes, title);
+        await SchedulePdfService.printSchedule(fileBytes, title);
       } else {
-        await SchedulePdfService.sharePdf(pdfBytes, filename);
+        await SchedulePdfService.sharePdf(fileBytes, filename);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$fileType exported successfully: $filename'),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Failed to generate PDF: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to generate file: $e')));
       }
     }
   }
@@ -931,7 +995,6 @@ class _ScheduleViewState extends State<ScheduleView> {
         const SizedBox(width: 8),
         ToggleButtons(
           isSelected: [
-            _mode == ScheduleMode.daily,
             _mode == ScheduleMode.weekly,
             _mode == ScheduleMode.monthly,
           ],
@@ -942,10 +1005,6 @@ class _ScheduleViewState extends State<ScheduleView> {
             _refreshShifts();
           },
           children: const [
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('Daily'),
-            ),
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: Text('Weekly'),
@@ -994,12 +1053,22 @@ class _ScheduleViewState extends State<ScheduleView> {
               ),
             ),
             const PopupMenuItem(
-              value: 'share',
+              value: 'pdf_standard',
               child: Row(
                 children: [
-                  Icon(Icons.share, size: 20),
+                  Icon(Icons.picture_as_pdf, size: 20),
                   SizedBox(width: 8),
-                  Text('Export/Share PDF'),
+                  Text('Export Standard PDF'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'pdf_manager',
+              child: Row(
+                children: [
+                  Icon(Icons.picture_as_pdf, size: 20),
+                  SizedBox(width: 8),
+                  Text('Export Manager PDF'),
                 ],
               ),
             ),
@@ -1062,13 +1131,6 @@ class _ScheduleViewState extends State<ScheduleView> {
   }
 
   Widget _buildBody() {
-    if (_mode == ScheduleMode.daily) {
-      return DailyScheduleView(
-        date: _date,
-        employees: _filteredEmployees,
-        shifts: _shifts,
-      );
-    }
     if (_mode == ScheduleMode.weekly) {
       // Calculate week start (Sunday)
       final weekStart = _date.subtract(Duration(days: _date.weekday % 7));
@@ -1157,69 +1219,74 @@ class _ScheduleViewState extends State<ScheduleView> {
                 _clipboard = null;
                 await _refreshShifts();
               },
-              onUpdateShift: (oldShift, newStart, newEnd) async {
-                if (newStart == newEnd) {
-                  // Delete with undo support
-                  if (oldShift.id != null) {
-                    final shiftToDelete = Shift(
-                      id: oldShift.id,
-                      employeeId: oldShift.employeeId,
-                      startTime: oldShift.start,
-                      endTime: oldShift.end,
-                      label: oldShift.text,
-                    );
-                    await _deleteShiftWithUndo(shiftToDelete);
-                  }
-                } else {
-                  // Check for conflicts (exclude current shift if editing)
-                  final hasConflict = await _shiftDao.hasConflict(
-                    oldShift.employeeId,
-                    newStart,
-                    newEnd,
-                    excludeId: oldShift.id,
-                  );
-                  if (hasConflict && mounted) {
-                    final proceed = await _showConflictWarning(
-                      context,
-                      oldShift.employeeId,
-                      newStart,
-                      newEnd,
-                      excludeId: oldShift.id,
-                    );
-                    if (!proceed) return;
-                  }
+              onUpdateShift:
+                  (oldShift, newStart, newEnd, {String? shiftNotes}) async {
+                    if (newStart == newEnd) {
+                      // Delete with undo support
+                      if (oldShift.id != null) {
+                        final shiftToDelete = Shift(
+                          id: oldShift.id,
+                          employeeId: oldShift.employeeId,
+                          startTime: oldShift.start,
+                          endTime: oldShift.end,
+                          label: oldShift.text,
+                          notes: oldShift.notes,
+                        );
+                        await _deleteShiftWithUndo(shiftToDelete);
+                      }
+                    } else {
+                      // Check for conflicts (exclude current shift if editing)
+                      final hasConflict = await _shiftDao.hasConflict(
+                        oldShift.employeeId,
+                        newStart,
+                        newEnd,
+                        excludeId: oldShift.id,
+                      );
+                      if (hasConflict && mounted) {
+                        final proceed = await _showConflictWarning(
+                          context,
+                          oldShift.employeeId,
+                          newStart,
+                          newEnd,
+                          excludeId: oldShift.id,
+                        );
+                        if (!proceed) return;
+                      }
 
-                  // Update or add with undo support
-                  if (oldShift.id != null) {
-                    // Update existing
-                    final oldShiftModel = Shift(
-                      id: oldShift.id,
-                      employeeId: oldShift.employeeId,
-                      startTime: oldShift.start,
-                      endTime: oldShift.end,
-                      label: oldShift.text,
-                    );
-                    final updated = Shift(
-                      id: oldShift.id,
-                      employeeId: oldShift.employeeId,
-                      startTime: newStart,
-                      endTime: newEnd,
-                      label: oldShift.text,
-                    );
-                    await _updateShiftWithUndo(oldShiftModel, updated);
-                  } else {
-                    // Insert new
-                    final newShift = Shift(
-                      employeeId: oldShift.employeeId,
-                      startTime: newStart,
-                      endTime: newEnd,
-                      label: oldShift.text,
-                    );
-                    await _insertShiftWithUndo(newShift);
-                  }
-                }
-                await _refreshShifts();
-              },
+                      // Update or add with undo support
+                      if (oldShift.id != null) {
+                        // Update existing
+                        final oldShiftModel = Shift(
+                          id: oldShift.id,
+                          employeeId: oldShift.employeeId,
+                          startTime: oldShift.start,
+                          endTime: oldShift.end,
+                          label: oldShift.text,
+                          notes: oldShift.notes,
+                        );
+                        final updated = Shift(
+                          id: oldShift.id,
+                          employeeId: oldShift.employeeId,
+                          startTime: newStart,
+                          endTime: newEnd,
+                          label: oldShift.text,
+                          notes: shiftNotes ?? oldShift.notes,
+                        );
+                        await _updateShiftWithUndo(oldShiftModel, updated);
+                      } else {
+                        // Insert new
+                        final newShift = Shift(
+                          employeeId: oldShift.employeeId,
+                          startTime: newStart,
+                          endTime: newEnd,
+                          label: oldShift.text,
+                          notes: shiftNotes,
+                        );
+                        await _insertShiftWithUndo(newShift);
+                      }
+                    }
+                    await _refreshShifts();
+                  },
               onMoveShift: (shift, newDay, newEmployeeId) async {
                 // Move shift to a new day and/or employee
                 // Calculate the shift duration to preserve time
@@ -1358,7 +1425,7 @@ class _ScheduleViewState extends State<ScheduleView> {
         _clipboard = null;
         await _refreshShifts();
       },
-      onUpdateShift: (oldShift, newStart, newEnd) async {
+      onUpdateShift: (oldShift, newStart, newEnd, {String? shiftNotes}) async {
         if (newStart == newEnd) {
           // Delete with undo
           if (oldShift.id != null) {
@@ -1368,6 +1435,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               startTime: oldShift.start,
               endTime: oldShift.end,
               label: oldShift.text,
+              notes: oldShift.notes,
             );
             await _deleteShiftWithUndo(shiftToDelete);
           }
@@ -1380,6 +1448,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               startTime: oldShift.start,
               endTime: oldShift.end,
               label: oldShift.text,
+              notes: oldShift.notes,
             );
             final updated = Shift(
               id: oldShift.id,
@@ -1387,6 +1456,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               startTime: newStart,
               endTime: newEnd,
               label: oldShift.text,
+              notes: shiftNotes ?? oldShift.notes,
             );
             await _updateShiftWithUndo(oldShiftModel, updated);
           } else {
@@ -1395,6 +1465,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               startTime: newStart,
               endTime: newEnd,
               label: oldShift.text,
+              notes: shiftNotes,
             );
             await _insertShiftWithUndo(newShift);
           }
@@ -1590,92 +1661,6 @@ class _ScheduleViewState extends State<ScheduleView> {
 }
 
 // ------------------------------------------------------------
-// DAILY VIEW - list-only view: show shifts for a single day sorted by start time
-// ------------------------------------------------------------
-class DailyScheduleView extends StatelessWidget {
-  final DateTime date;
-  final List<Employee> employees;
-  final List<ShiftPlaceholder> shifts;
-
-  const DailyScheduleView({
-    super.key,
-    required this.date,
-    required this.employees,
-    this.shifts = const [],
-  });
-
-  List<ShiftPlaceholder> _shiftsForDate() {
-    final d = DateTime(date.year, date.month, date.day);
-    final list = shifts.where((s) {
-      return s.start.year == d.year &&
-          s.start.month == d.month &&
-          s.start.day == d.day;
-    }).toList();
-    list.sort((a, b) => a.start.compareTo(b.start)); // earlier first
-    return list;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = _shiftsForDate();
-
-    if (items.isEmpty) {
-      return Center(
-        child: Text('No shifts for ${date.month}/${date.day}/${date.year}'),
-      );
-    }
-
-    return ListView.separated(
-      padding: const EdgeInsets.all(8),
-      itemCount: items.length,
-      separatorBuilder: (context, idx) => const Divider(height: 12),
-      itemBuilder: (context, idx) {
-        final s = items[idx];
-        final emp = employees.firstWhere(
-          (e) => e.id == s.employeeId,
-          orElse: () =>
-              Employee(id: s.employeeId, name: 'Employee', jobCode: ''),
-        );
-        final time = _formatTimeOfDay(
-          TimeOfDay(hour: s.start.hour, minute: s.start.minute),
-        );
-        return ListTile(
-          key: ValueKey(
-            'daily-shift-${s.employeeId}-${s.start.toIso8601String()}',
-          ),
-          leading: CircleAvatar(
-            child: Text(emp.name.isNotEmpty ? emp.name[0] : '?'),
-          ),
-          title: Text(emp.name),
-          subtitle: Text(
-            '$time — ${_formatTimeOfDay(TimeOfDay(hour: s.end.hour, minute: s.end.minute))}',
-          ),
-          trailing: Text(s.text),
-        );
-      },
-    );
-  }
-
-  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false}) {
-    // Special cases for cell display
-    if (forCell) {
-      final storeHours = StoreHours.cached;
-      if (storeHours.isOpenTime(t.hour, t.minute)) return 'Op';
-      if (storeHours.isCloseTime(t.hour, t.minute)) return 'CL';
-      // Show just hour, or hour:minute if not on the hour
-      final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
-      if (t.minute == 0) return '$h';
-      return '$h:${t.minute.toString().padLeft(2, '0')}';
-    }
-    // Full format for dropdowns/dialogs
-    final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
-    final mm = t.minute.toString().padLeft(2, '0');
-    final suffix = t.period == DayPeriod.am ? 'AM' : 'PM';
-    return '$h:$mm $suffix';
-  }
-}
-
-// ------------------------------------------------------------
 // WEEKLY VIEW - days on Y axis (Mon..Sun or starting with date's week), employees on X axis
 // ------------------------------------------------------------
 class WeeklyScheduleView extends StatefulWidget {
@@ -1687,8 +1672,9 @@ class WeeklyScheduleView extends StatefulWidget {
   final void Function(
     ShiftPlaceholder oldShift,
     DateTime newStart,
-    DateTime newEnd,
-  )?
+    DateTime newEnd, {
+    String? shiftNotes,
+  })?
   onUpdateShift;
   final void Function(ShiftPlaceholder shift)? onCopyShift;
   final void Function(DateTime day, int employeeId)? onPasteTarget;
@@ -2035,13 +2021,21 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                               } else {
                                 selectedRunnerShift = shiftType;
                                 // Update time selection to match shift type defaults
-                                final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
-                                  (st) => st?.key == shiftType,
-                                  orElse: () => null,
-                                );
+                                final shiftTypeObj = _shiftTypes
+                                    .cast<ShiftType?>()
+                                    .firstWhere(
+                                      (st) => st?.key == shiftType,
+                                      orElse: () => null,
+                                    );
                                 if (shiftTypeObj != null) {
-                                  selStart = _findTimeIndex(times, shiftTypeObj.defaultShiftStart);
-                                  selEnd = _findTimeIndex(times, shiftTypeObj.defaultShiftEnd);
+                                  selStart = _findTimeIndex(
+                                    times,
+                                    shiftTypeObj.defaultShiftStart,
+                                  );
+                                  selEnd = _findTimeIndex(
+                                    times,
+                                    shiftTypeObj.defaultShiftEnd,
+                                  );
                                 }
                               }
                             });
@@ -2129,11 +2123,14 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
       (st) => st?.key == shiftType,
       orElse: () => null,
     );
-    final hex = shiftTypeObj?.colorHex ?? 
-        ShiftType.defaultShiftTypes.firstWhere(
-          (st) => st.key == shiftType,
-          orElse: () => ShiftType.defaultShiftTypes.first,
-        ).colorHex;
+    final hex =
+        shiftTypeObj?.colorHex ??
+        ShiftType.defaultShiftTypes
+            .firstWhere(
+              (st) => st.key == shiftType,
+              orElse: () => ShiftType.defaultShiftTypes.first,
+            )
+            .colorHex;
     final cleanHex = hex.replaceFirst('#', '');
     return Color(int.parse('FF$cleanHex', radix: 16));
   }
@@ -2557,6 +2554,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                       minute: s.start.minute,
                                     ),
                                     forCell: true,
+                                    dayOfWeek: d.weekday,
                                   );
                                   final endLabel = _formatTimeOfDay(
                                     TimeOfDay(
@@ -2564,6 +2562,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                       minute: s.end.minute,
                                     ),
                                     forCell: true,
+                                    dayOfWeek: d.weekday,
                                   );
                                   final isShiftSelected =
                                       _selectedShift != null &&
@@ -2642,8 +2641,9 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                             widget.onUpdateShift != null) {
                                           widget.onUpdateShift!(
                                             s,
-                                            res[0],
-                                            res[1],
+                                            res['start'] as DateTime,
+                                            res['end'] as DateTime,
+                                            shiftNotes: res['notes'] as String?,
                                           );
                                         }
                                       },
@@ -2886,12 +2886,14 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     return DateTime(day.year, day.month, day.day, tod.hour, tod.minute);
   }
 
-  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false}) {
+  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false, int? dayOfWeek}) {
     // Special cases for cell display
     if (forCell) {
       final storeHours = StoreHours.cached;
-      if (storeHours.isOpenTime(t.hour, t.minute)) return 'Op';
-      if (storeHours.isCloseTime(t.hour, t.minute)) return 'CL';
+      if (storeHours.isOpenTime(t.hour, t.minute, dayOfWeek: dayOfWeek))
+        return 'Op';
+      if (storeHours.isCloseTime(t.hour, t.minute, dayOfWeek: dayOfWeek))
+        return 'CL';
       // Show just hour, or hour:minute if not on the hour
       final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
       if (t.minute == 0) return '$h';
@@ -3079,7 +3081,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     }
   }
 
-  Future<List<DateTime>?> _showEditDialog(
+  Future<Map<String, dynamic>?> _showEditDialog(
     BuildContext context,
     DateTime day,
     ShiftPlaceholder shift,
@@ -3103,6 +3105,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     int selStart = startIdx;
     int selEnd = endIdx;
     String? selectedRunnerShift;
+    final notesController = TextEditingController(text: shift.notes ?? '');
 
     // Get the employee for this shift
     final employee = widget.employees.firstWhere(
@@ -3110,7 +3113,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
       orElse: () => widget.employees.first,
     );
 
-    final result = await showDialog<List<DateTime>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -3156,6 +3159,22 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                             setState(() => selEnd = v);
                           },
                         ),
+                        const SizedBox(height: 12),
+                        // Shift Notes
+                        TextField(
+                          controller: notesController,
+                          decoration: const InputDecoration(
+                            labelText: 'Shift Notes',
+                            hintText: 'Add notes...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          maxLines: 2,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -3187,13 +3206,21 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                   } else {
                                     selectedRunnerShift = shiftType;
                                     // Update time selection to match shift type defaults
-                                    final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
-                                      (st) => st?.key == shiftType,
-                                      orElse: () => null,
-                                    );
+                                    final shiftTypeObj = _shiftTypes
+                                        .cast<ShiftType?>()
+                                        .firstWhere(
+                                          (st) => st?.key == shiftType,
+                                          orElse: () => null,
+                                        );
                                     if (shiftTypeObj != null) {
-                                      selStart = _findTimeIndex(times, shiftTypeObj.defaultShiftStart);
-                                      selEnd = _findTimeIndex(times, shiftTypeObj.defaultShiftEnd);
+                                      selStart = _findTimeIndex(
+                                        times,
+                                        shiftTypeObj.defaultShiftStart,
+                                      );
+                                      selEnd = _findTimeIndex(
+                                        times,
+                                        shiftTypeObj.defaultShiftEnd,
+                                      );
                                     }
                                   }
                                 });
@@ -3259,7 +3286,12 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
 
                     final newStart = _timeOfDayToDateTime(day, times[selStart]);
                     final newEnd = _timeOfDayToDateTime(day, times[selEnd]);
-                    Navigator.pop(context, [newStart, newEnd]);
+                    final notes = notesController.text.trim();
+                    Navigator.pop(context, {
+                      'start': newStart,
+                      'end': newEnd,
+                      'notes': notes.isEmpty ? null : notes,
+                    });
                   },
                   child: const Text('OK'),
                 ),
@@ -3270,6 +3302,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
       },
     );
 
+    notesController.dispose();
     return result;
   }
 }
@@ -3287,8 +3320,9 @@ class MonthlyScheduleView extends StatefulWidget {
   final void Function(
     ShiftPlaceholder oldShift,
     DateTime newStart,
-    DateTime newEnd,
-  )?
+    DateTime newEnd, {
+    String? shiftNotes,
+  })?
   onUpdateShift;
   final void Function(ShiftPlaceholder shift)? onCopyShift;
   final void Function(DateTime day, int employeeId)? onPasteTarget;
@@ -3396,11 +3430,14 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       (st) => st?.key == shiftType,
       orElse: () => null,
     );
-    final hex = shiftTypeObj?.colorHex ?? 
-        ShiftType.defaultShiftTypes.firstWhere(
-          (st) => st.key == shiftType,
-          orElse: () => ShiftType.defaultShiftTypes.first,
-        ).colorHex;
+    final hex =
+        shiftTypeObj?.colorHex ??
+        ShiftType.defaultShiftTypes
+            .firstWhere(
+              (st) => st.key == shiftType,
+              orElse: () => ShiftType.defaultShiftTypes.first,
+            )
+            .colorHex;
     final cleanHex = hex.replaceFirst('#', '');
     return Color(int.parse('FF$cleanHex', radix: 16));
   }
@@ -3553,6 +3590,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       ),
       items: [
         const PopupMenuItem(value: 'add', child: Text('Add Shift')),
+        const PopupMenuItem(value: 'off', child: Text('Mark as Off')),
         if (widget.clipboardAvailable)
           const PopupMenuItem(value: 'paste', child: Text('Paste Shift')),
       ],
@@ -3570,6 +3608,22 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
           text: '',
         ),
       );
+    } else if (result == 'off' && widget.onUpdateShift != null) {
+      // Create an OFF shift that spans from midnight to 11:59pm
+      final offShift = ShiftPlaceholder(
+        employeeId: employeeId,
+        start: DateTime(day.year, day.month, day.day, 0, 0),
+        end: DateTime(day.year, day.month, day.day, 23, 59),
+        text: 'Off',
+      );
+      // Use a temporary placeholder (start==end) to signal this is a new shift
+      final tempShift = ShiftPlaceholder(
+        employeeId: employeeId,
+        start: DateTime(day.year, day.month, day.day, 0, 0),
+        end: DateTime(day.year, day.month, day.day, 0, 0),
+        text: 'Off',
+      );
+      widget.onUpdateShift!(tempShift, offShift.start, offShift.end);
     } else if (result == 'paste') {
       widget.onPasteTarget?.call(day, employeeId);
     }
@@ -3608,12 +3662,14 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     return weeks;
   }
 
-  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false}) {
+  String _formatTimeOfDay(TimeOfDay t, {bool forCell = false, int? dayOfWeek}) {
     // Special cases for cell display
     if (forCell) {
       final storeHours = StoreHours.cached;
-      if (storeHours.isOpenTime(t.hour, t.minute)) return 'Op';
-      if (storeHours.isCloseTime(t.hour, t.minute)) return 'CL';
+      if (storeHours.isOpenTime(t.hour, t.minute, dayOfWeek: dayOfWeek))
+        return 'Op';
+      if (storeHours.isCloseTime(t.hour, t.minute, dayOfWeek: dayOfWeek))
+        return 'CL';
       // Show just hour, or hour:minute if not on the hour
       final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
       if (t.minute == 0) return '$h';
@@ -3709,8 +3765,9 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
     ShiftTemplate? selectedTemplate;
     String? selectedRunnerShift;
+    final notesController = TextEditingController(text: shift.notes ?? '');
 
-    final result = await showDialog<List<DateTime>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -3880,6 +3937,22 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                             });
                           },
                         ),
+                        const SizedBox(height: 12),
+                        // Shift Notes
+                        TextField(
+                          controller: notesController,
+                          decoration: const InputDecoration(
+                            labelText: 'Shift Notes',
+                            hintText: 'Add notes for this shift...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          maxLines: 2,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                   ),
@@ -3911,13 +3984,21 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                   } else {
                                     selectedRunnerShift = shiftType;
                                     // Update time selection to match shift type defaults
-                                    final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
-                                      (st) => st?.key == shiftType,
-                                      orElse: () => null,
-                                    );
+                                    final shiftTypeObj = _shiftTypes
+                                        .cast<ShiftType?>()
+                                        .firstWhere(
+                                          (st) => st?.key == shiftType,
+                                          orElse: () => null,
+                                        );
                                     if (shiftTypeObj != null) {
-                                      selStart = _findTimeIndex(times, shiftTypeObj.defaultShiftStart);
-                                      selEnd = _findTimeIndex(times, shiftTypeObj.defaultShiftEnd);
+                                      selStart = _findTimeIndex(
+                                        times,
+                                        shiftTypeObj.defaultShiftStart,
+                                      );
+                                      selEnd = _findTimeIndex(
+                                        times,
+                                        shiftTypeObj.defaultShiftEnd,
+                                      );
                                     }
                                   }
                                 });
@@ -3983,13 +4064,19 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
                     final newStart = _timeOfDayToDateTime(day, times[selStart]);
                     final newEnd = _timeOfDayToDateTime(day, times[selEnd]);
+                    final notes = notesController.text.trim();
                     if (!newEnd.isAfter(newStart)) {
-                      Navigator.pop(context, [
-                        newStart,
-                        newStart.add(const Duration(hours: 1)),
-                      ]);
+                      Navigator.pop(context, {
+                        'start': newStart,
+                        'end': newStart.add(const Duration(hours: 1)),
+                        'notes': notes.isEmpty ? null : notes,
+                      });
                     } else {
-                      Navigator.pop(context, [newStart, newEnd]);
+                      Navigator.pop(context, {
+                        'start': newStart,
+                        'end': newEnd,
+                        'notes': notes.isEmpty ? null : notes,
+                      });
                     }
                   },
                   child: const Text('Save'),
@@ -4001,8 +4088,15 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       },
     );
 
+    notesController.dispose();
+
     if (result != null && widget.onUpdateShift != null) {
-      widget.onUpdateShift!(shift, result[0], result[1]);
+      widget.onUpdateShift!(
+        shift,
+        result['start'] as DateTime,
+        result['end'] as DateTime,
+        shiftNotes: result['notes'] as String?,
+      );
     }
   }
 
@@ -4098,7 +4192,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            if (shift.text.isNotEmpty)
+            // Don't show label if it's empty or just "Shift"
+            if (shift.text.isNotEmpty && shift.text.toLowerCase() != 'shift')
               Text(
                 shift.text,
                 style: const TextStyle(fontSize: 9),
@@ -4247,6 +4342,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                           minute: shift.start.minute,
                         ),
                         forCell: true,
+                        dayOfWeek: day.weekday,
                       );
                       final endLabel = _formatTimeOfDay(
                         TimeOfDay(
@@ -4254,6 +4350,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                           minute: shift.end.minute,
                         ),
                         forCell: true,
+                        dayOfWeek: day.weekday,
                       );
 
                       return Draggable<ShiftPlaceholder>(
@@ -4684,6 +4781,7 @@ class ShiftPlaceholder {
   final DateTime start;
   final DateTime end;
   final String text;
+  final String? notes; // Shift-specific notes
 
   ShiftPlaceholder({
     this.id,
@@ -4691,6 +4789,7 @@ class ShiftPlaceholder {
     required this.start,
     required this.end,
     required this.text,
+    this.notes,
   });
 
   @override

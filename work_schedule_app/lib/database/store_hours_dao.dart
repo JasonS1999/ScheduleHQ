@@ -10,10 +10,63 @@ class StoreHoursDao {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS store_hours (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        openTime TEXT NOT NULL,
-        closeTime TEXT NOT NULL
+        sundayOpen TEXT NOT NULL DEFAULT '04:30',
+        sundayClose TEXT NOT NULL DEFAULT '01:00',
+        mondayOpen TEXT NOT NULL DEFAULT '04:30',
+        mondayClose TEXT NOT NULL DEFAULT '01:00',
+        tuesdayOpen TEXT NOT NULL DEFAULT '04:30',
+        tuesdayClose TEXT NOT NULL DEFAULT '01:00',
+        wednesdayOpen TEXT NOT NULL DEFAULT '04:30',
+        wednesdayClose TEXT NOT NULL DEFAULT '01:00',
+        thursdayOpen TEXT NOT NULL DEFAULT '04:30',
+        thursdayClose TEXT NOT NULL DEFAULT '01:00',
+        fridayOpen TEXT NOT NULL DEFAULT '04:30',
+        fridayClose TEXT NOT NULL DEFAULT '01:00',
+        saturdayOpen TEXT NOT NULL DEFAULT '04:30',
+        saturdayClose TEXT NOT NULL DEFAULT '01:00'
       )
     ''');
+  }
+
+  /// Migrate from old schema (single openTime/closeTime) to per-day schema
+  static Future<void> migrateToPerDayHours(Database db) async {
+    // Check if we have the old columns
+    final columns = await db.rawQuery("PRAGMA table_info(store_hours)");
+    final columnNames = columns.map((c) => c['name'] as String).toSet();
+    
+    if (columnNames.contains('openTime') && !columnNames.contains('mondayOpen')) {
+      // Old schema - migrate to new
+      final oldData = await db.query('store_hours', limit: 1);
+      String oldOpen = StoreHours.defaultOpenTime;
+      String oldClose = StoreHours.defaultCloseTime;
+      
+      if (oldData.isNotEmpty) {
+        oldOpen = oldData.first['openTime'] as String? ?? StoreHours.defaultOpenTime;
+        oldClose = oldData.first['closeTime'] as String? ?? StoreHours.defaultCloseTime;
+      }
+      
+      // Drop old table and create new
+      await db.execute('DROP TABLE IF EXISTS store_hours');
+      await createTable(db);
+      
+      // Insert with old values for all days
+      await db.insert('store_hours', {
+        'sundayOpen': oldOpen,
+        'sundayClose': oldClose,
+        'mondayOpen': oldOpen,
+        'mondayClose': oldClose,
+        'tuesdayOpen': oldOpen,
+        'tuesdayClose': oldClose,
+        'wednesdayOpen': oldOpen,
+        'wednesdayClose': oldClose,
+        'thursdayOpen': oldOpen,
+        'thursdayClose': oldClose,
+        'fridayOpen': oldOpen,
+        'fridayClose': oldClose,
+        'saturdayOpen': oldOpen,
+        'saturdayClose': oldClose,
+      });
+    }
   }
 
   /// Get store hours (there should only be one row)
