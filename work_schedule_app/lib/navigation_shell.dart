@@ -51,8 +51,18 @@ class _NavigationShellState extends State<NavigationShell> {
         _updateAvailable = hasUpdate;
         _checkingUpdate = false;
       });
-      if (showDialogIfAvailable && hasUpdate) {
-        _showUpdateDialog();
+      if (showDialogIfAvailable) {
+        if (hasUpdate) {
+          _showUpdateDialog();
+        } else {
+          // Show snackbar that app is up to date
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('You\'re up to date! (v${UpdateService.currentVersion})'),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       }
     }
   }
