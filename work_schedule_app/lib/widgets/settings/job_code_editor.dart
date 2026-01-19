@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../models/job_code_settings.dart';
+import '../../models/job_code_group.dart';
 import '../../database/job_code_settings_dao.dart';
 
 class JobCodeEditor extends StatefulWidget {
   final JobCodeSettings settings;
+  final List<JobCodeGroup> groups;
 
-  const JobCodeEditor({super.key, required this.settings});
+  const JobCodeEditor({super.key, required this.settings, this.groups = const []});
 
   @override
   State<JobCodeEditor> createState() => _JobCodeEditorState();
@@ -311,6 +313,49 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
 
             const SizedBox(height: 20),
 
+            // Group assignment
+            if (widget.groups.isNotEmpty) ...[
+              DropdownButtonFormField<String?>(
+                value: _settings.sortGroup,
+                decoration: const InputDecoration(
+                  labelText: 'Group',
+                  helperText: 'Grouped job codes stay together on schedules',
+                ),
+                items: [
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('No group'),
+                  ),
+                  ...widget.groups.map((g) => DropdownMenuItem<String?>(
+                    value: g.name,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: _colorFromHex(g.colorHex),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(g.name),
+                      ],
+                    ),
+                  )),
+                ],
+                onChanged: (v) {
+                  setState(() {
+                    _settings = _settings.copyWith(
+                      sortGroup: v,
+                      clearSortGroup: v == null,
+                    );
+                  });
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+
             // Save / Delete actions (keep both visible without scrolling)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -335,6 +380,7 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                       maxHoursPerWeek: _settings.maxHoursPerWeek,
                       colorHex: _settings.colorHex,
                       sortOrder: _settings.sortOrder,
+                      sortGroup: _settings.sortGroup,
                     );
 
                     final messenger = ScaffoldMessenger.of(context);

@@ -32,10 +32,10 @@ class SchedulePdfService {
     final sortedEmployees = _sortEmployees(employees, jobCodeSettings);
 
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.all(20),
-        header: (context) => pw.Column(
+        build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
@@ -43,18 +43,23 @@ class SchedulePdfService {
               style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
+            pw.Expanded(
+              child: pw.FittedBox(
+                fit: pw.BoxFit.contain,
+                alignment: pw.Alignment.topCenter,
+                child: _buildWeekTable(
+                  employees: sortedEmployees,
+                  week: week,
+                  targetMonth: null,
+                  shifts: shifts,
+                  shiftRunners: shiftRunners,
+                  shiftTypes: shiftTypes,
+                  jobCodeSettings: jobCodeSettings,
+                ),
+              ),
+            ),
           ],
         ),
-        build: (context) => [
-          _buildWeekTable(
-            employees: sortedEmployees,
-            week: week,
-            targetMonth: null,
-            shifts: shifts,
-            shiftRunners: shiftRunners,
-            shiftTypes: shiftTypes,
-          ),
-        ],
       ),
     );
 
@@ -108,12 +113,12 @@ class SchedulePdfService {
 
     final sortedEmployees = _sortEmployees(employees, jobCodeSettings);
 
-    // Stack week tables vertically; allow MultiPage to paginate naturally.
+    // Stack week tables vertically on a single page with scaling
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.all(16),
-        header: (context) => pw.Column(
+        build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
@@ -121,15 +126,25 @@ class SchedulePdfService {
               style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
+            pw.Expanded(
+              child: pw.FittedBox(
+                fit: pw.BoxFit.contain,
+                alignment: pw.Alignment.topCenter,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: _buildMonthlyStackedWeekWidgets(
+                    employees: sortedEmployees,
+                    weeks: weeks,
+                    targetMonth: month,
+                    shifts: shifts,
+                    shiftRunners: shiftRunners,
+                    shiftTypes: shiftTypes,
+                    jobCodeSettings: jobCodeSettings,
+                  ),
+                ),
+              ),
+            ),
           ],
-        ),
-        build: (context) => _buildMonthlyStackedWeekWidgets(
-          employees: sortedEmployees,
-          weeks: weeks,
-          targetMonth: month,
-          shifts: shifts,
-          shiftRunners: shiftRunners,
-          shiftTypes: shiftTypes,
         ),
       ),
     );
@@ -161,10 +176,10 @@ class SchedulePdfService {
     final sortedEmployees = _sortEmployees(employees, jobCodeSettings);
 
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.letter.landscape,
         margin: const pw.EdgeInsets.all(12),
-        header: (context) => pw.Column(
+        build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
             pw.Text(
@@ -172,19 +187,23 @@ class SchedulePdfService {
               style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 6),
+            pw.Expanded(
+              child: pw.FittedBox(
+                fit: pw.BoxFit.contain,
+                alignment: pw.Alignment.topCenter,
+                child: _buildManagerTable(
+                  employees: sortedEmployees,
+                  days: days,
+                  shifts: shifts,
+                  shiftRunners: shiftRunners,
+                  shiftTypes: shiftTypes,
+                  jobCodeSettings: jobCodeSettings,
+                  notes: notes,
+                ),
+              ),
+            ),
           ],
         ),
-        build: (context) => [
-          _buildManagerTable(
-            employees: sortedEmployees,
-            days: days,
-            shifts: shifts,
-            shiftRunners: shiftRunners,
-            shiftTypes: shiftTypes,
-            jobCodeSettings: jobCodeSettings,
-            notes: notes,
-          ),
-        ],
       ),
     );
 
@@ -256,10 +275,10 @@ class SchedulePdfService {
     final sortedEmployees = _sortEmployees(employees, jobCodeSettings);
 
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.letter.landscape,
         margin: const pw.EdgeInsets.all(12),
-        header: (context) => pw.Column(
+        build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
             pw.Text(
@@ -267,20 +286,24 @@ class SchedulePdfService {
               style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 6),
+            pw.Expanded(
+              child: pw.FittedBox(
+                fit: pw.BoxFit.contain,
+                alignment: pw.Alignment.topCenter,
+                child: _buildManagerTable(
+                  employees: sortedEmployees,
+                  days: days,
+                  shifts: shifts,
+                  shiftRunners: shiftRunners,
+                  shiftTypes: shiftTypes,
+                  jobCodeSettings: jobCodeSettings,
+                  notes: notes,
+                  targetMonth: month,
+                ),
+              ),
+            ),
           ],
         ),
-        build: (context) => [
-          _buildManagerTable(
-            employees: sortedEmployees,
-            days: days,
-            shifts: shifts,
-            shiftRunners: shiftRunners,
-            shiftTypes: shiftTypes,
-            jobCodeSettings: jobCodeSettings,
-            notes: notes,
-            targetMonth: month,
-          ),
-        ],
       ),
     );
 
@@ -294,6 +317,7 @@ class SchedulePdfService {
     required List<ShiftPlaceholder> shifts,
     required List<ShiftRunner> shiftRunners,
     required List<ShiftType> shiftTypes,
+    required List<JobCodeSettings> jobCodeSettings,
   }) {
     final children = <pw.Widget>[];
 
@@ -310,6 +334,7 @@ class SchedulePdfService {
           shifts: shifts,
           shiftRunners: shiftRunners,
           shiftTypes: shiftTypes,
+          jobCodeSettings: jobCodeSettings,
         ),
       );
     }
@@ -324,6 +349,7 @@ class SchedulePdfService {
     required List<ShiftPlaceholder> shifts,
     required List<ShiftRunner> shiftRunners,
     required List<ShiftType> shiftTypes,
+    required List<JobCodeSettings> jobCodeSettings,
   }) {
     final dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THUR', 'FRI', 'SAT'];
 
@@ -344,9 +370,9 @@ class SchedulePdfService {
       1: const pw.FixedColumnWidth(70), // Position (job code)
       9: const pw.FixedColumnWidth(24), // HRS
     };
-    // Day columns
+    // Day columns - use fixed width so FittedBox can scale properly
     for (int i = 0; i < 7; i++) {
-      colWidths[2 + i] = const pw.FlexColumnWidth(1);
+      colWidths[2 + i] = const pw.FixedColumnWidth(60);
     }
 
     final rows = <pw.TableRow>[];
@@ -389,20 +415,33 @@ class SchedulePdfService {
       ),
     );
 
-    String? lastJobCode;
+    // Build job code group map for determining when to add spacers
+    final jobCodeGroupMap = <String, String?>{};
+    for (final jc in jobCodeSettings) {
+      jobCodeGroupMap[jc.code.toLowerCase()] = jc.sortGroup;
+    }
+
+    // Helper to get effective group key
+    String getGroupKey(String jobCode) {
+      final group = jobCodeGroupMap[jobCode.toLowerCase()];
+      return group ?? '__ungrouped_$jobCode'; // Ungrouped codes are their own group
+    }
+
+    String? lastGroupKey;
     for (final emp in employees) {
       final jobCode = emp.jobCode;
+      final currentGroupKey = getGroupKey(jobCode);
 
-      if (lastJobCode != null &&
-          jobCode.toLowerCase() != lastJobCode.toLowerCase()) {
-        // Spacer row between job codes
+      // Only add spacer when the group changes (not just the job code)
+      if (lastGroupKey != null && currentGroupKey != lastGroupKey) {
+        // Spacer row between groups
         rows.add(
           pw.TableRow(
             children: List.generate(10, (_) => pw.SizedBox(height: 6)),
           ),
         );
       }
-      lastJobCode = jobCode;
+      lastGroupKey = currentGroupKey;
 
       final hours = _computeWeekHours(
         employeeId: emp.id,
@@ -639,24 +678,74 @@ class SchedulePdfService {
     List<Employee> employees,
     List<JobCodeSettings> jobCodeSettings,
   ) {
+    // Build lookup maps
     final orderByCode = <String, int>{};
+    final groupByCode = <String, String?>{};
+    final groupOrder = <String, int>{};
+    
     for (final s in jobCodeSettings) {
       orderByCode[s.code.toLowerCase()] = s.sortOrder;
+      groupByCode[s.code.toLowerCase()] = s.sortGroup;
+    }
+    
+    // Calculate group order based on the minimum sortOrder of job codes in each group
+    final groupMinOrder = <String, int>{};
+    for (final s in jobCodeSettings) {
+      if (s.sortGroup != null) {
+        final current = groupMinOrder[s.sortGroup!];
+        if (current == null || s.sortOrder < current) {
+          groupMinOrder[s.sortGroup!] = s.sortOrder;
+        }
+      }
+    }
+    for (final entry in groupMinOrder.entries) {
+      groupOrder[entry.key] = entry.value;
     }
 
     final list = [...employees];
     list.sort((a, b) {
-      final ao = orderByCode[a.jobCode.toLowerCase()] ?? 999999;
-      final bo = orderByCode[b.jobCode.toLowerCase()] ?? 999999;
-      final byOrder = ao.compareTo(bo);
+      final aCode = a.jobCode.toLowerCase();
+      final bCode = b.jobCode.toLowerCase();
+      final aGroup = groupByCode[aCode];
+      final bGroup = groupByCode[bCode];
+      final aOrder = orderByCode[aCode] ?? 999999;
+      final bOrder = orderByCode[bCode] ?? 999999;
+      
+      // If both are in the same group (or both ungrouped), sort by job code order then name
+      if (aGroup == bGroup) {
+        final byOrder = aOrder.compareTo(bOrder);
+        if (byOrder != 0) return byOrder;
+        final byCode = aCode.compareTo(bCode);
+        if (byCode != 0) return byCode;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      }
+      
+      // If one is grouped and one isn't, use the group's min order vs the ungrouped order
+      final aEffectiveOrder = aGroup != null ? (groupOrder[aGroup] ?? aOrder) : aOrder;
+      final bEffectiveOrder = bGroup != null ? (groupOrder[bGroup] ?? bOrder) : bOrder;
+      
+      // Sort by effective order
+      final byEffective = aEffectiveOrder.compareTo(bEffectiveOrder);
+      if (byEffective != 0) return byEffective;
+      
+      // If same effective order, grouped items come after ungrouped at that position
+      if (aGroup != null && bGroup == null) return 1;
+      if (aGroup == null && bGroup != null) return -1;
+      
+      // Both are in different groups with same min order - use individual order
+      final byOrder = aOrder.compareTo(bOrder);
       if (byOrder != 0) return byOrder;
-
-      final byCode = a.jobCode.toLowerCase().compareTo(b.jobCode.toLowerCase());
-      if (byCode != 0) return byCode;
-
+      
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return list;
+  }
+  
+  /// Helper to determine which "super group" a job code belongs to
+  /// Returns the group name if in a group, or the job code itself if ungrouped
+  static String _getGroupKey(String jobCode, Map<String, String?> groupByCode) {
+    final group = groupByCode[jobCode.toLowerCase()];
+    return group ?? '__ungrouped__$jobCode';
   }
 
   static bool _isLabelOnly(String text) {
@@ -728,10 +817,12 @@ class SchedulePdfService {
       shiftTypeColorMap[st.key] = _hexToPdfColor(st.colorHex);
     }
 
-    // Build job code color map
+    // Build job code color map and group map
     final jobCodeColorMap = <String, PdfColor>{};
+    final jobCodeGroupMap = <String, String?>{};
     for (final jc in jobCodeSettings) {
       jobCodeColorMap[jc.code.toLowerCase()] = _hexToPdfColor(jc.colorHex);
+      jobCodeGroupMap[jc.code.toLowerCase()] = jc.sortGroup;
     }
 
     // Group employees by job code (maintaining sort order)
@@ -745,6 +836,26 @@ class SchedulePdfService {
       }
       jobCodeGroups[jobCode]!.add(emp);
     }
+    
+    // Determine where gaps should go (between different super groups)
+    // A super group is defined by sortGroup, or if ungrouped, the job code itself
+    final gapAfterJobCode = <String, bool>{};
+    for (int i = 0; i < jobCodeOrder.length - 1; i++) {
+      final currentCode = jobCodeOrder[i];
+      final nextCode = jobCodeOrder[i + 1];
+      final currentGroup = jobCodeGroupMap[currentCode.toLowerCase()];
+      final nextGroup = jobCodeGroupMap[nextCode.toLowerCase()];
+      
+      // Add gap if:
+      // 1. Current is ungrouped (any ungrouped code gets a gap after)
+      // 2. Next is ungrouped (gap before ungrouped)
+      // 3. They're in different groups
+      final needsGap = currentGroup == null || nextGroup == null || currentGroup != nextGroup;
+      gapAfterJobCode[currentCode] = needsGap;
+    }
+    
+    // Count actual gaps needed
+    final numGaps = gapAfterJobCode.values.where((v) => v).length;
 
     // Calculate fixed widths for all columns
     // Page: Letter landscape = 792 points, margins = 12 each side
@@ -753,7 +864,6 @@ class SchedulePdfService {
     final dayColWidth = 45.0;
     final reminderColWidth = 80.0;
     final gapWidth = 3.0;
-    final numGaps = jobCodeOrder.length - 1;
     final totalGapWidth = numGaps * gapWidth;
     final employeeAreaWidth =
         availableWidth - dayColWidth - reminderColWidth - totalGapWidth;
@@ -764,11 +874,13 @@ class SchedulePdfService {
     colWidths[0] = pw.FixedColumnWidth(dayColWidth);
     int colIdx = 1;
     for (int i = 0; i < jobCodeOrder.length; i++) {
-      final groupSize = jobCodeGroups[jobCodeOrder[i]]!.length;
+      final jobCode = jobCodeOrder[i];
+      final groupSize = jobCodeGroups[jobCode]!.length;
       for (int j = 0; j < groupSize; j++) {
         colWidths[colIdx++] = pw.FixedColumnWidth(employeeColWidth);
       }
-      if (i < jobCodeOrder.length - 1) {
+      // Only add gap if gapAfterJobCode[jobCode] is true
+      if (gapAfterJobCode[jobCode] == true) {
         colWidths[colIdx++] = pw.FixedColumnWidth(gapWidth);
       }
     }
@@ -801,20 +913,31 @@ class SchedulePdfService {
         color: useDarkText ? PdfColors.black : PdfColors.white,
       );
 
+      // Determine if this job code is at the edge of a super group
+      // First in super group: either i == 0 OR the previous job code has a gap after it
+      final isFirstJobCodeInSuperGroup = i == 0 || gapAfterJobCode[jobCodeOrder[i - 1]] == true;
+      // Last in super group: there's a gap after this job code (or it's the last one)
+      final isLastJobCodeInSuperGroup = gapAfterJobCode[jobCode] == true || i == jobCodeOrder.length - 1;
+
       // Create a cell for each employee with the job code text
       for (int j = 0; j < groupSize; j++) {
-        final isFirstInGroup = j == 0;
-        final isLastInGroup = j == groupSize - 1;
+        final isFirstInJobCode = j == 0;
+        final isLastInJobCode = j == groupSize - 1;
+        
+        // Thick left border only on the very first cell of the super group
+        final needsThickLeft = isFirstJobCodeInSuperGroup && isFirstInJobCode;
+        // Thick right border only on the very last cell of the super group
+        final needsThickRight = isLastJobCodeInSuperGroup && isLastInJobCode;
 
-        // Thick borders only on left/right edges of each job code group
+        // Thick borders only on left/right edges of each super group
         final jobCodeCellBorder = pw.Border(
           left: pw.BorderSide(
             color: PdfColors.black,
-            width: isFirstInGroup ? 2.0 : 0,
+            width: needsThickLeft ? 2.0 : 0,
           ),
           right: pw.BorderSide(
             color: PdfColors.black,
-            width: isLastInGroup ? 2.0 : 0,
+            width: needsThickRight ? 2.0 : 0,
           ),
           top: const pw.BorderSide(color: PdfColors.black, width: 2.0),
           bottom: const pw.BorderSide(color: PdfColors.black, width: 0.5),
@@ -837,8 +960,8 @@ class SchedulePdfService {
         );
       }
 
-      // Gap between job code groups
-      if (i < jobCodeOrder.length - 1) {
+      // Gap between job code groups (only if gapAfterJobCode says so)
+      if (gapAfterJobCode[jobCode] == true) {
         jobCodeHeaderCells.add(pw.Container(width: gapWidth));
       }
     }
@@ -875,20 +998,29 @@ class SchedulePdfService {
           jobCodeColorMap[jobCode.toLowerCase()] ?? PdfColors.grey400;
       final useDarkText = _isLightColor(jobCodeColor);
 
+      // Determine if this job code is at the edge of a super group
+      final isFirstJobCodeInSuperGroup = i == 0 || gapAfterJobCode[jobCodeOrder[i - 1]] == true;
+      final isLastJobCodeInSuperGroup = gapAfterJobCode[jobCode] == true || i == jobCodeOrder.length - 1;
+
       for (int j = 0; j < emps.length; j++) {
         final emp = emps[j];
-        final isFirstInGroup = j == 0;
-        final isLastInGroup = j == emps.length - 1;
+        final isFirstInJobCode = j == 0;
+        final isLastInJobCode = j == emps.length - 1;
+        
+        // Thick left border only on the very first cell of the super group
+        final needsThickLeft = isFirstJobCodeInSuperGroup && isFirstInJobCode;
+        // Thick right border only on the very last cell of the super group
+        final needsThickRight = isLastJobCodeInSuperGroup && isLastInJobCode;
 
-        // Thick borders only on left/right edges of each job code group
+        // Thick borders only on left/right edges of each super group
         final empCellBorder = pw.Border(
           left: pw.BorderSide(
             color: PdfColors.black,
-            width: isFirstInGroup ? 2.0 : 0,
+            width: needsThickLeft ? 2.0 : 0,
           ),
           right: pw.BorderSide(
             color: PdfColors.black,
-            width: isLastInGroup ? 2.0 : 0,
+            width: needsThickRight ? 2.0 : 0,
           ),
           top: const pw.BorderSide(color: PdfColors.black, width: 0.5),
           bottom: const pw.BorderSide(color: PdfColors.black, width: 0.5),
@@ -914,8 +1046,9 @@ class SchedulePdfService {
         );
       }
 
-      if (i < jobCodeOrder.length - 1) {
-        employeeHeaderCells.add(pw.Container(width: 3));
+      // Gap between job code groups (only if gapAfterJobCode says so)
+      if (gapAfterJobCode[jobCode] == true) {
+        employeeHeaderCells.add(pw.Container(width: gapWidth));
       }
     }
 
@@ -998,11 +1131,20 @@ class SchedulePdfService {
       for (int i = 0; i < jobCodeOrder.length; i++) {
         final jobCode = jobCodeOrder[i];
         final emps = jobCodeGroups[jobCode]!;
+        
+        // Determine if this job code is at the edge of a super group
+        final isFirstJobCodeInSuperGroup = i == 0 || gapAfterJobCode[jobCodeOrder[i - 1]] == true;
+        final isLastJobCodeInSuperGroup = gapAfterJobCode[jobCode] == true || i == jobCodeOrder.length - 1;
 
         for (int empIdx = 0; empIdx < emps.length; empIdx++) {
           final emp = emps[empIdx];
-          final isFirstInGroup = empIdx == 0;
-          final isLastInGroup = empIdx == emps.length - 1;
+          final isFirstInJobCode = empIdx == 0;
+          final isLastInJobCode = empIdx == emps.length - 1;
+          
+          // Thick left border only on the very first cell of the super group
+          final needsThickLeft = isFirstJobCodeInSuperGroup && isFirstInJobCode;
+          // Thick right border only on the very last cell of the super group
+          final needsThickRight = isLastJobCodeInSuperGroup && isLastInJobCode;
 
           final dayText = _formatEmployeeDayCell(
             employeeId: emp.id,
@@ -1040,16 +1182,16 @@ class SchedulePdfService {
             cellBgColor = PdfColor.fromHex('#D9D9D9'); // Light grey for ETO
           }
 
-          // Build border with thick borders around each week's cells per job code group
-          // Thick left/right on job code group edges, thick top on Sunday, thick bottom on Saturday
+          // Build border with thick borders around each week's cells per super group
+          // Thick left/right on super group edges, thick top on Sunday, thick bottom on Saturday
           final cellBorder = pw.Border(
             left: pw.BorderSide(
               color: PdfColors.black,
-              width: isFirstInGroup ? weekBorderWidth : 0,
+              width: needsThickLeft ? weekBorderWidth : 0,
             ),
             right: pw.BorderSide(
               color: PdfColors.black,
-              width: isLastInGroup ? weekBorderWidth : 0,
+              width: needsThickRight ? weekBorderWidth : 0,
             ),
             top: pw.BorderSide(
               color: PdfColors.black,
@@ -1076,8 +1218,9 @@ class SchedulePdfService {
           );
         }
 
-        if (i < jobCodeOrder.length - 1) {
-          rowCells.add(pw.Container(width: 3));
+        // Gap between job code groups (only if gapAfterJobCode says so)
+        if (gapAfterJobCode[jobCode] == true) {
+          rowCells.add(pw.Container(width: gapWidth));
         }
       }
 

@@ -5,6 +5,7 @@ class JobCodeSettings {
   final int defaultScheduledHours;
   final String colorHex;
   final int sortOrder;
+  final String? sortGroup; // Group name for grouping job codes together
 
   // Static default for vacation days (not configurable)
   static const int defaultVacationDays = 8;
@@ -16,6 +17,7 @@ class JobCodeSettings {
     this.defaultScheduledHours = 40,
     required this.colorHex,
     this.sortOrder = 0,
+    this.sortGroup,
   });
 
   JobCodeSettings copyWith({
@@ -24,6 +26,8 @@ class JobCodeSettings {
     int? defaultScheduledHours,
     String? colorHex,
     int? sortOrder,
+    String? sortGroup,
+    bool clearSortGroup = false,
   }) {
     return JobCodeSettings(
       code: code,
@@ -32,6 +36,7 @@ class JobCodeSettings {
       defaultScheduledHours: defaultScheduledHours ?? this.defaultScheduledHours,
       colorHex: colorHex ?? this.colorHex,
       sortOrder: sortOrder ?? this.sortOrder,
+      sortGroup: clearSortGroup ? null : (sortGroup ?? this.sortGroup),
     );
   }
 
@@ -44,6 +49,7 @@ class JobCodeSettings {
       'maxHoursPerWeek': maxHoursPerWeek,
       'colorHex': colorHex,
       'sortOrder': sortOrder,
+      'sortGroup': sortGroup,
     };
   }
 
@@ -55,6 +61,7 @@ class JobCodeSettings {
       defaultScheduledHours: map['defaultScheduledHours'] ?? 40,
       colorHex: map['colorHex'] ?? '#4285F4',
       sortOrder: map['sortOrder'] ?? 0,
+      sortGroup: map['sortGroup'] as String?,
     );
   }
 }

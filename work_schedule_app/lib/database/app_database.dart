@@ -65,7 +65,16 @@ Future<void> _onCreate(Database db, int version) async {
       defaultVacationDays INTEGER NOT NULL,
       colorHex TEXT NOT NULL,
       sortOrder INTEGER NOT NULL DEFAULT 0,
-      maxHoursPerWeek INTEGER NOT NULL DEFAULT 40
+      maxHoursPerWeek INTEGER NOT NULL DEFAULT 40,
+      sortGroup TEXT
+    )
+  ''');
+
+  await db.execute('''
+    CREATE TABLE job_code_groups (
+      name TEXT PRIMARY KEY,
+      colorHex TEXT NOT NULL,
+      sortOrder INTEGER NOT NULL DEFAULT 0
     )
   ''');
 
@@ -245,7 +254,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 18,
+      version: 19,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -541,6 +550,22 @@ class AppDatabase {
               'saturdayOpen': oldOpen,
               'saturdayClose': oldClose,
             });
+          }
+        }
+        if (oldVersion < 19) {
+          // Add job_code_groups table
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS job_code_groups (
+              name TEXT PRIMARY KEY,
+              colorHex TEXT NOT NULL,
+              sortOrder INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          // Add sortGroup column to job_code_settings
+          try {
+            await db.execute('ALTER TABLE job_code_settings ADD COLUMN sortGroup TEXT');
+          } catch (_) {
+            // Column may already exist
           }
         }
       },
