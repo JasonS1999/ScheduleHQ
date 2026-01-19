@@ -182,6 +182,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Store Info Card
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -190,7 +191,81 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.store, size: 24),
+                      const Icon(Icons.business, size: 24),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Store Information',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This information will appear on PDF exports.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          initialValue: _storeHours?.storeName ?? '',
+                          decoration: const InputDecoration(
+                            labelText: 'Store Name',
+                            hintText: 'e.g., Downtown Store',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.store),
+                          ),
+                          onChanged: (value) async {
+                            if (_storeHours != null) {
+                              final updated = _storeHours!.copyWith(storeName: value);
+                              await _dao.updateStoreHours(updated);
+                              StoreHours.setCache(updated);
+                              setState(() => _storeHours = updated);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          initialValue: _storeHours?.storeNsn ?? '',
+                          decoration: const InputDecoration(
+                            labelText: 'NSN (Store #)',
+                            hintText: 'e.g., 12345',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.tag),
+                          ),
+                          onChanged: (value) async {
+                            if (_storeHours != null) {
+                              final updated = _storeHours!.copyWith(storeNsn: value);
+                              await _dao.updateStoreHours(updated);
+                              StoreHours.setCache(updated);
+                              setState(() => _storeHours = updated);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Store Hours Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.schedule, size: 24),
                       const SizedBox(width: 8),
                       Text(
                         'Store Operating Hours',

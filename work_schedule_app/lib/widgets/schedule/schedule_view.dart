@@ -364,6 +364,8 @@ class _ScheduleViewState extends State<ScheduleView> {
             shiftRunners: shiftRunners,
             shiftTypes: shiftTypes,
             notes: _notes,
+            storeName: StoreHours.cached.storeName,
+            storeNsn: StoreHours.cached.storeNsn,
           );
           fileType = 'Manager PDF';
           filename =
@@ -376,6 +378,8 @@ class _ScheduleViewState extends State<ScheduleView> {
             jobCodeSettings: _jobCodeSettings,
             shiftRunners: shiftRunners,
             shiftTypes: shiftTypes,
+            storeName: StoreHours.cached.storeName,
+            storeNsn: StoreHours.cached.storeNsn,
           );
           fileType = 'PDF';
           filename =
@@ -404,6 +408,8 @@ class _ScheduleViewState extends State<ScheduleView> {
             shiftRunners: shiftRunners,
             shiftTypes: shiftTypes,
             notes: _notes,
+            storeName: StoreHours.cached.storeName,
+            storeNsn: StoreHours.cached.storeNsn,
           );
           fileType = 'Manager PDF';
           filename = 'manager_schedule_${_date.year}_${_date.month}.pdf';
@@ -416,6 +422,8 @@ class _ScheduleViewState extends State<ScheduleView> {
             jobCodeSettings: _jobCodeSettings,
             shiftRunners: shiftRunners,
             shiftTypes: shiftTypes,
+            storeName: StoreHours.cached.storeName,
+            storeNsn: StoreHours.cached.storeNsn,
           );
           fileType = 'PDF';
           filename = 'schedule_${_date.year}_${_date.month}.pdf';

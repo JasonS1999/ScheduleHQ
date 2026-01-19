@@ -187,6 +187,8 @@ Future<void> _onCreate(Database db, int version) async {
   await db.execute('''
     CREATE TABLE store_hours (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      storeName TEXT NOT NULL DEFAULT '',
+      storeNsn TEXT NOT NULL DEFAULT '',
       sundayOpen TEXT NOT NULL DEFAULT '04:30',
       sundayClose TEXT NOT NULL DEFAULT '01:00',
       mondayOpen TEXT NOT NULL DEFAULT '04:30',
@@ -254,7 +256,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 19,
+      version: 20,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -564,6 +566,19 @@ class AppDatabase {
           // Add sortGroup column to job_code_settings
           try {
             await db.execute('ALTER TABLE job_code_settings ADD COLUMN sortGroup TEXT');
+          } catch (_) {
+            // Column may already exist
+          }
+        }
+        if (oldVersion < 20) {
+          // Add storeName and storeNsn columns to store_hours
+          try {
+            await db.execute("ALTER TABLE store_hours ADD COLUMN storeName TEXT NOT NULL DEFAULT ''");
+          } catch (_) {
+            // Column may already exist
+          }
+          try {
+            await db.execute("ALTER TABLE store_hours ADD COLUMN storeNsn TEXT NOT NULL DEFAULT ''");
           } catch (_) {
             // Column may already exist
           }

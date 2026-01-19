@@ -10,6 +10,33 @@ import '../models/schedule_note.dart';
 import '../widgets/schedule/schedule_view.dart';
 
 class SchedulePdfService {
+  /// Build store info header for PDFs
+  static pw.Widget _buildStoreHeader(String title, {String? storeName, String? storeNsn}) {
+    // Build store info text inline
+    String storeInfoText = '';
+    if (storeName?.isNotEmpty ?? false) {
+      storeInfoText = storeName!;
+    }
+    if (storeNsn?.isNotEmpty ?? false) {
+      if (storeInfoText.isNotEmpty) {
+        storeInfoText += ' $storeNsn';
+      } else {
+        storeInfoText = storeNsn!;
+      }
+    }
+    
+    // Build full header: "Title | Store Info"
+    String fullTitle = title;
+    if (storeInfoText.isNotEmpty) {
+      fullTitle += ' | $storeInfoText';
+    }
+    
+    return pw.Text(
+      fullTitle,
+      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+    );
+  }
+
   /// Generate a PDF for the weekly schedule
   static Future<Uint8List> generateWeeklyPdf({
     required DateTime weekStart,
@@ -18,13 +45,15 @@ class SchedulePdfService {
     List<JobCodeSettings> jobCodeSettings = const [],
     List<ShiftRunner> shiftRunners = const [],
     List<ShiftType> shiftTypes = const [],
+    String? storeName,
+    String? storeNsn,
   }) async {
     final pdf = pw.Document();
 
     // Calculate week end
     final weekEnd = weekStart.add(const Duration(days: 6));
     final weekTitle =
-        'Week of ${_formatDate(weekStart)} - ${_formatDate(weekEnd)}';
+        'Manager Schedule | Week of ${_formatDate(weekStart)} - ${_formatDate(weekEnd)}';
 
     // Generate days for the week (Sun..Sat)
     final week = List.generate(7, (i) => weekStart.add(Duration(days: i)));
@@ -36,12 +65,9 @@ class SchedulePdfService {
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.all(20),
         build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(
-              weekTitle,
-              style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
-            ),
+            _buildStoreHeader(weekTitle, storeName: storeName, storeNsn: storeNsn),
             pw.SizedBox(height: 10),
             pw.Expanded(
               child: pw.FittedBox(
@@ -75,6 +101,8 @@ class SchedulePdfService {
     List<JobCodeSettings> jobCodeSettings = const [],
     List<ShiftRunner> shiftRunners = const [],
     List<ShiftType> shiftTypes = const [],
+    String? storeName,
+    String? storeNsn,
   }) async {
     final pdf = pw.Document();
 
@@ -92,7 +120,7 @@ class SchedulePdfService {
       'November',
       'December',
     ];
-    final managerTitle = '${monthNames[month - 1]} $year Manager Schedule';
+    final managerTitle = 'Manager Schedule | ${monthNames[month - 1]} $year';
 
     // Get first and last day of month
     final firstDay = DateTime(year, month, 1);
@@ -119,12 +147,9 @@ class SchedulePdfService {
         pageFormat: PdfPageFormat.letter,
         margin: const pw.EdgeInsets.all(16),
         build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(
-              managerTitle,
-              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
-            ),
+            _buildStoreHeader(managerTitle, storeName: storeName, storeNsn: storeNsn),
             pw.SizedBox(height: 10),
             pw.Expanded(
               child: pw.FittedBox(
@@ -162,6 +187,8 @@ class SchedulePdfService {
     List<ShiftRunner> shiftRunners = const [],
     List<ShiftType> shiftTypes = const [],
     Map<DateTime, ScheduleNote> notes = const {},
+    String? storeName,
+    String? storeNsn,
   }) async {
     final pdf = pw.Document();
 
@@ -182,10 +209,7 @@ class SchedulePdfService {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(
-              weekTitle,
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
+            _buildStoreHeader(weekTitle, storeName: storeName, storeNsn: storeNsn),
             pw.SizedBox(height: 6),
             pw.Expanded(
               child: pw.FittedBox(
@@ -221,6 +245,8 @@ class SchedulePdfService {
     List<ShiftRunner> shiftRunners = const [],
     List<ShiftType> shiftTypes = const [],
     Map<DateTime, ScheduleNote> notes = const {},
+    String? storeName,
+    String? storeNsn,
   }) async {
     final pdf = pw.Document();
 
@@ -281,10 +307,7 @@ class SchedulePdfService {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            pw.Text(
-              managerTitle,
-              style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
-            ),
+            _buildStoreHeader(managerTitle, storeName: storeName, storeNsn: storeNsn),
             pw.SizedBox(height: 6),
             pw.Expanded(
               child: pw.FittedBox(

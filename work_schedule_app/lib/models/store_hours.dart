@@ -1,5 +1,7 @@
 class StoreHours {
   final int? id;
+  final String storeName;
+  final String storeNsn;
   
   // Per-day open times (0=Sunday, 1=Monday, ..., 6=Saturday)
   final String sundayOpen;
@@ -33,6 +35,8 @@ class StoreHours {
 
   StoreHours({
     this.id,
+    this.storeName = '',
+    this.storeNsn = '',
     required this.sundayOpen,
     required this.sundayClose,
     required this.mondayOpen,
@@ -52,6 +56,8 @@ class StoreHours {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'storeName': storeName,
+      'storeNsn': storeNsn,
       'sundayOpen': sundayOpen,
       'sundayClose': sundayClose,
       'mondayOpen': mondayOpen,
@@ -72,6 +78,8 @@ class StoreHours {
   factory StoreHours.fromMap(Map<String, dynamic> map) {
     return StoreHours(
       id: map['id'] as int?,
+      storeName: map['storeName'] as String? ?? '',
+      storeNsn: map['storeNsn'] as String? ?? '',
       sundayOpen: map['sundayOpen'] as String? ?? defaultOpenTime,
       sundayClose: map['sundayClose'] as String? ?? defaultCloseTime,
       mondayOpen: map['mondayOpen'] as String? ?? defaultOpenTime,
@@ -91,6 +99,8 @@ class StoreHours {
 
   factory StoreHours.defaults() {
     return StoreHours(
+      storeName: '',
+      storeNsn: '',
       sundayOpen: defaultOpenTime,
       sundayClose: defaultCloseTime,
       mondayOpen: defaultOpenTime,
@@ -110,6 +120,8 @@ class StoreHours {
 
   StoreHours copyWith({
     int? id,
+    String? storeName,
+    String? storeNsn,
     String? sundayOpen,
     String? sundayClose,
     String? mondayOpen,
@@ -127,6 +139,8 @@ class StoreHours {
   }) {
     return StoreHours(
       id: id ?? this.id,
+      storeName: storeName ?? this.storeName,
+      storeNsn: storeNsn ?? this.storeNsn,
       sundayOpen: sundayOpen ?? this.sundayOpen,
       sundayClose: sundayClose ?? this.sundayClose,
       mondayOpen: mondayOpen ?? this.mondayOpen,

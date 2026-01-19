@@ -69,7 +69,7 @@ class _SettingsPageState extends State<SettingsPage>
             Tab(text: "Job Codes"),
             Tab(text: "Shift Templates"),
             Tab(text: "Shift Runner"),
-            Tab(text: "Store Hours"),
+            Tab(text: "Store Settings"),
             Tab(text: "Schedule"),
           ],
         ),
