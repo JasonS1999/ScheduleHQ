@@ -56,19 +56,30 @@ class _NavigationShellState extends State<NavigationShell> {
           if (hasUpdate) {
             _showUpdateDialog();
           } else {
-            // Show snackbar that app is up to date with debug info
+            // Show snackbar with debug info
             final latestVersion = UpdateService.latestVersion ?? 'unknown';
             final error = UpdateService.lastError;
-            String message = 'Current: v${UpdateService.currentVersion}, Latest: v$latestVersion';
-            if (error != null) {
-              message += ' | Error: $error';
+            
+            if (error != null && latestVersion == 'unknown') {
+              // API failed - offer to open browser
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Could not check for updates. Open releases page?'),
+                  duration: const Duration(seconds: 6),
+                  action: SnackBarAction(
+                    label: 'Open',
+                    onPressed: () => UpdateService.openReleasesPage(),
+                  ),
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('You\'re up to date! (v${UpdateService.currentVersion})'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
             }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(message),
-                duration: const Duration(seconds: 6),
-              ),
-            );
           }
         }
       }
