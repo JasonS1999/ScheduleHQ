@@ -225,6 +225,24 @@ Future<void> _onCreate(Database db, int version) async {
     'saturdayClose': '01:00',
   });
 
+  await db.execute('''
+    CREATE TABLE employee_weekly_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employeeId INTEGER NOT NULL,
+      dayOfWeek INTEGER NOT NULL,
+      startTime TEXT,
+      endTime TEXT,
+      isOff INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY(employeeId) REFERENCES employees(id) ON DELETE CASCADE,
+      UNIQUE(employeeId, dayOfWeek)
+    )
+  ''');
+
+  await db.execute('''
+    CREATE INDEX IF NOT EXISTS idx_weekly_templates_employee 
+    ON employee_weekly_templates(employeeId)
+  ''');
+
   log("✅ Schema created", name: 'AppDatabase');
 } 
 
@@ -279,7 +297,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 20,
+      version: 21,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -605,6 +623,25 @@ class AppDatabase {
           } catch (_) {
             // Column may already exist
           }
+        }
+        if (oldVersion < 21) {
+          // Add employee_weekly_templates table for per-employee schedule templates
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS employee_weekly_templates (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              employeeId INTEGER NOT NULL,
+              dayOfWeek INTEGER NOT NULL,
+              startTime TEXT,
+              endTime TEXT,
+              isOff INTEGER NOT NULL DEFAULT 0,
+              FOREIGN KEY(employeeId) REFERENCES employees(id) ON DELETE CASCADE,
+              UNIQUE(employeeId, dayOfWeek)
+            )
+          ''');
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_weekly_templates_employee 
+            ON employee_weekly_templates(employeeId)
+          ''');
         }
       },
     );

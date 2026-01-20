@@ -4,6 +4,7 @@ import '../models/employee.dart';
 import '../database/job_code_settings_dao.dart';
 import '../models/job_code_settings.dart';
 import 'employee_availability_page.dart';
+import 'weekly_template_dialog.dart';
 import '../widgets/csv_import_dialog.dart';
 
 final JobCodeSettingsDao _jobCodeDao = JobCodeSettingsDao();
@@ -303,6 +304,17 @@ class _RosterPageState extends State<RosterPage> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.calendar_view_week, size: 16),
+                        label: const Text('Weekly Template'),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (context) => WeeklyTemplateDialog(employee: e),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 8),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.calendar_today, size: 16),
                         label: const Text('Availability'),

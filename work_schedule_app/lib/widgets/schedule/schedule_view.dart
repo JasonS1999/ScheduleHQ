@@ -4,6 +4,7 @@ import '../../database/employee_dao.dart';
 import '../../database/time_off_dao.dart';
 import '../../database/employee_availability_dao.dart';
 import '../../database/shift_template_dao.dart';
+import '../../database/weekly_template_dao.dart';
 import '../../database/job_code_settings_dao.dart';
 import '../../database/shift_dao.dart';
 import '../../database/schedule_note_dao.dart';
@@ -13,6 +14,7 @@ import '../../database/store_hours_dao.dart';
 import '../../models/employee.dart';
 import '../../models/time_off_entry.dart';
 import '../../models/shift_template.dart';
+import '../../models/weekly_template.dart';
 import '../../models/shift.dart';
 import '../../models/schedule_note.dart';
 import '../../models/job_code_settings.dart';
@@ -681,18 +683,18 @@ class _ScheduleViewState extends State<ScheduleView> {
     });
   }
 
-  final ShiftTemplateDao _templateDao = ShiftTemplateDao();
+  final WeeklyTemplateDao _weeklyTemplateDao = WeeklyTemplateDao();
 
   Future<void> _autoFillFromTemplates(DateTime weekStart) async {
-    // Get all templates
-    final templates = await _templateDao.getAllTemplates();
-
-    if (templates.isEmpty) {
+    // Get employees who have weekly templates
+    final employeeIdsWithTemplates = await _weeklyTemplateDao.getEmployeeIdsWithTemplates();
+    
+    if (employeeIdsWithTemplates.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'No shift templates defined. Go to Settings > Shift Templates to create some.',
+              'No employees have weekly templates defined. Go to Roster and set up Weekly Templates for employees.',
             ),
             duration: Duration(seconds: 4),
           ),
@@ -701,205 +703,167 @@ class _ScheduleViewState extends State<ScheduleView> {
       return;
     }
 
-    // Show dialog to select days and options
-    if (!mounted) return;
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) {
-        final selectedDays = <int>{
-          1,
-          2,
-          3,
-          4,
-          5,
-        }; // Mon-Fri default (1=Mon, 5=Fri in this context)
-        bool skipExisting = true;
+    // Filter employees who have templates
+    final employeesWithTemplates = _employees
+        .where((e) => employeeIdsWithTemplates.contains(e.id))
+        .toList();
 
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-            return AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.auto_fix_high, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('Auto-Fill from Templates'),
-                ],
-              ),
-              content: SizedBox(
-                width: 400,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Found ${templates.length} template(s) and ${_employees.length} employee(s).',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Select days to fill:'),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: List.generate(7, (i) {
-                        return FilterChip(
-                          label: Text(dayNames[i]),
-                          selected: selectedDays.contains(i),
-                          onSelected: (selected) {
-                            setDialogState(() {
-                              if (selected) {
-                                selectedDays.add(i);
-                              } else {
-                                selectedDays.remove(i);
-                              }
-                            });
-                          },
-                        );
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    CheckboxListTile(
-                      title: const Text('Skip employees with existing shifts'),
-                      value: skipExisting,
-                      contentPadding: EdgeInsets.zero,
-                      onChanged: (v) =>
-                          setDialogState(() => skipExisting = v ?? true),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.auto_fix_high),
-                  label: const Text('Auto-Fill'),
-                  onPressed: () => Navigator.pop(ctx, {
-                    'days': selectedDays.toList(),
-                    'skipExisting': skipExisting,
-                  }),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    if (result == null) return;
-
-    final selectedDays = result['days'] as List<int>;
-    final skipExisting = result['skipExisting'] as bool;
-
-    if (selectedDays.isEmpty) {
+    if (employeesWithTemplates.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select at least one day')),
+          const SnackBar(
+            content: Text('No employees with weekly templates found in the current filter.'),
+            duration: Duration(seconds: 4),
+          ),
         );
       }
       return;
     }
 
+    // Show dialog with employee selection
+    if (!mounted) return;
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _AutoFillFromWeeklyTemplatesDialog(
+        employees: employeesWithTemplates,
+        weeklyTemplateDao: _weeklyTemplateDao,
+        weekStart: weekStart,
+      ),
+    );
+
+    if (result == null) return;
+
+    final selectedEmployeeIds = result['selectedEmployees'] as List<int>;
+    final skipExisting = result['skipExisting'] as bool;
+    final overrideExisting = result['overrideExisting'] as bool;
+
+    if (selectedEmployeeIds.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select at least one employee')),
+        );
+      }
+      return;
+    }
+
+    // Get templates for selected employees
+    final templates = await _weeklyTemplateDao.getTemplatesForEmployees(selectedEmployeeIds);
+
     // Generate shifts
     int shiftsCreated = 0;
+    int shiftsDeleted = 0;
     final newShifts = <Shift>[];
+    final shiftsToDelete = <int>[];
 
-    for (final employee in _employees) {
-      if (templates.isEmpty) continue;
-
-      // Templates are shared across job codes; use the first template.
-      final template = templates.first;
-
-      // Parse template start time (e.g., "09:00" in HH:MM format)
-      final startTimeParts = template.startTime.split(':');
-      final startHour = int.parse(startTimeParts[0]);
-      final startMinute = startTimeParts.length > 1
-          ? int.parse(startTimeParts[1])
-          : 0;
-
-      // Parse template end time
-      final endTimeParts = template.endTime.split(':');
-      final endHour = int.parse(endTimeParts[0]);
-      final endMinute = endTimeParts.length > 1
-          ? int.parse(endTimeParts[1])
-          : 0;
-
-      for (final dayIndex in selectedDays) {
+    for (final employeeId in selectedEmployeeIds) {
+      final employeeTemplates = templates[employeeId] ?? [];
+      
+      for (final template in employeeTemplates) {
+        // Skip blank days (no shift and not marked as OFF)
+        if (template.isBlank) continue;
+        
+        final dayIndex = template.dayOfWeek;
         final day = weekStart.add(Duration(days: dayIndex));
 
         // Check if employee already has a shift this day
-        if (skipExisting) {
-          final existingShifts = _shifts
-              .where(
-                (s) =>
-                    s.employeeId == employee.id &&
-                    s.start.year == day.year &&
-                    s.start.month == day.month &&
-                    s.start.day == day.day,
-              )
-              .toList();
+        final existingShifts = _shifts
+            .where(
+              (s) =>
+                  s.employeeId == employeeId &&
+                  s.start.year == day.year &&
+                  s.start.month == day.month &&
+                  s.start.day == day.day,
+            )
+            .toList();
 
-          if (existingShifts.isNotEmpty) continue;
+        if (existingShifts.isNotEmpty) {
+          if (skipExisting) {
+            continue;
+          } else if (overrideExisting) {
+            // Mark existing shifts for deletion
+            for (final shift in existingShifts) {
+              if (shift.id != null) {
+                shiftsToDelete.add(shift.id!);
+                shiftsDeleted++;
+              }
+            }
+          } else {
+            // Don't skip but don't override either - skip this day
+            continue;
+          }
         }
 
-        final shiftStart = DateTime(
-          day.year,
-          day.month,
-          day.day,
-          startHour,
-          startMinute,
-        );
-        var shiftEnd = DateTime(
-          day.year,
-          day.month,
-          day.day,
-          endHour,
-          endMinute,
-        );
+        // Handle OFF days - create a shift with "OFF" label
+        if (template.isOff) {
+          newShifts.add(
+            Shift(
+              employeeId: employeeId,
+              startTime: DateTime(day.year, day.month, day.day, 0, 0),
+              endTime: DateTime(day.year, day.month, day.day, 23, 59),
+              label: 'OFF',
+            ),
+          );
+          shiftsCreated++;
+          continue;
+        }
 
-        // Handle overnight shifts (end time is next day)
-        if (shiftEnd.isBefore(shiftStart) ||
-            shiftEnd.isAtSameMomentAs(shiftStart)) {
+        // Parse template times for regular shifts
+        final startTimeParts = template.startTime!.split(':');
+        final startHour = int.parse(startTimeParts[0]);
+        final startMinute = startTimeParts.length > 1 ? int.parse(startTimeParts[1]) : 0;
+
+        final endTimeParts = template.endTime!.split(':');
+        final endHour = int.parse(endTimeParts[0]);
+        final endMinute = endTimeParts.length > 1 ? int.parse(endTimeParts[1]) : 0;
+
+        final shiftStart = DateTime(day.year, day.month, day.day, startHour, startMinute);
+        var shiftEnd = DateTime(day.year, day.month, day.day, endHour, endMinute);
+
+        // Handle overnight shifts
+        if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart)) {
           shiftEnd = shiftEnd.add(const Duration(days: 1));
         }
 
         newShifts.add(
           Shift(
-            employeeId: employee.id!,
+            employeeId: employeeId,
             startTime: shiftStart,
             endTime: shiftEnd,
-            label: template.templateName,
           ),
         );
         shiftsCreated++;
       }
     }
 
-    if (newShifts.isEmpty) {
+    if (newShifts.isEmpty && shiftsToDelete.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'No shifts were created (all slots already filled or no matching templates)',
-            ),
+            content: Text('No shifts were created (all slots already filled or no shifts in templates)'),
           ),
         );
       }
       return;
     }
 
-    // Insert all shifts
-    await _shiftDao.insertAll(newShifts);
+    // Delete existing shifts if override is enabled
+    for (final shiftId in shiftsToDelete) {
+      await _shiftDao.delete(shiftId);
+    }
+
+    // Insert new shifts
+    if (newShifts.isNotEmpty) {
+      await _shiftDao.insertAll(newShifts);
+    }
     await _refreshShifts();
 
     if (mounted) {
+      String message = 'Created $shiftsCreated shift(s) from weekly templates';
+      if (shiftsDeleted > 0) {
+        message += ', replaced $shiftsDeleted existing shift(s)';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Created $shiftsCreated shift(s) from templates'),
-        ),
+        SnackBar(content: Text(message)),
       );
     }
   }
@@ -5533,6 +5497,258 @@ class _MonthlyRunnerSearchDialogState extends State<_MonthlyRunnerSearchDialog> 
             onPressed: () => Navigator.pop(context, ''),
             child: const Text('Clear', style: TextStyle(color: Colors.red)),
           ),
+      ],
+    );
+  }
+}
+
+/// Dialog for auto-filling shifts from weekly templates with employee selection
+class _AutoFillFromWeeklyTemplatesDialog extends StatefulWidget {
+  final List<Employee> employees;
+  final WeeklyTemplateDao weeklyTemplateDao;
+  final DateTime weekStart;
+
+  const _AutoFillFromWeeklyTemplatesDialog({
+    required this.employees,
+    required this.weeklyTemplateDao,
+    required this.weekStart,
+  });
+
+  @override
+  State<_AutoFillFromWeeklyTemplatesDialog> createState() => _AutoFillFromWeeklyTemplatesDialogState();
+}
+
+class _AutoFillFromWeeklyTemplatesDialogState extends State<_AutoFillFromWeeklyTemplatesDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  Set<int> _selectedEmployeeIds = {};
+  bool _skipExisting = true;
+  bool _overrideExisting = false;
+  Map<int, List<WeeklyTemplateEntry>> _employeeTemplates = {};
+  bool _isLoading = true;
+
+  static const List<String> _dayAbbreviations = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTemplates();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadTemplates() async {
+    final employeeIds = widget.employees.map((e) => e.id!).toList();
+    final templates = await widget.weeklyTemplateDao.getTemplatesForEmployees(employeeIds);
+    setState(() {
+      _employeeTemplates = templates;
+      _isLoading = false;
+    });
+  }
+
+  List<Employee> get _filteredEmployees {
+    if (_searchQuery.isEmpty) return widget.employees;
+    final query = _searchQuery.toLowerCase();
+    return widget.employees.where((e) => 
+      e.name.toLowerCase().contains(query) ||
+      e.jobCode.toLowerCase().contains(query)
+    ).toList();
+  }
+
+  String _getTemplatePreview(int employeeId) {
+    final templates = _employeeTemplates[employeeId] ?? [];
+    if (templates.isEmpty) return 'No template';
+    
+    final parts = <String>[];
+    for (final entry in templates) {
+      if (entry.hasShift) {
+        parts.add('${_dayAbbreviations[entry.dayOfWeek]}: ${entry.startTime}-${entry.endTime}');
+      } else if (entry.isOff) {
+        parts.add('${_dayAbbreviations[entry.dayOfWeek]}: OFF');
+      }
+    }
+    return parts.isEmpty ? 'No shifts defined' : parts.join(', ');
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selectedEmployeeIds = _filteredEmployees.map((e) => e.id!).toSet();
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedEmployeeIds.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.auto_fix_high, color: Colors.green),
+          SizedBox(width: 8),
+          Expanded(child: Text('Auto-Fill from Weekly Templates')),
+        ],
+      ),
+      content: SizedBox(
+        width: 550,
+        height: 500,
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Search bar
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search employees...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Selection controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${_selectedEmployeeIds.length} of ${widget.employees.length} selected',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: _selectAll,
+                            child: const Text('Select All'),
+                          ),
+                          TextButton(
+                            onPressed: _deselectAll,
+                            child: const Text('Deselect All'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  
+                  // Employee list
+                  Expanded(
+                    child: _filteredEmployees.isEmpty
+                        ? const Center(child: Text('No employees found'))
+                        : ListView.builder(
+                            itemCount: _filteredEmployees.length,
+                            itemBuilder: (context, index) {
+                              final employee = _filteredEmployees[index];
+                              final isSelected = _selectedEmployeeIds.contains(employee.id);
+                              final templatePreview = _getTemplatePreview(employee.id!);
+                              
+                              return CheckboxListTile(
+                                value: isSelected,
+                                onChanged: (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      _selectedEmployeeIds.add(employee.id!);
+                                    } else {
+                                      _selectedEmployeeIds.remove(employee.id);
+                                    }
+                                  });
+                                },
+                                title: Text(employee.name),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      employee.jobCode,
+                                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                    ),
+                                    Text(
+                                      templatePreview,
+                                      style: TextStyle(
+                                        color: Colors.blue[700],
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                                isThreeLine: true,
+                                dense: true,
+                                controlAffinity: ListTileControlAffinity.leading,
+                              );
+                            },
+                          ),
+                  ),
+                  
+                  const Divider(),
+                  
+                  // Options
+                  CheckboxListTile(
+                    title: const Text('Skip employees with existing shifts'),
+                    subtitle: const Text('Don\'t create shifts for days that already have one'),
+                    value: _skipExisting,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    onChanged: (v) {
+                      setState(() {
+                        _skipExisting = v ?? true;
+                        if (_skipExisting) {
+                          _overrideExisting = false;
+                        }
+                      });
+                    },
+                  ),
+                  if (!_skipExisting)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 32),
+                      child: CheckboxListTile(
+                        title: const Text('Override existing shifts'),
+                        subtitle: const Text('Delete existing shifts and replace with template'),
+                        value: _overrideExisting,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        onChanged: (v) => setState(() => _overrideExisting = v ?? false),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.auto_fix_high),
+          label: Text('Auto-Fill (${_selectedEmployeeIds.length})'),
+          onPressed: _selectedEmployeeIds.isEmpty
+              ? null
+              : () => Navigator.pop(context, {
+                    'selectedEmployees': _selectedEmployeeIds.toList(),
+                    'skipExisting': _skipExisting,
+                    'overrideExisting': _overrideExisting,
+                  }),
+        ),
       ],
     );
   }
