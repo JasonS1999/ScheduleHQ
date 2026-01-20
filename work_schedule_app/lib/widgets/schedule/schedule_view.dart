@@ -2685,16 +2685,11 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
                                           border: Border.all(
-                                            color: isShiftSelected
-                                                ? Colors.blue
-                                                : Theme.of(
-                                                    context,
-                                                  ).dividerColor,
-                                            width: isShiftSelected ? 2.5 : 1,
+                                            color: Theme.of(
+                                              context,
+                                            ).dividerColor,
+                                            width: 1,
                                           ),
-                                          color: isShiftSelected
-                                              ? Colors.blue.withAlpha(38)
-                                              : null,
                                         ),
                                         child: Builder(
                                           builder: (context) {
@@ -2710,45 +2705,36 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                                     runnerShiftType,
                                                   )
                                                 : null;
+                                            final isDark = Theme.of(context).brightness == Brightness.dark;
 
-                                            return Stack(
-                                              children: [
-                                                // Shift runner fill background
-                                                if (runnerColor != null)
-                                                  Positioned.fill(
-                                                    child: Container(
-                                                      decoration: BoxDecoration(
-                                                        color: runnerColor.withOpacity(0.25),
-                                                        border: Border.all(
-                                                          color: runnerColor,
-                                                          width: 2,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                // Main content
-                                                Center(
-                                                  child: Text(
-                                                    _isLabelOnly(s.text)
-                                                        ? _labelText(s.text)
-                                                        : '$startLabel - $endLabel',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          isShiftSelected
-                                                          ? FontWeight.bold
-                                                          : FontWeight.normal,
-                                                      color:
-                                                          Theme.of(
-                                                                context,
-                                                              ).brightness ==
-                                                              Brightness.dark
-                                                          ? Colors.white
-                                                          : Colors.black87,
-                                                      fontSize: 12,
-                                                    ),
+                                            return Container(
+                                              decoration: BoxDecoration(
+                                                border: isShiftSelected
+                                                    ? Border.all(color: Colors.blue, width: 2)
+                                                    : runnerColor != null
+                                                        ? Border.all(color: runnerColor, width: 1.5)
+                                                        : null,
+                                                color: isShiftSelected
+                                                    ? Colors.blue.withAlpha(38)
+                                                    : runnerColor?.withOpacity(0.15),
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  _isLabelOnly(s.text)
+                                                      ? _labelText(s.text)
+                                                      : '$startLabel - $endLabel',
+                                                  style: TextStyle(
+                                                    fontWeight:
+                                                        isShiftSelected
+                                                        ? FontWeight.bold
+                                                        : FontWeight.normal,
+                                                    color: isDark
+                                                        ? Colors.white
+                                                        : Colors.black87,
+                                                    fontSize: 14,
                                                   ),
                                                 ),
-                                              ],
+                                              ),
                                             );
                                           },
                                         ),
@@ -4336,15 +4322,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
         : null;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
         color: isSelected
             ? Colors.blue.withAlpha(128)
-            : runnerColor != null
-                ? runnerColor.withOpacity(0.25)
-                : Theme.of(context).colorScheme.primaryContainer.withAlpha(128),
-        borderRadius: BorderRadius.circular(4),
+            : runnerColor?.withOpacity(0.25),
         border: isSelected
             ? Border.all(color: Colors.blue, width: 2)
             : runnerColor != null
@@ -4353,13 +4334,13 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (_isLabelOnly(shift.text))
             Text(
               _labelText(shift.text),
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
                 color: Colors.red[700],
               ),
@@ -4368,7 +4349,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
           else ...[
             Text(
               '$startLabel-$endLabel',
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -4377,7 +4358,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
             if (shift.text.isNotEmpty && shift.text.toLowerCase() != 'shift')
               Text(
                 shift.text,
-                style: const TextStyle(fontSize: 9),
+                style: const TextStyle(fontSize: 11),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -4466,7 +4447,6 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
               : null,
           child: Container(
             width: cellWidth,
-            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               border: Border(
                 left: BorderSide(color: Theme.of(context).dividerColor),
@@ -4514,7 +4494,6 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                   )
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: shiftsForCell.map((shift) {
                       final isSelected = _selectedShift == shift;
                       final startLabel = _formatTimeOfDay(
@@ -4534,9 +4513,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                         dayOfWeek: day.weekday,
                       );
 
-                      return Draggable<ShiftPlaceholder>(
-                        data: shift,
-                        feedback: Material(
+                      return Expanded(
+                        child: Draggable<ShiftPlaceholder>(
+                          data: shift,
+                          feedback: Material(
                           elevation: 4,
                           borderRadius: BorderRadius.circular(4),
                           child: Container(
@@ -4593,7 +4573,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                             context,
                           ),
                         ),
-                      );
+                      ),
+                    );
                     }).toList(),
                   ),
           ),
