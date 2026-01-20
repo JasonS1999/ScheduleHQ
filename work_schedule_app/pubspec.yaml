@@ -2,7 +2,7 @@ name: work_schedule_app
 description: "Workforce scheduling and PTO management app."
 publish_to: 'none'
 
-version: 1.3.1+14
+version: 1.3.2+15
 
 environment:
   sdk: ^3.10.7
@@ -47,7 +47,7 @@ msix_config:
   publisher_display_name: Jason S
   identity_name: com.jasons.managerscheduleapp
   publisher: CN=Manager Schedule App, O=Jason S
-  msix_version: 1.3.1.0
+  msix_version: 1.3.2.0
   logo_path: windows/runner/resources/app_icon.ico
   certificate_path: certs/ManagerScheduleApp.pfx
   capabilities: internetClient
