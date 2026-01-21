@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'controllers/schedule_controller.dart';
 import 'models/shift_entry.dart';
+import 'services/app_colors.dart';
 
 class ScheduleHomePage extends StatefulWidget {
   final int year;
@@ -160,14 +161,16 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
   Widget _buildDayCell(DateTime day) {
     final isCurrentMonth = day.month == _currentMonth;
     final entries = _controller.entriesForDay(day);
+    final appColors = context.appColors;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Expanded(
       child: InkWell(
         onTap: () => _onDayTapped(day),
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.shade300),
-            color: isCurrentMonth ? Colors.white : Colors.grey.shade100,
+            border: Border.all(color: appColors.borderLight),
+            color: isCurrentMonth ? colorScheme.surface : appColors.surfaceVariant,
           ),
           padding: const EdgeInsets.all(4),
           height: 80,
@@ -178,7 +181,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
                 '${day.day}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isCurrentMonth ? Colors.black : Colors.grey,
+                  color: isCurrentMonth ? appColors.textPrimary : appColors.textTertiary,
                 ),
               ),
               const SizedBox(height: 4),

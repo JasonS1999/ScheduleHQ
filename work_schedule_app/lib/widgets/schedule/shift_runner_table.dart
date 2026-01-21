@@ -9,6 +9,7 @@ import '../../models/shift_runner.dart';
 import '../../models/shift_type.dart';
 import '../../models/shift.dart';
 import '../../models/employee.dart';
+import '../../services/app_colors.dart';
 
 class ShiftRunnerTable extends StatefulWidget {
   final DateTime weekStart;
@@ -382,8 +383,8 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
             style: TextStyle(
               fontSize: 13,
               color: hasRunner 
-                  ? (isDark ? Colors.white : Colors.black87)
-                  : Colors.grey,
+                  ? context.appColors.textPrimary
+                  : context.appColors.textTertiary,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -513,7 +514,7 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
                 ),
                 Text(
                   '${widget.day.month}/${widget.day.day} • ${widget.startTime} - ${widget.endTime}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).extension<AppColors>()!.textSecondary),
                 ),
               ],
             ),
@@ -549,7 +550,7 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: Theme.of(context).extension<AppColors>()!.surfaceVariant,
               ),
               onChanged: _filterEmployees,
             ),
@@ -558,7 +559,7 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
               'Available Employees (${_filteredEmployees.length})',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: Theme.of(context).extension<AppColors>()!.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -572,7 +573,7 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
                         _searchController.text.isEmpty
                             ? 'No available employees for this shift'
                             : 'No matching employees',
-                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                        style: TextStyle(color: Theme.of(context).extension<AppColors>()!.textTertiary, fontSize: 13),
                       ),
                     )
                   : ListView.builder(

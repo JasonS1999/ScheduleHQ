@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'database/app_database.dart';
 import 'navigation_shell.dart';
+import 'services/app_colors.dart';
 import 'services/theme_service.dart';
 
 Future<void> main() async {
@@ -36,11 +37,13 @@ class MyApp extends StatelessWidget {
             colorSchemeSeed: Colors.blue,
             brightness: Brightness.light,
             useMaterial3: true,
+            extensions: const [AppColors.light],
           ),
           darkTheme: ThemeData(
             colorSchemeSeed: Colors.blue,
             brightness: Brightness.dark,
             useMaterial3: true,
+            extensions: const [AppColors.dark],
           ),
           themeMode: mode,
           home: const NavigationShell(),

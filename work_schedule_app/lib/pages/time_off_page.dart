@@ -7,6 +7,7 @@ import '../database/job_code_settings_dao.dart';
 import '../models/employee.dart';
 import '../models/time_off_entry.dart';
 import '../models/settings.dart';
+import '../services/app_colors.dart';
 import '../services/pto_trimester_service.dart';
 import '../widgets/custom_time_picker.dart';
 
@@ -158,15 +159,15 @@ class _TimeOffPageState extends State<TimeOffPage> {
     return Color(value);
   }
 
-  Color _colorForEntry(TimeOffEntry entry) {
+  Color _colorForEntry(TimeOffEntry entry, {required Color fallback}) {
     final emp = _employeeByIdSafe[entry.employeeId];
     final code = emp?.jobCode;
-    if (code == null) return Colors.grey;
+    if (code == null) return fallback;
 
     final cached = _jobCodeColorCache[code];
     if (cached != null) return cached;
 
-    return Colors.grey;
+    return fallback;
   }
 
   String _timeOffLabel(TimeOffEntry e) {
@@ -697,7 +698,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text('Hours: $calculatedHours', style: const TextStyle(color: Colors.grey)),
+                    Text('Hours: $calculatedHours', style: TextStyle(color: Theme.of(context).extension<AppColors>()!.textSecondary)),
                   ],
                 ],
               ),
@@ -926,8 +927,8 @@ class _TimeOffPageState extends State<TimeOffPage> {
                         children: [
                           Chip(
                             avatar: CircleAvatar(
-                              backgroundColor: _jobCodeColorCache[selectedEmployee!.jobCode] ?? Colors.grey,
-                              child: Text(selectedEmployee!.name[0], style: const TextStyle(color: Colors.white, fontSize: 12)),
+                              backgroundColor: _jobCodeColorCache[selectedEmployee!.jobCode] ?? Theme.of(context).extension<AppColors>()!.textSecondary,
+                              child: Text(selectedEmployee!.name[0], style: TextStyle(color: Theme.of(context).extension<AppColors>()!.textOnSuccess, fontSize: 12)),
                             ),
                             label: Text('${selectedEmployee!.name} (${selectedEmployee!.jobCode})'),
                             deleteIcon: const Icon(Icons.close, size: 16),
@@ -942,7 +943,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                             canAddPto ? '✓ PTO' : '✗ No PTO',
                             style: TextStyle(
                               fontSize: 12,
-                              color: canAddPto ? Colors.green : Colors.grey,
+                              color: canAddPto ? Theme.of(context).extension<AppColors>()!.successForeground : Theme.of(context).extension<AppColors>()!.textSecondary,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -950,7 +951,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                             canAddVacation ? '✓ $vacWeeksLeft vac wks' : '✗ No vacation',
                             style: TextStyle(
                               fontSize: 12,
-                              color: canAddVacation ? Colors.green : Colors.grey,
+                              color: canAddVacation ? Theme.of(context).extension<AppColors>()!.successForeground : Theme.of(context).extension<AppColors>()!.textSecondary,
                             ),
                           ),
                         ],
@@ -991,7 +992,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                                     ? 'Select an employee first'
                                     : 'No entries added yet.\nClick "Add Entry" to start.',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.grey[500]),
+                                style: TextStyle(color: Theme.of(context).extension<AppColors>()!.textTertiary),
                               ),
                             )
                           : ListView.builder(
@@ -1033,7 +1034,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                                                 child: Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                                                   decoration: BoxDecoration(
-                                                    border: Border.all(color: Colors.grey),
+                                                    border: Border.all(color: Theme.of(context).extension<AppColors>()!.borderMedium),
                                                     borderRadius: BorderRadius.circular(4),
                                                   ),
                                                   child: Text(
@@ -1119,12 +1120,12 @@ class _TimeOffPageState extends State<TimeOffPage> {
                                                 child: Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                                                   decoration: BoxDecoration(
-                                                    border: Border.all(color: Colors.grey.shade300),
+                                                    border: Border.all(color: Theme.of(context).extension<AppColors>()!.borderLight),
                                                     borderRadius: BorderRadius.circular(4),
                                                   ),
                                                   child: Text(
                                                     entry.isAllDay ? 'All Day' : '${entry.hours}h',
-                                                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                                    style: TextStyle(fontSize: 12, color: Theme.of(context).extension<AppColors>()!.textSecondary),
                                                     textAlign: TextAlign.center,
                                                   ),
                                                 ),
@@ -1133,7 +1134,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                                             
                                             // Delete button
                                             IconButton(
-                                              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                                              icon: Icon(Icons.delete, size: 20, color: Theme.of(context).extension<AppColors>()!.errorIcon),
                                               onPressed: () {
                                                 setDialogState(() => entries.removeAt(index));
                                               },
@@ -1230,7 +1231,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                                                   child: Text(formatTime(entry.endTime ?? '17:00'), style: const TextStyle(fontSize: 12)),
                                                 ),
                                                 const SizedBox(width: 8),
-                                                Text('(${entry.hours}h)', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                                Text('(${entry.hours}h)', style: TextStyle(fontSize: 12, color: Theme.of(context).extension<AppColors>()!.textSecondary)),
                                               ],
                                             ],
                                           ),
@@ -1296,7 +1297,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text('Added ${entries.length} time off entries for ${selectedEmployee!.name}'),
-                              backgroundColor: Colors.green,
+                              backgroundColor: Theme.of(context).extension<AppColors>()!.successForeground,
                             ),
                           );
                         },
@@ -1365,7 +1366,7 @@ class _TimeOffPageState extends State<TimeOffPage> {
                   _selectedDay = null;
                 }),
                 child: Container(
-                  color: const Color.fromRGBO(0, 0, 0, 0.35),
+                  color: context.appColors.overlayDim,
                 ),
               ),
             ),
@@ -1424,9 +1425,10 @@ class _TimeOffPageState extends State<TimeOffPage> {
 
   Widget _buildLegend() {
     final entries = <Widget>[];
+    final appColors = context.appColors;
 
     void addLegendItem(String label, String codeKey) {
-      final color = _jobCodeColorCache[codeKey] ?? Colors.grey;
+      final color = _jobCodeColorCache[codeKey] ?? appColors.textSecondary;
       entries.add(Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1548,11 +1550,11 @@ class _TimeOffPageState extends State<TimeOffPage> {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? Colors.blue.shade100
+                            ? context.appColors.selectionBackground
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
                         border: isToday
-                            ? Border.all(color: Colors.blue, width: 1.5)
+                            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 1.5)
                             : null,
                       ),
                       child: Column(
@@ -1572,9 +1574,9 @@ class _TimeOffPageState extends State<TimeOffPage> {
                               padding: const EdgeInsets.only(top: 4),
                             child: Text(
                               "$count",
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.redAccent,
+                                color: Theme.of(context).colorScheme.error,
                               ),
                             ),
                           ),
@@ -1603,15 +1605,15 @@ class _TimeOffPageState extends State<TimeOffPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: entries.map((e) {
-            final color = _colorForEntry(e);
+            final color = _colorForEntry(e, fallback: context.appColors.textSecondary);
             final label = _timeOffLabel(e);
 
             return ListTile(
               leading: CircleAvatar(
                 backgroundColor: color,
-                child: const Icon(
+                child: Icon(
                   Icons.person,
-                  color: Colors.white,
+                  color: context.appColors.textOnSuccess,
                   size: 18,
                 ),
               ),

@@ -26,3 +26,22 @@ linter:
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options
+
+# =============================================================================
+# THEME COLOR GUIDELINES
+# =============================================================================
+# To maintain consistent dark/light mode support, avoid these color patterns:
+#
+# PROHIBITED PATTERNS (use AppColors from lib/services/app_colors.dart instead):
+#   - Colors.white            → use appColors.textOnSuccess or colorScheme.surface
+#   - Colors.black            → use appColors.textPrimary or colorScheme.onSurface
+#   - Colors.grey[###]        → use appColors.textSecondary or textTertiary
+#   - Colors.*.shade50/100    → use appColors.*Background (e.g., successBackground)
+#   - Color.fromRGBO(0,0,0,*) → use appColors.overlayDim or overlayLight
+#   - Color(0xFF...)          → define semantic colors in AppColors extension
+#
+# Run the color pattern checker script to detect violations:
+#   dart run tool/check_color_patterns.dart
+#
+# See test/theme_contrast_test.dart for theme accessibility tests.
+# =============================================================================

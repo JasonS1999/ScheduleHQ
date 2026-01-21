@@ -21,6 +21,7 @@ import '../../models/job_code_settings.dart';
 import '../../models/shift_runner.dart';
 import '../../models/shift_type.dart';
 import '../../models/store_hours.dart';
+import '../../services/app_colors.dart';
 import '../../services/schedule_pdf_service.dart';
 import '../../services/schedule_undo_manager.dart';
 import 'shift_runner_table.dart';
@@ -1728,8 +1729,8 @@ class _ScheduleViewState extends State<ScheduleView> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  border: Border.all(color: Colors.orange.shade200),
+                  color: Theme.of(ctx).extension<AppColors>()!.warningBackground,
+                  border: Border.all(color: Theme.of(ctx).extension<AppColors>()!.warningBorder),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -1769,7 +1770,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               onPressed: () => Navigator.pop(ctx, true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(ctx).colorScheme.onPrimary,
               ),
               child: const Text('Proceed Anyway'),
             ),
@@ -2848,8 +2849,8 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                                       ? FontWeight.bold
                                                       : FontWeight.normal,
                                                   color: isDark
-                                                      ? Colors.white
-                                                      : Colors.black87,
+                                                      ? Theme.of(context).colorScheme.onSurface
+                                                      : Theme.of(context).colorScheme.onSurface,
                                                   fontSize: 14,
                                                 ),
                                               ),
@@ -2875,22 +2876,22 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                         height: 56,
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          color: Colors.blue.shade100,
+                                          color: context.appColors.selectionBackground,
                                           borderRadius: BorderRadius.circular(
                                             4,
                                           ),
                                           border: Border.all(
-                                            color: Colors.blue,
+                                            color: Theme.of(context).colorScheme.primary,
                                             width: 2,
                                           ),
                                         ),
                                         child: Center(
                                           child: Text(
                                             '$startLabel - $endLabel',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.blue,
+                                              color: Theme.of(context).colorScheme.primary,
                                             ),
                                           ),
                                         ),
@@ -2901,17 +2902,17 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
                                         border: Border.all(
-                                          color: Colors.grey.shade300,
+                                          color: context.appColors.borderLight,
                                           width: 1,
                                           style: BorderStyle.solid,
                                         ),
-                                        color: Colors.grey.shade200,
+                                        color: context.appColors.surfaceVariant,
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'Moving...',
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: Colors.grey,
+                                          color: context.appColors.textSecondary,
                                         ),
                                       ),
                                     ),
@@ -4876,8 +4877,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                             ),
                             child: Text(
                               '$startLabel-$endLabel',
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onPrimary,
                                 fontSize: 10,
                               ),
                             ),
@@ -5083,8 +5084,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                 style: TextStyle(
                   fontSize: 10,
                   color: hasRunner 
-                      ? (isDark ? Colors.white : Colors.black87)
-                      : Colors.grey,
+                      ? context.appColors.textPrimary
+                      : context.appColors.textTertiary,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -5248,8 +5249,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                   final bg = jobCodeColorFor(employee.jobCode);
                   final fg =
                       ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
-                      ? Colors.white
-                      : Colors.black;
+                      ? Theme.of(context).colorScheme.surface
+                      : Theme.of(context).colorScheme.onSurface;
 
                   cells.add(
                     Container(
@@ -5259,7 +5260,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       decoration: BoxDecoration(
                         color: bg,
                         border: Border.all(
-                          color: Colors.black,
+                          color: Theme.of(context).colorScheme.onSurface,
                           width: 2,
                         ),
                       ),
@@ -5607,7 +5608,7 @@ class _MonthlyRunnerSearchDialogState extends State<_MonthlyRunnerSearchDialog> 
                 ),
                 Text(
                   '${widget.day.month}/${widget.day.day} • ${widget.startTime} - ${widget.endTime}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).extension<AppColors>()!.textSecondary),
                 ),
               ],
             ),
@@ -5643,7 +5644,7 @@ class _MonthlyRunnerSearchDialogState extends State<_MonthlyRunnerSearchDialog> 
                   borderRadius: BorderRadius.circular(8),
                 ),
                 filled: true,
-                fillColor: Colors.grey[100],
+                fillColor: Theme.of(context).extension<AppColors>()!.surfaceVariant,
               ),
               onChanged: _filterEmployees,
             ),
@@ -5652,7 +5653,7 @@ class _MonthlyRunnerSearchDialogState extends State<_MonthlyRunnerSearchDialog> 
               'Available Employees (${_filteredEmployees.length})',
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: Theme.of(context).extension<AppColors>()!.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -5666,7 +5667,7 @@ class _MonthlyRunnerSearchDialogState extends State<_MonthlyRunnerSearchDialog> 
                         _searchController.text.isEmpty
                             ? 'No available employees for this shift'
                             : 'No matching employees',
-                        style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                        style: TextStyle(color: Theme.of(context).extension<AppColors>()!.textTertiary, fontSize: 13),
                       ),
                     )
                   : ListView.builder(
@@ -5920,7 +5921,7 @@ class _AutoFillFromWeeklyTemplatesDialogState extends State<_AutoFillFromWeeklyT
                                   children: [
                                     Text(
                                       employee.jobCode,
-                                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                      style: TextStyle(color: Theme.of(context).extension<AppColors>()!.textSecondary, fontSize: 12),
                                     ),
                                     Text(
                                       templatePreview,

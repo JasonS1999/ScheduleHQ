@@ -6,6 +6,7 @@ import 'pages/roster_page.dart';
 import 'package:work_schedule_app/pages/settings_page.dart';
 import 'pages/pto_vac_tracker_page.dart';
 import 'pages/analytics_page.dart';
+import 'services/app_colors.dart';
 import 'services/update_service.dart';
 
 class NavigationShell extends StatefulWidget {
@@ -87,7 +88,7 @@ class _NavigationShellState extends State<NavigationShell> {
             SnackBar(
               content: Text('Error checking for updates: $e'),
               duration: const Duration(seconds: 4),
-              backgroundColor: Colors.red,
+              backgroundColor: Theme.of(context).colorScheme.error,
             ),
           );
         }
@@ -220,18 +221,23 @@ class _NavigationShellState extends State<NavigationShell> {
           else if (_updateAvailable)
             Tooltip(
               message: 'Update available: v${UpdateService.latestVersion}',
-              child: ElevatedButton.icon(
-                onPressed: _showUpdateDialog,
-                icon: const Icon(Icons.system_update, size: 18),
-                label: const Text('Update'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
+              child: Builder(
+                builder: (context) {
+                  final appColors = context.appColors;
+                  return ElevatedButton.icon(
+                    onPressed: _showUpdateDialog,
+                    icon: const Icon(Icons.system_update, size: 18),
+                    label: const Text('Update'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: appColors.successForeground,
+                      foregroundColor: appColors.textOnSuccess,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  );
+                },
               ),
             )
           else
@@ -261,17 +267,18 @@ class _NavigationShellState extends State<NavigationShell> {
     }
 
     if (_updateAvailable) {
+      final appColors = context.appColors;
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        color: Colors.green.shade50,
+        color: appColors.successBackground,
         child: ElevatedButton.icon(
           onPressed: _showUpdateDialog,
           icon: const Icon(Icons.system_update),
           label: Text('Update available: v${UpdateService.latestVersion}'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
+            backgroundColor: appColors.successForeground,
+            foregroundColor: appColors.textOnSuccess,
           ),
         ),
       );
@@ -421,10 +428,11 @@ class _UpdateDialogState extends State<_UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final appColors = context.appColors;
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.system_update, color: Colors.green.shade600),
+          Icon(Icons.system_update, color: appColors.successIcon),
           const SizedBox(width: 8),
           const Text('Update Available'),
         ],
@@ -439,7 +447,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: appColors.surfaceVariant,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -447,9 +455,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 children: [
                   Column(
                     children: [
-                      const Text(
+                      Text(
                         'Current',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: appColors.textSecondary),
                       ),
                       Text(
                         'v${widget.currentVersion}',
@@ -457,18 +465,18 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                       ),
                     ],
                   ),
-                  const Icon(Icons.arrow_forward, color: Colors.grey),
+                  Icon(Icons.arrow_forward, color: appColors.textSecondary),
                   Column(
                     children: [
-                      const Text(
+                      Text(
                         'New',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: appColors.textSecondary),
                       ),
                       Text(
                         'v${widget.latestVersion}',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
+                          color: appColors.successForeground,
                         ),
                       ),
                     ],
@@ -490,7 +498,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 constraints: const BoxConstraints(maxHeight: 150),
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: appColors.borderLight),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: SingleChildScrollView(
@@ -511,7 +519,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               const SizedBox(height: 4),
               Text(
                 '${(_progress * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: appColors.textSecondary),
               ),
             ],
 
@@ -520,17 +528,17 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade50,
+                  color: appColors.errorBackground,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error, color: Colors.red, size: 20),
+                    Icon(Icons.error, color: appColors.errorIcon, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         _error!,
-                        style: const TextStyle(color: Colors.red),
+                        style: TextStyle(color: appColors.errorForeground),
                       ),
                     ),
                   ],
@@ -542,7 +550,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
+                  color: appColors.successBackground,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Column(
@@ -552,7 +560,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                       children: [
                         Icon(
                           Icons.check_circle,
-                          color: Colors.green.shade600,
+                          color: appColors.successIcon,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
@@ -577,7 +585,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
+                  color: appColors.successBackground,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Column(
@@ -587,7 +595,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                       children: [
                         Icon(
                           Icons.check_circle,
-                          color: Colors.green.shade600,
+                          color: appColors.successIcon,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
@@ -628,8 +636,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             icon: const Icon(Icons.download),
             label: const Text('Download Update'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+              backgroundColor: appColors.successForeground,
+              foregroundColor: appColors.textOnSuccess,
             ),
           ),
         // Install button for MSIX
@@ -639,8 +647,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             icon: const Icon(Icons.install_desktop),
             label: const Text('Install Now'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
+              backgroundColor: appColors.successForeground,
+              foregroundColor: appColors.textOnSuccess,
             ),
           ),
         // Close button for legacy ZIP download
