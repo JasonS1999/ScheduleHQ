@@ -5064,7 +5064,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                               _showNoteDialog(context, day),
                                           child: Container(
                                             width: dayColumnWidth,
-                                            padding: const EdgeInsets.all(8),
+                                            constraints: const BoxConstraints(minHeight: 50),
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
                                               border: Border(
                                                 right: BorderSide(
@@ -5086,63 +5087,56 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                                         .withAlpha(25)
                                                   : null,
                                             ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.center,
                                               children: [
-                                                Row(
+                                                // Day name and date
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  mainAxisSize: MainAxisSize.min,
                                                   children: [
                                                     Text(
                                                       dayName,
                                                       style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
+                                                        fontWeight: FontWeight.bold,
                                                         fontSize: 14,
                                                       ),
                                                     ),
-                                                    const Spacer(),
-                                                    if (_hasNoteForDay(day))
-                                                      const Icon(
-                                                        Icons.note,
-                                                        size: 14,
-                                                        color: Colors.amber,
+                                                    Text(
+                                                      '${day.month}/${day.day}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: !isCurrentMonth
+                                                            ? Colors.grey
+                                                            : day.day == DateTime.now().day &&
+                                                                  day.month == DateTime.now().month &&
+                                                                  day.year == DateTime.now().year
+                                                            ? Theme.of(context).colorScheme.primary
+                                                            : null,
                                                       ),
+                                                    ),
                                                   ],
                                                 ),
-                                                Text(
-                                                  '${day.month}/${day.day}',
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    color: !isCurrentMonth
-                                                        ? Colors.grey
-                                                        : day.day ==
-                                                                  DateTime.now()
-                                                                      .day &&
-                                                              day.month ==
-                                                                  DateTime.now()
-                                                                      .month &&
-                                                              day.year ==
-                                                                  DateTime.now()
-                                                                      .year
-                                                        ? Theme.of(
-                                                            context,
-                                                          ).colorScheme.primary
-                                                        : null,
-                                                  ),
-                                                ),
-                                                if (_hasNoteForDay(day))
-                                                  Text(
-                                                    _getNoteForDay(day),
-                                                    style: const TextStyle(
-                                                      fontSize: 9,
-                                                      color: Colors.amber,
+                                                if (_hasNoteForDay(day)) ...[
+                                                  const SizedBox(width: 4),
+                                                  Expanded(
+                                                    child: Text(
+                                                      _getNoteForDay(day),
+                                                      style: const TextStyle(
+                                                        fontSize: 9,
+                                                        color: Colors.amber,
+                                                      ),
+                                                      maxLines: 2,
+                                                      overflow: TextOverflow.ellipsis,
                                                     ),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
                                                   ),
+                                                  const Icon(
+                                                    Icons.note,
+                                                    size: 14,
+                                                    color: Colors.amber,
+                                                  ),
+                                                ],
                                               ],
                                             ),
                                           ),
