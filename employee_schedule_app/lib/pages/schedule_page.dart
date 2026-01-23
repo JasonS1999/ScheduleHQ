@@ -131,9 +131,8 @@ class _SchedulePageState extends State<SchedulePage> {
           .collection('shifts')
           .where('employeeUid', isEqualTo: _employeeUid)
           .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(_weekStart))
-          .where('date', isLessThan: DateFormat('yyyy-MM-dd').format(_weekEnd))
+          .where('date', isLessThanOrEqualTo: DateFormat('yyyy-MM-dd').format(_weekEnd.subtract(const Duration(days: 1))))
           .orderBy('date')
-          .orderBy('startTime')
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {

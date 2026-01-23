@@ -21,6 +21,7 @@ class RosterPage extends StatefulWidget {
 class _RosterPageState extends State<RosterPage> {
   final EmployeeDao _employeeDao = EmployeeDao();
   List<Employee> _employees = [];
+  bool _isSyncingAccounts = false;
 
   void _sortEmployeesInRosterOrder(List<Employee> list) {
     if (list.isEmpty) return;
@@ -332,12 +333,75 @@ class _RosterPageState extends State<RosterPage> {
     }
   }
 
+  /// Sync employee accounts with Firebase Auth via Cloud Function.
+  /// Creates Firebase Auth accounts for employees and updates local UIDs.
+  Future<void> _syncEmployeeAccounts() async {
+    setState(() => _isSyncingAccounts = true);
+    
+    try {
+      final result = await FirestoreSyncService.instance.syncAllEmployeeAccounts();
+      
+      if (!mounted) return;
+      
+      final processed = result['processed'] ?? 0;
+      final created = result['created'] ?? 0;
+      final updated = result['updated'] ?? 0;
+      final skipped = result['skipped'] ?? 0;
+      final errors = result['errors'] ?? 0;
+      
+      String message;
+      if (created > 0 || updated > 0) {
+        message = 'Synced $processed employees: $created created, $updated updated';
+        if (skipped > 0) message += ', $skipped skipped';
+        if (errors > 0) message += ', $errors errors';
+      } else if (processed == 0) {
+        message = 'No employees found to sync';
+      } else {
+        message = 'All $processed employees already synced';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: errors > 0 ? Colors.orange : Colors.green,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      
+      // Reload employees to show any changes
+      await _loadEmployees();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to sync accounts: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncingAccounts = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Roster"),
         actions: [
+          IconButton(
+            icon: _isSyncingAccounts 
+                ? const SizedBox(
+                    width: 20, 
+                    height: 20, 
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_sync),
+            tooltip: 'Sync Employee Accounts',
+            onPressed: _isSyncingAccounts ? null : _syncEmployeeAccounts,
+          ),
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Import from CSV',

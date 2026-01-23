@@ -3,8 +3,10 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // Helper function to check manager role
+    // Uses exists() first to avoid errors when document doesn't exist
     function isManager() {
       return request.auth != null && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "manager";
     }
     
@@ -13,31 +15,54 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.email == email;
     }
     
+    // Users collection - MUST come first so managers can create their own profile
+    // Any authenticated user can create/update their OWN user document
+    // This allows first-time manager setup
+    match /users/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isManager());
+      allow create: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null && (request.auth.uid == uid || isManager());
+    }
+    
     // Employees - managers write, employees read own
     match /employees/{docId} {
-      allow read: if isManager() || isOwnEmployee(resource.data.email);
+      allow read: if request.auth != null && (isManager() || isOwnEmployee(resource.data.email));
       allow write: if isManager();
     }
     
-    // Schedules - managers write, employees read own
-    match /schedules/{docId} {
-      allow read: if request.auth != null;
+    // Shifts - managers write, employees read own shifts
+    match /shifts/{docId} {
+      allow read: if request.auth != null && 
+                    (isManager() || resource.data.employeeUid == request.auth.uid);
+      allow write: if isManager();
+    }
+    
+    // Published schedules metadata - managers only
+    match /publishedSchedules/{docId} {
+      allow read, write: if isManager();
+    }
+    
+    // Time off entries - managers write, employees read own
+    match /timeOff/{docId} {
+      allow read: if request.auth != null && (isManager() || 
+                     resource.data.employeeUid == request.auth.uid);
       allow write: if isManager();
     }
     
     // Time off requests - employees create own, managers update
     match /timeOffRequests/{docId} {
-      allow read: if isManager() || 
-                     resource.data.employeeEmail == request.auth.token.email;
+      allow read: if request.auth != null && (isManager() || 
+                     resource.data.employeeEmail == request.auth.token.email ||
+                     resource.data.employeeUid == request.auth.uid);
       allow create: if request.auth != null && 
                        request.resource.data.employeeEmail == request.auth.token.email;
       allow update: if isManager();
     }
     
-    // Users - own profile readable, managers can read all
-    match /users/{uid} {
-      allow read: if request.auth.uid == uid || isManager();
-      allow create, update: if request.auth.uid == uid || isManager();
+    // PTO Summary - employees read own, managers read/write all
+    match /ptoSummary/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isManager());
+      allow write: if isManager();
     }
   }
 }

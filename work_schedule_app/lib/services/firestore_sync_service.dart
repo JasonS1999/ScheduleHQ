@@ -1,6 +1,7 @@
 import 'dart:developer';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:work_schedule_app/database/app_database.dart';
 import 'package:work_schedule_app/models/employee.dart';
 import 'package:work_schedule_app/models/shift.dart';
@@ -19,6 +20,7 @@ class FirestoreSyncService {
   FirestoreSyncService._internal();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
   
   // Collection references
   CollectionReference<Map<String, dynamic>> get _employeesRef =>
@@ -32,6 +34,30 @@ class FirestoreSyncService {
   
   CollectionReference<Map<String, dynamic>> get _publishedSchedulesRef =>
       _firestore.collection('publishedSchedules');
+
+  // ============== EMPLOYEE ACCOUNT SYNC ==============
+  
+  /// Call Cloud Function to create Firebase Auth accounts for all employees.
+  /// This sets up UIDs for employees that were created before Cloud Functions existed.
+  Future<Map<String, dynamic>> syncAllEmployeeAccounts() async {
+    try {
+      log('Calling syncAllEmployeeAccounts Cloud Function...', name: 'FirestoreSyncService');
+      
+      final callable = _functions.httpsCallable('syncAllEmployeeAccounts');
+      final result = await callable.call();
+      
+      final data = Map<String, dynamic>.from(result.data as Map);
+      log('Sync result: $data', name: 'FirestoreSyncService');
+      
+      // After Cloud Function updates Firestore, sync UIDs to local DB
+      await syncEmployeeUidsFromFirestore();
+      
+      return data;
+    } catch (e) {
+      log('Error calling syncAllEmployeeAccounts: $e', name: 'FirestoreSyncService');
+      rethrow;
+    }
+  }
 
   // ============== EMPLOYEE ROSTER SYNC ==============
   
@@ -131,6 +157,47 @@ class FirestoreSyncService {
     }
   }
 
+  /// Sync employee UIDs from Firestore back to local database.
+  /// This pulls UIDs that were set by Cloud Functions when accounts were created.
+  Future<int> syncEmployeeUidsFromFirestore() async {
+    try {
+      final db = await AppDatabase.instance.db;
+      
+      // Get all employees from Firestore
+      final snapshot = await _employeesRef.get();
+      
+      int updatedCount = 0;
+      
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final localId = data['localId'] as int?;
+        final uid = data['uid'] as String?;
+        
+        if (localId != null && uid != null) {
+          // Update local database with the UID
+          final result = await db.update(
+            'employees',
+            {'uid': uid},
+            where: 'id = ? AND (uid IS NULL OR uid != ?)',
+            whereArgs: [localId, uid],
+          );
+          
+          if (result > 0) {
+            updatedCount++;
+            log('Synced UID for employee $localId', name: 'FirestoreSyncService');
+          }
+        }
+      }
+      
+      log('Synced $updatedCount employee UIDs from Firestore', 
+          name: 'FirestoreSyncService');
+      return updatedCount;
+    } catch (e) {
+      log('Error syncing employee UIDs: $e', name: 'FirestoreSyncService');
+      rethrow;
+    }
+  }
+
   // ============== SCHEDULE PUBLISHING ==============
   
   /// Publish shifts for a date range to Firestore.
@@ -141,6 +208,9 @@ class FirestoreSyncService {
     List<int>? employeeIds, // If null, publish for all employees
   }) async {
     try {
+      // First, sync employee UIDs from Firestore to ensure we have the latest
+      await syncEmployeeUidsFromFirestore();
+      
       final db = await AppDatabase.instance.db;
       
       // Build query for shifts in the date range
@@ -190,12 +260,21 @@ class FirestoreSyncService {
       final publishId = DateTime.now().millisecondsSinceEpoch.toString();
       
       int publishedCount = 0;
+      int skippedNoUid = 0;
       
       for (final shift in shifts) {
         if (shift.id == null) continue;
         
         final employee = employeeMap[shift.employeeId];
         if (employee == null) continue;
+        
+        // Skip employees without UID - they won't be able to see their schedule
+        if (employee.uid == null || employee.uid!.isEmpty) {
+          skippedNoUid++;
+          log('Skipping shift for ${employee.name} - no Firebase UID (email: ${employee.email})', 
+              name: 'FirestoreSyncService');
+          continue;
+        }
         
         final docRef = _shiftsRef.doc('${shift.employeeId}_${shift.id}');
         
@@ -227,13 +306,18 @@ class FirestoreSyncService {
       
       await batch.commit();
       
-      log('Published $publishedCount shifts to Firestore', 
+      log('Published $publishedCount shifts to Firestore (skipped $skippedNoUid without UID)', 
           name: 'FirestoreSyncService');
+      
+      String message = 'Successfully published $publishedCount shifts';
+      if (skippedNoUid > 0) {
+        message += '\n⚠️ $skippedNoUid shifts skipped (employees without Firebase accounts)';
+      }
       
       return PublishResult(
         success: true,
         shiftsPublished: publishedCount,
-        message: 'Successfully published $publishedCount shifts',
+        message: message,
       );
     } catch (e) {
       log('Error publishing schedule: $e', name: 'FirestoreSyncService');

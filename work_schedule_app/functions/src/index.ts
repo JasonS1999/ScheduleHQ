@@ -477,3 +477,109 @@ export const onSchedulePublished = onDocumentCreated(
   }
 );
 */
+
+/**
+ * Manually sync all existing employees to create Firebase Auth accounts.
+ * Call this once to set up accounts for employees created before Cloud Functions were deployed.
+ */
+export const syncAllEmployeeAccounts = onCall(async (request) => {
+  // Verify caller is a manager
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be logged in");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data()?.role !== "manager") {
+    throw new HttpsError("permission-denied", "Only managers can sync employee accounts");
+  }
+
+  const results = {
+    total: 0,
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    errors: [] as string[],
+  };
+
+  try {
+    const employeesSnapshot = await db.collection("employees").get();
+    results.total = employeesSnapshot.size;
+
+    for (const doc of employeesSnapshot.docs) {
+      const employeeData = doc.data();
+      const email = employeeData.email;
+      const existingUid = employeeData.uid;
+
+      // Skip if no email
+      if (!email) {
+        logger.log(`Employee ${doc.id} has no email, skipping`);
+        results.skipped++;
+        continue;
+      }
+
+      // Skip if already has uid
+      if (existingUid) {
+        logger.log(`Employee ${doc.id} already has uid ${existingUid}`);
+        results.skipped++;
+        continue;
+      }
+
+      try {
+        // Check if user already exists in Auth
+        let userRecord;
+        try {
+          userRecord = await auth.getUserByEmail(email);
+          logger.log(`User already exists for ${email} with uid: ${userRecord.uid}`);
+        } catch (error: unknown) {
+          if ((error as { code?: string }).code === "auth/user-not-found") {
+            // Create new user
+            userRecord = await auth.createUser({
+              email: email,
+              emailVerified: false,
+              disabled: false,
+            });
+            logger.log(`Created new user for ${email} with uid: ${userRecord.uid}`);
+            results.created++;
+          } else {
+            throw error;
+          }
+        }
+
+        // Update employee document with uid
+        await doc.ref.update({
+          uid: userRecord.uid,
+          accountCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Create/update user document
+        await db.collection("users").doc(userRecord.uid).set({
+          email: email,
+          employeeId: parseInt(doc.id) || doc.id,
+          role: "employee",
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        results.updated++;
+        
+        // Send password reset email
+        try {
+          await auth.generatePasswordResetLink(email);
+          logger.log(`Password reset link generated for ${email}`);
+        } catch (resetError) {
+          logger.warn(`Failed to generate reset link for ${email}:`, resetError);
+        }
+
+      } catch (error) {
+        logger.error(`Error processing employee ${doc.id}:`, error);
+        results.errors.push(`${doc.id}: ${error}`);
+      }
+    }
+
+    logger.log(`Sync complete:`, results);
+    return results;
+
+  } catch (error) {
+    logger.error("Error syncing employee accounts:", error);
+    throw new HttpsError("internal", `Error syncing accounts: ${error}`);
+  }
+});
