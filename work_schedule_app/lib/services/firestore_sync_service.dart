@@ -69,6 +69,12 @@ class FirestoreSyncService {
     return ref.collection('timeOffRequests');
   }
 
+  CollectionReference<Map<String, dynamic>>? get _shiftRunnersRef {
+    final ref = _managerDocRef;
+    if (ref == null) return null;
+    return ref.collection('shiftRunners');
+  }
+
   // ============== EMPLOYEE ACCOUNT SYNC ==============
 
   /// Call Cloud Function to create Firebase Auth accounts for all employees.
@@ -763,6 +769,22 @@ class FirestoreSyncService {
         final data = doc.data();
         final startTime = (data['startTime'] as Timestamp).toDate();
         final endTime = (data['endTime'] as Timestamp).toDate();
+        final now = DateTime.now().toIso8601String();
+        
+        // Get createdAt/updatedAt - use current time as fallback for old data
+        String createdAt = now;
+        String updatedAt = now;
+        if (data['createdAt'] != null) {
+          createdAt = data['createdAt'] is String 
+              ? data['createdAt'] as String 
+              : now;
+        }
+        if (data['updatedAt'] != null) {
+          updatedAt = data['updatedAt'] is String 
+              ? data['updatedAt'] as String 
+              : now;
+        }
+        
         await db.insert('shifts', {
           'id': data['localId'],
           'employeeId': data['employeeLocalId'],
@@ -770,6 +792,8 @@ class FirestoreSyncService {
           'endTime': endTime.toIso8601String(),
           'label': data['label'],
           'notes': data['notes'],
+          'createdAt': createdAt,
+          'updatedAt': updatedAt,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       log(
@@ -798,6 +822,25 @@ class FirestoreSyncService {
         'Downloaded ${timeOffSnapshot.docs.length} time-off entries',
         name: 'FirestoreSyncService',
       );
+
+      // Download shift runners
+      final shiftRunnersRef = _shiftRunnersRef;
+      if (shiftRunnersRef != null) {
+        final runnersSnapshot = await shiftRunnersRef.get();
+        for (final doc in runnersSnapshot.docs) {
+          final data = doc.data();
+          await db.insert('shift_runners', {
+            'id': data['localId'],
+            'date': data['date'],
+            'shiftType': data['shiftType'],
+            'runnerName': data['runnerName'],
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        log(
+          'Downloaded ${runnersSnapshot.docs.length} shift runners',
+          name: 'FirestoreSyncService',
+        );
+      }
     } catch (e) {
       log(
         'Error downloading data from cloud: $e',
@@ -860,6 +903,8 @@ class FirestoreSyncService {
             'endTime': Timestamp.fromDate(shift.endTime),
             'label': shift.label,
             'notes': shift.notes,
+            'createdAt': shift.createdAt.toIso8601String(),
+            'updatedAt': shift.updatedAt.toIso8601String(),
             'managerUid': _managerUid,
           });
         }
@@ -876,6 +921,35 @@ class FirestoreSyncService {
     final startOfYear = DateTime(now.year - 1, 1, 1);
     final endOfYear = DateTime(now.year + 1, 12, 31);
     await syncAllTimeOff(startDate: startOfYear, endDate: endOfYear);
+
+    // Sync all shift runners
+    final runnerMaps = await db.query('shift_runners');
+    if (runnerMaps.isNotEmpty) {
+      final shiftRunnersRef = _shiftRunnersRef;
+      if (shiftRunnersRef != null) {
+        final batch = _firestore.batch();
+        for (final runnerMap in runnerMaps) {
+          final id = runnerMap['id'] as int?;
+          if (id == null) continue;
+          
+          final date = runnerMap['date'] as String;
+          final shiftType = runnerMap['shiftType'] as String;
+          final docRef = shiftRunnersRef.doc('${date}_$shiftType');
+          batch.set(docRef, {
+            'localId': id,
+            'date': date,
+            'shiftType': shiftType,
+            'runnerName': runnerMap['runnerName'],
+            'managerUid': _managerUid,
+          });
+        }
+        await batch.commit();
+        log(
+          'Uploaded ${runnerMaps.length} shift runners to cloud',
+          name: 'FirestoreSyncService',
+        );
+      }
+    }
   }
 }
 

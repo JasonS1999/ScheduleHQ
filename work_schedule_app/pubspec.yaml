@@ -57,11 +57,11 @@ flutter:
 msix_config:
   display_name: ScheduleHQ
   publisher_display_name: JasonSjogren
-  identity_name: com.jasons.schedulehq
-  publisher: CN=Manager Schedule App, O=Jason S
+  identity_name: JasonSjogren.ScheduleHQ
+  publisher: CN=993C831D-9B99-4BD8-AA74-403CC55DF8EF
   msix_version: 2.1.0.0
   logo_path: windows/runner/resources/app_icon.ico
-  certificate_path: certs/ManagerScheduleApp.pfx
-  # store: true  # Uncomment for Microsoft Store builds
+  # certificate_path: certs/ManagerScheduleApp.pfx  # Comment out for store builds
+  store: true
   capabilities: internetClient
   languages: en-us

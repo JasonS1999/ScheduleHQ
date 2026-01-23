@@ -86,12 +86,17 @@ class StoreHoursDao {
   Future<void> updateStoreHours(StoreHours hours) async {
     final db = await _db;
     final existing = await db.query('store_hours', limit: 1);
+    
+    // Create map without id to avoid setting id to null
+    final map = hours.toMap();
+    map.remove('id');
+    
     if (existing.isEmpty) {
-      await db.insert('store_hours', hours.toMap());
+      await db.insert('store_hours', map);
     } else {
       await db.update(
         'store_hours',
-        hours.toMap(),
+        map,
         where: 'id = ?',
         whereArgs: [existing.first['id']],
       );
