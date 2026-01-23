@@ -6,7 +6,7 @@ publish_to: 'none'
 #   - pubspec.yaml: msix_version (below)
 #   - pubspec_store.yaml: version and msix_version
 #   - lib/services/update_service.dart: currentVersion constant
-version: 2.1.0+1
+version: 2.2.0+1
 
 environment:
   sdk: ^3.10.7
@@ -59,7 +59,7 @@ msix_config:
   publisher_display_name: JasonSjogren
   identity_name: JasonSjogren.ScheduleHQ
   publisher: CN=993C831D-9B99-4BD8-AA74-403CC55DF8EF
-  msix_version: 2.1.0.0
+  msix_version: 2.2.0.0
   logo_path: windows/runner/resources/app_icon.ico
   # certificate_path: certs/ManagerScheduleApp.pfx  # Comment out for store builds
   store: true
