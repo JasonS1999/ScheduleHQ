@@ -75,6 +75,24 @@ class FirestoreSyncService {
     return ref.collection('shiftRunners');
   }
 
+  CollectionReference<Map<String, dynamic>>? get _employeeAvailabilityRef {
+    final ref = _managerDocRef;
+    if (ref == null) return null;
+    return ref.collection('employeeAvailability');
+  }
+
+  CollectionReference<Map<String, dynamic>>? get _weeklyTemplatesRef {
+    final ref = _managerDocRef;
+    if (ref == null) return null;
+    return ref.collection('weeklyTemplates');
+  }
+
+  CollectionReference<Map<String, dynamic>>? get _shiftTemplatesRef {
+    final ref = _managerDocRef;
+    if (ref == null) return null;
+    return ref.collection('shiftTemplates');
+  }
+
   // ============== EMPLOYEE ACCOUNT SYNC ==============
 
   /// Call Cloud Function to create Firebase Auth accounts for all employees.
@@ -841,6 +859,74 @@ class FirestoreSyncService {
           name: 'FirestoreSyncService',
         );
       }
+
+      // Download employee availability
+      final availabilityRef = _employeeAvailabilityRef;
+      if (availabilityRef != null) {
+        final availabilitySnapshot = await availabilityRef.get();
+        for (final doc in availabilitySnapshot.docs) {
+          final data = doc.data();
+          if (data['localId'] == null) continue;
+          await db.insert('employee_availability', {
+            'id': data['localId'],
+            'employeeId': data['employeeId'],
+            'availabilityType': data['availabilityType'],
+            'dayOfWeek': data['dayOfWeek'],
+            'weekNumber': data['weekNumber'],
+            'specificDate': data['specificDate'],
+            'startTime': data['startTime'],
+            'endTime': data['endTime'],
+            'allDay': data['allDay'],
+            'available': data['available'],
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        log(
+          'Downloaded ${availabilitySnapshot.docs.length} employee availability entries',
+          name: 'FirestoreSyncService',
+        );
+      }
+
+      // Download weekly templates
+      final weeklyTemplatesRef = _weeklyTemplatesRef;
+      if (weeklyTemplatesRef != null) {
+        final weeklySnapshot = await weeklyTemplatesRef.get();
+        for (final doc in weeklySnapshot.docs) {
+          final data = doc.data();
+          if (data['localId'] == null) continue;
+          await db.insert('employee_weekly_templates', {
+            'id': data['localId'],
+            'employeeId': data['employeeId'],
+            'dayOfWeek': data['dayOfWeek'],
+            'startTime': data['startTime'],
+            'endTime': data['endTime'],
+            'isOff': data['isOff'],
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        log(
+          'Downloaded ${weeklySnapshot.docs.length} weekly template entries',
+          name: 'FirestoreSyncService',
+        );
+      }
+
+      // Download shift templates
+      final shiftTemplatesRef = _shiftTemplatesRef;
+      if (shiftTemplatesRef != null) {
+        final shiftTemplatesSnapshot = await shiftTemplatesRef.get();
+        for (final doc in shiftTemplatesSnapshot.docs) {
+          final data = doc.data();
+          if (data['localId'] == null) continue;
+          await db.insert('shift_templates', {
+            'id': data['localId'],
+            'templateName': data['templateName'],
+            'startTime': data['startTime'],
+            'endTime': data['endTime'],
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+        log(
+          'Downloaded ${shiftTemplatesSnapshot.docs.length} shift templates',
+          name: 'FirestoreSyncService',
+        );
+      }
     } catch (e) {
       log(
         'Error downloading data from cloud: $e',
@@ -946,6 +1032,95 @@ class FirestoreSyncService {
         await batch.commit();
         log(
           'Uploaded ${runnerMaps.length} shift runners to cloud',
+          name: 'FirestoreSyncService',
+        );
+      }
+    }
+
+    // Sync all employee availability
+    final availabilityMaps = await db.query('employee_availability');
+    if (availabilityMaps.isNotEmpty) {
+      final availabilityRef = _employeeAvailabilityRef;
+      if (availabilityRef != null) {
+        final batch = _firestore.batch();
+        for (final avail in availabilityMaps) {
+          final id = avail['id'] as int?;
+          if (id == null) continue;
+          
+          final docRef = availabilityRef.doc('$id');
+          batch.set(docRef, {
+            'localId': id,
+            'employeeId': avail['employeeId'],
+            'availabilityType': avail['availabilityType'],
+            'dayOfWeek': avail['dayOfWeek'],
+            'weekNumber': avail['weekNumber'],
+            'specificDate': avail['specificDate'],
+            'startTime': avail['startTime'],
+            'endTime': avail['endTime'],
+            'allDay': avail['allDay'],
+            'available': avail['available'],
+            'managerUid': _managerUid,
+          });
+        }
+        await batch.commit();
+        log(
+          'Uploaded ${availabilityMaps.length} employee availability entries to cloud',
+          name: 'FirestoreSyncService',
+        );
+      }
+    }
+
+    // Sync all weekly templates
+    final weeklyTemplateMaps = await db.query('employee_weekly_templates');
+    if (weeklyTemplateMaps.isNotEmpty) {
+      final weeklyTemplatesRef = _weeklyTemplatesRef;
+      if (weeklyTemplatesRef != null) {
+        final batch = _firestore.batch();
+        for (final template in weeklyTemplateMaps) {
+          final id = template['id'] as int?;
+          if (id == null) continue;
+          
+          final docRef = weeklyTemplatesRef.doc('$id');
+          batch.set(docRef, {
+            'localId': id,
+            'employeeId': template['employeeId'],
+            'dayOfWeek': template['dayOfWeek'],
+            'startTime': template['startTime'],
+            'endTime': template['endTime'],
+            'isOff': template['isOff'],
+            'managerUid': _managerUid,
+          });
+        }
+        await batch.commit();
+        log(
+          'Uploaded ${weeklyTemplateMaps.length} weekly template entries to cloud',
+          name: 'FirestoreSyncService',
+        );
+      }
+    }
+
+    // Sync all shift templates
+    final shiftTemplateMaps = await db.query('shift_templates');
+    if (shiftTemplateMaps.isNotEmpty) {
+      final shiftTemplatesRef = _shiftTemplatesRef;
+      if (shiftTemplatesRef != null) {
+        final batch = _firestore.batch();
+        for (final template in shiftTemplateMaps) {
+          final id = template['id'] as int?;
+          if (id == null) continue;
+          
+          final docRef = shiftTemplatesRef.doc('$id');
+          batch.set(docRef, {
+            'localId': id,
+            'templateName': template['templateName'],
+            'startTime': template['startTime'],
+            'endTime': template['endTime'],
+            'managerUid': _managerUid,
+          });
+        }
+        await batch.commit();
+        log(
+          'Uploaded ${shiftTemplateMaps.length} shift templates to cloud',
           name: 'FirestoreSyncService',
         );
       }
