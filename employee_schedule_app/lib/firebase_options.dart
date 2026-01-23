@@ -42,11 +42,10 @@ class DefaultFirebaseOptions {
   }
 
   // Values from Firebase Console for schedulehq-cf87f project
-  // You'll need to add an Android app in Firebase Console and update these values
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDQnp3Goid99mo-cIbeReog0Sm5vdMDNU4', // Get from Firebase Console after adding Android app
-    appId: '1:991523306618:android:544b9061ac0b4cebd58fc3',   // Get from Firebase Console after adding Android app
-    messagingSenderId: '165541659498',
+    apiKey: 'AIzaSyDQnp3Goid99mo-cIbeReog0Sm5vdMDNU4',
+    appId: '1:991523306618:android:544b9061ac0b4cebd58fc3',
+    messagingSenderId: '991523306618', // Must match project_number in google-services.json
     projectId: 'schedulehq-cf87f',
     storageBucket: 'schedulehq-cf87f.firebasestorage.app',
   );

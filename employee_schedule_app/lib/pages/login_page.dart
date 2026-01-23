@@ -39,9 +39,11 @@ class _LoginPageState extends State<LoginPage> {
       );
       // Navigation is handled by AuthWrapper
     } on EmployeeAuthException catch (e) {
-      setState(() {
-        _errorMessage = e.message;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.message;
+        });
+      }
     } on FirebaseAuthException catch (e) {
       String message;
       switch (e.code) {
@@ -63,13 +65,17 @@ class _LoginPageState extends State<LoginPage> {
         default:
           message = e.message ?? 'Login failed. Please try again.';
       }
-      setState(() {
-        _errorMessage = message;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = message;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Login failed. Please check your credentials.';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Login failed. Please check your credentials.';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {

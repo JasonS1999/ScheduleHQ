@@ -11,8 +11,9 @@ const db = admin.firestore();
 
 /**
  * Triggered when a new employee document is created in a manager's subcollection.
- * If the employee has an email, creates a Firebase Auth account
- * and sends a password reset email.
+ * Creates a Firebase Auth account for the employee.
+ * - If employee has an email: creates account with that email and sends password reset
+ * - If no email: creates account with a placeholder email (employee can't log in but has UID)
  */
 export const onEmployeeCreatedInManager = onDocumentCreated(
   "managers/{managerId}/employees/{employeeId}",
@@ -28,27 +29,25 @@ export const onEmployeeCreatedInManager = onDocumentCreated(
     const employeeId = event.params.employeeId;
     const email = employeeData.email;
 
-    // Skip if no email provided
-    if (!email) {
-      logger.log(`Employee ${employeeId} has no email, skipping account creation`);
-      return;
-    }
+    // Generate placeholder email if none provided
+    const accountEmail = email || `employee_${managerId}_${employeeId}@schedulehq.internal`;
+    const hasRealEmail = !!email;
 
-    logger.log(`Creating account for employee ${employeeId} (manager: ${managerId}) with email ${email}`);
+    logger.log(`Creating account for employee ${employeeId} (manager: ${managerId}) with ${hasRealEmail ? 'email: ' + email : 'placeholder email'}`);
 
     try {
       // Check if user already exists
       let userRecord;
       try {
-        userRecord = await auth.getUserByEmail(email);
+        userRecord = await auth.getUserByEmail(accountEmail);
         logger.log(`User already exists with uid: ${userRecord.uid}`);
       } catch (error: unknown) {
         // User doesn't exist, create new account
         if ((error as { code?: string }).code === "auth/user-not-found") {
           userRecord = await auth.createUser({
-            email: email,
+            email: accountEmail,
             emailVerified: false,
-            disabled: false,
+            disabled: !hasRealEmail, // Disable accounts without real emails (they can't log in anyway)
           });
           logger.log(`Created new user with uid: ${userRecord.uid}`);
         } else {
@@ -58,10 +57,12 @@ export const onEmployeeCreatedInManager = onDocumentCreated(
 
       // Create or update user document with role
       await db.collection("users").doc(userRecord.uid).set({
-        email: email,
+        email: accountEmail,
+        realEmail: hasRealEmail ? email : null,
         employeeId: parseInt(employeeId) || employeeId,
         managerUid: managerId,
         role: "employee",
+        hasAppAccess: hasRealEmail,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
@@ -71,11 +72,13 @@ export const onEmployeeCreatedInManager = onDocumentCreated(
         accountCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      // Generate password reset link and send email
-      const resetLink = await auth.generatePasswordResetLink(email);
-      logger.log(`Password reset link generated for ${email}: ${resetLink}`);
+      // Only generate password reset link if they have a real email
+      if (hasRealEmail) {
+        const resetLink = await auth.generatePasswordResetLink(email);
+        logger.log(`Password reset link generated for ${email}: ${resetLink}`);
+      }
 
-      logger.log(`Account setup complete for employee ${employeeId}`);
+      logger.log(`Account setup complete for employee ${employeeId} (hasAppAccess: ${hasRealEmail})`);
     } catch (error) {
       logger.error(`Error creating account for employee ${employeeId}:`, error);
       throw error;
@@ -86,6 +89,7 @@ export const onEmployeeCreatedInManager = onDocumentCreated(
 /**
  * Triggered when an employee document is updated in a manager's subcollection.
  * If the email field was added or changed, handles account creation/update.
+ * If employee had no UID (no email before), creates one now.
  */
 export const onEmployeeUpdatedInManager = onDocumentUpdated(
   "managers/{managerId}/employees/{employeeId}",
@@ -102,68 +106,85 @@ export const onEmployeeUpdatedInManager = onDocumentUpdated(
 
     const oldEmail = beforeData.email;
     const newEmail = afterData.email;
+    const existingUid = afterData.uid;
 
-    // Skip if email hasn't changed or was removed
-    if (!newEmail || oldEmail === newEmail) {
-      return;
-    }
-
-    logger.log(`Email changed for employee ${employeeId} (manager: ${managerId}): ${oldEmail} -> ${newEmail}`);
-
-    try {
-      // If there was an old account, we might want to update or create new
-      if (afterData.uid) {
-        // Update existing auth user's email
-        try {
-          await auth.updateUser(afterData.uid, { email: newEmail });
-          logger.log(`Updated email for uid ${afterData.uid}`);
-          
-          // Send password reset to new email
-          await auth.generatePasswordResetLink(newEmail);
-          logger.log(`Password reset sent to new email ${newEmail}`);
-        } catch (error) {
-          logger.error(`Error updating user email:`, error);
-          throw error;
-        }
-      } else {
-        // No existing uid, create new account (same logic as onCreate)
+    // If no UID exists, create an account (with real email or placeholder)
+    if (!existingUid) {
+      const accountEmail = newEmail || `employee_${managerId}_${employeeId}@schedulehq.internal`;
+      const hasRealEmail = !!newEmail;
+      
+      logger.log(`Creating account for employee ${employeeId} (no existing UID) with ${hasRealEmail ? 'email: ' + newEmail : 'placeholder email'}`);
+      
+      try {
         let userRecord;
         try {
-          userRecord = await auth.getUserByEmail(newEmail);
+          userRecord = await auth.getUserByEmail(accountEmail);
         } catch (error: unknown) {
           if ((error as { code?: string }).code === "auth/user-not-found") {
             userRecord = await auth.createUser({
-              email: newEmail,
+              email: accountEmail,
               emailVerified: false,
-              disabled: false,
+              disabled: !hasRealEmail,
             });
           } else {
             throw error;
           }
         }
 
-        // Create user document
         await db.collection("users").doc(userRecord.uid).set({
-          email: newEmail,
+          email: accountEmail,
+          realEmail: hasRealEmail ? newEmail : null,
           employeeId: parseInt(employeeId) || employeeId,
           managerUid: managerId,
           role: "employee",
+          hasAppAccess: hasRealEmail,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
 
-        // Update employee with uid
         await event.data?.after.ref.update({
           uid: userRecord.uid,
           accountCreatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
 
-        // Send password reset
-        await auth.generatePasswordResetLink(newEmail);
-        logger.log(`Account created and reset email sent to ${newEmail}`);
+        if (hasRealEmail) {
+          await auth.generatePasswordResetLink(newEmail);
+          logger.log(`Password reset sent to ${newEmail}`);
+        }
+        
+        logger.log(`Account created for employee ${employeeId} with uid ${userRecord.uid}`);
+      } catch (error) {
+        logger.error(`Error creating account for employee ${employeeId}:`, error);
+        throw error;
       }
-    } catch (error) {
-      logger.error(`Error handling email update for employee ${employeeId}:`, error);
-      throw error;
+      return;
+    }
+
+    // If email changed (and UID exists), update the account
+    if (newEmail && oldEmail !== newEmail) {
+      logger.log(`Email changed for employee ${employeeId} (manager: ${managerId}): ${oldEmail} -> ${newEmail}`);
+
+      try {
+        // Update existing auth user's email
+        await auth.updateUser(existingUid, { 
+          email: newEmail,
+          disabled: false, // Re-enable if they now have a real email
+        });
+        logger.log(`Updated email for uid ${existingUid}`);
+        
+        // Update user document
+        await db.collection("users").doc(existingUid).update({
+          email: newEmail,
+          realEmail: newEmail,
+          hasAppAccess: true,
+        });
+        
+        // Send password reset to new email
+        await auth.generatePasswordResetLink(newEmail);
+        logger.log(`Password reset sent to new email ${newEmail}`);
+      } catch (error) {
+        logger.error(`Error updating user email:`, error);
+        throw error;
+      }
     }
   }
 );
@@ -644,8 +665,9 @@ export const onSchedulePublished = onDocumentCreated(
  * Manually sync all existing employees to create Firebase Auth accounts.
  * Call this once to set up accounts for employees created before Cloud Functions were deployed.
  * 
- * Supports both per-manager subcollections (managers/{uid}/employees) and
- * the legacy root employees collection.
+ * ALL employees get a UID:
+ * - With email: Creates account with real email, can log into mobile app
+ * - Without email: Creates account with placeholder email, has UID for data sync but can't log in
  */
 export const syncAllEmployeeAccounts = onCall(async (request) => {
   // Verify caller is a manager
@@ -663,6 +685,7 @@ export const syncAllEmployeeAccounts = onCall(async (request) => {
   const results = {
     total: 0,
     created: 0,
+    createdWithPlaceholder: 0,
     updated: 0,
     skipped: 0,
     errors: [] as string[],
@@ -683,13 +706,6 @@ export const syncAllEmployeeAccounts = onCall(async (request) => {
       const email = employeeData.email;
       const existingUid = employeeData.uid;
 
-      // Skip if no email
-      if (!email) {
-        logger.log(`Employee ${doc.id} has no email, skipping`);
-        results.skipped++;
-        continue;
-      }
-
       // Skip if already has uid
       if (existingUid) {
         logger.log(`Employee ${doc.id} already has uid ${existingUid}`);
@@ -697,22 +713,30 @@ export const syncAllEmployeeAccounts = onCall(async (request) => {
         continue;
       }
 
+      // Generate placeholder email if none provided
+      const accountEmail = email || `employee_${managerUid}_${doc.id}@schedulehq.internal`;
+      const hasRealEmail = !!email;
+
       try {
         // Check if user already exists in Auth
         let userRecord;
         try {
-          userRecord = await auth.getUserByEmail(email);
-          logger.log(`User already exists for ${email} with uid: ${userRecord.uid}`);
+          userRecord = await auth.getUserByEmail(accountEmail);
+          logger.log(`User already exists for ${accountEmail} with uid: ${userRecord.uid}`);
         } catch (error: unknown) {
           if ((error as { code?: string }).code === "auth/user-not-found") {
             // Create new user
             userRecord = await auth.createUser({
-              email: email,
+              email: accountEmail,
               emailVerified: false,
-              disabled: false,
+              disabled: !hasRealEmail, // Disable placeholder accounts
             });
-            logger.log(`Created new user for ${email} with uid: ${userRecord.uid}`);
-            results.created++;
+            logger.log(`Created new user for ${accountEmail} with uid: ${userRecord.uid}`);
+            if (hasRealEmail) {
+              results.created++;
+            } else {
+              results.createdWithPlaceholder++;
+            }
           } else {
             throw error;
           }
@@ -726,21 +750,25 @@ export const syncAllEmployeeAccounts = onCall(async (request) => {
 
         // Create/update user document
         await db.collection("users").doc(userRecord.uid).set({
-          email: email,
+          email: accountEmail,
+          realEmail: hasRealEmail ? email : null,
           employeeId: parseInt(doc.id) || doc.id,
           managerUid: managerUid,
           role: "employee",
+          hasAppAccess: hasRealEmail,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
         }, { merge: true });
 
         results.updated++;
         
-        // Send password reset email
-        try {
-          await auth.generatePasswordResetLink(email);
-          logger.log(`Password reset link generated for ${email}`);
-        } catch (resetError) {
-          logger.warn(`Failed to generate reset link for ${email}:`, resetError);
+        // Send password reset email only for real emails
+        if (hasRealEmail) {
+          try {
+            await auth.generatePasswordResetLink(email);
+            logger.log(`Password reset link generated for ${email}`);
+          } catch (resetError) {
+            logger.warn(`Failed to generate reset link for ${email}:`, resetError);
+          }
         }
 
       } catch (error) {

@@ -101,33 +101,81 @@ class FirestoreSyncService {
 
   // ============== EMPLOYEE ACCOUNT SYNC ==============
 
-  /// Call Cloud Function to create Firebase Auth accounts for all employees.
-  /// This sets up UIDs for employees that were created before Cloud Functions existed.
+  /// Sync employee accounts by triggering Firestore document updates.
+  /// This works on all platforms (including Windows) by touching employee documents
+  /// which triggers the onEmployeeUpdatedInManager Cloud Function.
   Future<Map<String, dynamic>> syncAllEmployeeAccounts() async {
     final uid = _managerUid;
     if (uid == null) {
       throw Exception('Not logged in');
     }
 
+    final employeesRef = _employeesRef;
+    if (employeesRef == null) {
+      throw Exception('Not logged in');
+    }
+
     try {
       log(
-        'Calling syncAllEmployeeAccounts Cloud Function...',
+        'Syncing employee accounts via Firestore triggers...',
         name: 'FirestoreSyncService',
       );
 
-      final callable = _functions.httpsCallable('syncAllEmployeeAccounts');
-      final result = await callable.call({'managerUid': uid});
+      // Get all employees without UIDs
+      final snapshot = await employeesRef.get();
+      
+      int total = snapshot.docs.length;
+      int needsSync = 0;
+      int triggered = 0;
 
-      final data = Map<String, dynamic>.from(result.data as Map);
-      log('Sync result: $data', name: 'FirestoreSyncService');
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final existingUid = data['uid'] as String?;
+        
+        // If already has UID, skip
+        if (existingUid != null && existingUid.isNotEmpty) {
+          continue;
+        }
+        
+        needsSync++;
+        
+        // Touch the document to trigger onEmployeeUpdatedInManager
+        // The Cloud Function will create the account
+        await doc.reference.update({
+          'syncRequestedAt': FieldValue.serverTimestamp(),
+        });
+        triggered++;
+        
+        log(
+          'Triggered sync for employee ${doc.id}',
+          name: 'FirestoreSyncService',
+        );
+      }
 
-      // After Cloud Function updates Firestore, sync UIDs to local DB
-      await syncEmployeeUidsFromFirestore();
+      // Wait a moment for Cloud Functions to process
+      if (triggered > 0) {
+        log(
+          'Waiting for Cloud Functions to process $triggered employees...',
+          name: 'FirestoreSyncService',
+        );
+        await Future.delayed(const Duration(seconds: 3));
+      }
 
-      return data;
+      // Sync UIDs back to local DB
+      final syncedCount = await syncEmployeeUidsFromFirestore();
+
+      final result = {
+        'total': total,
+        'needsSync': needsSync,
+        'triggered': triggered,
+        'syncedToLocal': syncedCount,
+      };
+      
+      log('Sync result: $result', name: 'FirestoreSyncService');
+      return result;
     } catch (e) {
       log(
-        'Error calling syncAllEmployeeAccounts: $e',
+        'Error syncing employee accounts: $e',
         name: 'FirestoreSyncService',
       );
       rethrow;
@@ -590,7 +638,17 @@ class FirestoreSyncService {
         ],
       );
 
+      log(
+        'Found ${timeOffMaps.length} time-off entries in local DB',
+        name: 'FirestoreSyncService',
+      );
+
       final entries = timeOffMaps.map((m) => TimeOffEntry.fromMap(m)).toList();
+
+      if (entries.isEmpty) {
+        log('No time-off entries to sync', name: 'FirestoreSyncService');
+        return;
+      }
 
       // Get employees
       final employeeIds = entries.map((e) => e.employeeId).toSet();
@@ -604,11 +662,18 @@ class FirestoreSyncService {
       };
 
       final batch = _firestore.batch();
+      int syncedCount = 0;
 
       for (final entry in entries) {
         if (entry.id == null) continue;
         final employee = employeeMap[entry.employeeId];
-        if (employee == null) continue;
+        if (employee == null) {
+          log(
+            'Skipping time-off entry ${entry.id} - employee ${entry.employeeId} not found',
+            name: 'FirestoreSyncService',
+          );
+          continue;
+        }
 
         final docRef = timeOffRef.doc('${entry.employeeId}_${entry.id}');
         batch.set(docRef, {
@@ -627,13 +692,18 @@ class FirestoreSyncService {
           'updatedAt': FieldValue.serverTimestamp(),
           'managerUid': _managerUid,
         }, SetOptions(merge: true));
+        syncedCount++;
       }
 
-      await batch.commit();
-      log(
-        'Synced ${entries.length} time-off entries to Firestore',
-        name: 'FirestoreSyncService',
-      );
+      if (syncedCount > 0) {
+        await batch.commit();
+        log(
+          'Synced $syncedCount time-off entries to Firestore',
+          name: 'FirestoreSyncService',
+        );
+      } else {
+        log('No time-off entries synced (all skipped)', name: 'FirestoreSyncService');
+      }
     } catch (e) {
       log('Error syncing all time-off: $e', name: 'FirestoreSyncService');
       rethrow;
@@ -981,12 +1051,16 @@ class FirestoreSyncService {
   /// Upload all local data to cloud.
   /// Call this to backup local data to cloud.
   Future<void> uploadAllDataToCloud() async {
+    log('Starting uploadAllDataToCloud...', name: 'FirestoreSyncService');
+    
     await syncAllEmployees();
 
     // Sync all shifts
     final db = await AppDatabase.instance.db;
     final shiftMaps = await db.query('shifts');
     final shifts = shiftMaps.map((m) => Shift.fromMap(m)).toList();
+
+    log('Found ${shifts.length} shifts in local DB', name: 'FirestoreSyncService');
 
     if (shifts.isNotEmpty) {
       final employeeIds = shifts.map((s) => s.employeeId).toSet();
@@ -1002,10 +1076,14 @@ class FirestoreSyncService {
       final shiftsRef = _shiftsRef;
       if (shiftsRef != null) {
         final batch = _firestore.batch();
+        int syncedCount = 0;
         for (final shift in shifts) {
           if (shift.id == null) continue;
           final employee = employeeMap[shift.employeeId];
-          if (employee == null) continue;
+          if (employee == null) {
+            log('Skipping shift ${shift.id} - employee ${shift.employeeId} not found', name: 'FirestoreSyncService');
+            continue;
+          }
 
           final docRef = shiftsRef.doc('${shift.employeeId}_${shift.id}');
           batch.set(docRef, {
@@ -1017,16 +1095,24 @@ class FirestoreSyncService {
             'endTime': Timestamp.fromDate(shift.endTime),
             'label': shift.label,
             'notes': shift.notes,
+            'date': shift.startTime.toIso8601String().split('T')[0],
             'createdAt': shift.createdAt.toIso8601String(),
             'updatedAt': shift.updatedAt.toIso8601String(),
             'managerUid': _managerUid,
           });
+          syncedCount++;
         }
-        await batch.commit();
-        log(
-          'Uploaded ${shifts.length} shifts to cloud',
-          name: 'FirestoreSyncService',
-        );
+        if (syncedCount > 0) {
+          await batch.commit();
+          log(
+            'Uploaded $syncedCount shifts to cloud',
+            name: 'FirestoreSyncService',
+          );
+        } else {
+          log('No shifts synced (all skipped)', name: 'FirestoreSyncService');
+        }
+      } else {
+        log('shiftsRef is null - not logged in?', name: 'FirestoreSyncService');
       }
     }
 

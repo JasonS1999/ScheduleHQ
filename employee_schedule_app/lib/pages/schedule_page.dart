@@ -14,6 +14,7 @@ class _SchedulePageState extends State<SchedulePage> {
   DateTime _selectedDate = DateTime.now();
   String? _employeeUid;
   String? _employeeName;
+  String? _managerUid;
 
   @override
   void initState() {
@@ -27,6 +28,14 @@ class _SchedulePageState extends State<SchedulePage> {
       setState(() {
         _employeeUid = user.uid;
       });
+      
+      // Get manager UID first
+      final managerUid = await AuthService.instance.getManagerUid();
+      if (managerUid != null && mounted) {
+        setState(() {
+          _managerUid = managerUid;
+        });
+      }
       
       final data = await AuthService.instance.getEmployeeData();
       if (data != null && mounted) {
@@ -116,7 +125,7 @@ class _SchedulePageState extends State<SchedulePage> {
           
           // Schedule content
           Expanded(
-            child: _employeeUid == null
+            child: _employeeUid == null || _managerUid == null
                 ? const Center(child: CircularProgressIndicator())
                 : _buildScheduleList(),
           ),
@@ -128,6 +137,8 @@ class _SchedulePageState extends State<SchedulePage> {
   Widget _buildScheduleList() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
+          .collection('managers')
+          .doc(_managerUid)
           .collection('shifts')
           .where('employeeUid', isEqualTo: _employeeUid)
           .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(_weekStart))

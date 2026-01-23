@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../services/auth_service.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -15,6 +16,8 @@ class _ProfilePageState extends State<ProfilePage> {
   String? _email;
   int? _vacationWeeksAllowed;
   int? _vacationWeeksUsed;
+  String? _managerUid;
+  int? _employeeLocalId;
   bool _loading = true;
 
   @override
@@ -27,11 +30,15 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _loading = true);
     
     final user = AuthService.instance.currentUser;
+    final managerUid = await AuthService.instance.getManagerUid();
+    final employeeLocalId = await AuthService.instance.getEmployeeLocalId();
     final data = await AuthService.instance.getEmployeeData();
     
     if (mounted) {
       setState(() {
         _email = user?.email;
+        _managerUid = managerUid;
+        _employeeLocalId = employeeLocalId;
         _name = data?['name'] as String?;
         _jobCode = data?['jobCode'] as String?;
         _vacationWeeksAllowed = data?['vacationWeeksAllowed'] as int? ?? 0;
@@ -207,49 +214,114 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildPtoSummary() {
     final user = AuthService.instance.currentUser;
-    if (user == null) {
+    if (user == null || _managerUid == null || _employeeLocalId == null) {
       return const Text('Not available');
     }
 
-    // Get PTO data from Firestore (this would need a dedicated collection for PTO tracking)
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('ptoSummary')
-          .doc(user.uid)
-          .snapshots(),
+    // Calculate PTO from timeOff entries in the manager's subcollection
+    return FutureBuilder<Map<String, int>>(
+      future: _calculatePtoSummary(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // If no PTO summary exists, show placeholder
-        if (!snapshot.hasData || !snapshot.data!.exists) {
+        if (snapshot.hasError || !snapshot.hasData) {
           return Column(
             children: [
-              _buildPtoRow('Earned this trimester', '—'),
-              _buildPtoRow('Used this trimester', '—'),
+              _buildPtoRow('Used', '—'),
               _buildPtoRow('Available', '—'),
             ],
           );
         }
 
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        final earned = data['earnedHours'] as int? ?? 0;
-        final used = data['usedHours'] as int? ?? 0;
-        final carryover = data['carryoverHours'] as int? ?? 0;
-        final available = earned + carryover - used;
+        final data = snapshot.data!;
+        final used = data['used'] ?? 0;
+        final available = data['available'] ?? 0;
 
         return Column(
           children: [
-            _buildPtoRow('Earned this trimester', '$earned hours'),
-            if (carryover > 0) _buildPtoRow('Carryover', '$carryover hours'),
-            _buildPtoRow('Used this trimester', '$used hours'),
+            _buildPtoRow('Used', '$used hours'),
             const Divider(),
             _buildPtoRow('Available', '$available hours', bold: true),
           ],
         );
       },
     );
+  }
+
+  Future<Map<String, int>> _calculatePtoSummary() async {
+    try {
+      // Get current trimester date range
+      final now = DateTime.now();
+      final trimesterStart = _getTrimesterStart(now);
+      final trimesterEnd = _getTrimesterEnd(now);
+
+      // Query all timeOff entries for this employee, then filter in memory
+      // This avoids needing a complex compound Firestore index
+      final query = await FirebaseFirestore.instance
+          .collection('managers')
+          .doc(_managerUid)
+          .collection('timeOff')
+          .where('employeeLocalId', isEqualTo: _employeeLocalId)
+          .get();
+
+      // Sum up used PTO hours in current trimester
+      int usedHours = 0;
+      for (final doc in query.docs) {
+        final data = doc.data();
+        final type = data['timeOffType'] as String?;
+        if (type != 'pto') continue;
+        
+        final dateStr = data['date'] as String?;
+        if (dateStr == null) continue;
+        
+        final date = DateTime.tryParse(dateStr);
+        if (date == null) continue;
+        
+        // Check if in current trimester
+        if (date.isBefore(trimesterStart) || date.isAfter(trimesterEnd)) continue;
+        
+        final hours = data['hours'] as int? ?? 8;
+        usedHours += hours;
+      }
+
+      // Get employee's PTO allowance from settings (default 40 hours per trimester)
+      // For now, use a default. Later this could come from manager settings synced to Firestore
+      const allowancePerTrimester = 40;
+      
+      final available = allowancePerTrimester - usedHours;
+
+      return {
+        'used': usedHours,
+        'available': available > 0 ? available : 0,
+      };
+    } catch (e) {
+      debugPrint('Error calculating PTO: $e');
+      return {'used': 0, 'available': 0};
+    }
+  }
+
+  DateTime _getTrimesterStart(DateTime date) {
+    final year = date.year;
+    if (date.month <= 4) {
+      return DateTime(year, 1, 1);
+    } else if (date.month <= 8) {
+      return DateTime(year, 5, 1);
+    } else {
+      return DateTime(year, 9, 1);
+    }
+  }
+
+  DateTime _getTrimesterEnd(DateTime date) {
+    final year = date.year;
+    if (date.month <= 4) {
+      return DateTime(year, 4, 30);
+    } else if (date.month <= 8) {
+      return DateTime(year, 8, 31);
+    } else {
+      return DateTime(year, 12, 31);
+    }
   }
 
   Widget _buildPtoRow(String label, String value, {bool bold = false}) {
