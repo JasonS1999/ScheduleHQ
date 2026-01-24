@@ -57,12 +57,16 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
       
-      // Time off entries - manager writes, employees read own
+      // Time off entries - manager writes, employees can create own entries (auto-approve)
       match /timeOff/{docId} {
         allow read: if request.auth != null && 
                       (request.auth.uid == managerUid || 
                        resource.data.employeeUid == request.auth.uid);
-        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
+        // Manager can do anything, employee can only create their own entries
+        allow create: if request.auth != null && 
+                        (request.auth.uid == managerUid || 
+                         request.resource.data.employeeUid == request.auth.uid);
+        allow update, delete: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
       
       // Time off requests - any authenticated user can create, manager approves/denies

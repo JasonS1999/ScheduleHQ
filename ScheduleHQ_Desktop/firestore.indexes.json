@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "shifts",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "employeeUid", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
@@ -10,9 +10,17 @@
     },
     {
       "collectionGroup": "timeOff",
-      "queryScope": "COLLECTION",
+      "queryScope": "COLLECTION_GROUP",
       "fields": [
         { "fieldPath": "employeeUid", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "timeOff",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "employeeLocalId", "order": "ASCENDING" },
         { "fieldPath": "date", "order": "ASCENDING" }
       ]
     },
