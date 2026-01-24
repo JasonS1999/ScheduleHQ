@@ -1355,6 +1355,112 @@ class FirestoreSyncService {
         );
       }
     }
+
+    // Migrate any orphaned entries from root timeOff collection
+    await migrateRootTimeOffEntries();
+
+    // Import any approved time-off requests that aren't in local database
+    await importApprovedTimeOffRequests();
+  }
+
+  /// Migrate time-off entries from root 'timeOff' collection to manager subcollection.
+  /// This is a one-time migration for entries created before the fix.
+  Future<int> migrateRootTimeOffEntries() async {
+    final timeOffRef = _timeOffRef;
+    final managerUid = _managerUid;
+    
+    if (timeOffRef == null || managerUid == null) {
+      log('Cannot migrate: not logged in', name: 'FirestoreSyncService');
+      return 0;
+    }
+
+    try {
+      // Query root timeOff collection for entries belonging to this manager's employees
+      final rootTimeOffRef = _firestore.collection('timeOff');
+      final snapshot = await rootTimeOffRef
+          .where('managerUid', isEqualTo: managerUid)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        // Also try to find entries by employeeUid matching our employees
+        final employeesRef = _employeesRef;
+        if (employeesRef != null) {
+          final employeesSnapshot = await employeesRef.get();
+          final employeeUids = employeesSnapshot.docs
+              .map((doc) => doc.data()['uid'] as String?)
+              .where((uid) => uid != null)
+              .toSet();
+
+          if (employeeUids.isNotEmpty) {
+            // Query for entries matching any of our employee UIDs
+            for (final uid in employeeUids) {
+              final entriesForEmployee = await rootTimeOffRef
+                  .where('employeeUid', isEqualTo: uid)
+                  .get();
+
+              for (final doc in entriesForEmployee.docs) {
+                await _migrateTimeOffDoc(doc, timeOffRef);
+              }
+            }
+          }
+        }
+        log('No root timeOff entries to migrate', name: 'FirestoreSyncService');
+        return 0;
+      }
+
+      int migratedCount = 0;
+      for (final doc in snapshot.docs) {
+        final migrated = await _migrateTimeOffDoc(doc, timeOffRef);
+        if (migrated) migratedCount++;
+      }
+
+      log('Migrated $migratedCount time-off entries from root collection', name: 'FirestoreSyncService');
+      return migratedCount;
+    } catch (e) {
+      log('Error migrating root timeOff entries: $e', name: 'FirestoreSyncService');
+      return 0;
+    }
+  }
+
+  /// Helper to migrate a single timeOff document
+  Future<bool> _migrateTimeOffDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+    CollectionReference<Map<String, dynamic>> targetRef,
+  ) async {
+    try {
+      final data = doc.data();
+      if (data == null) return false;
+
+      // Check if already exists in target collection
+      final existingQuery = await targetRef
+          .where('employeeUid', isEqualTo: data['employeeUid'])
+          .where('date', isEqualTo: data['date'])
+          .where('timeOffType', isEqualTo: data['timeOffType'])
+          .limit(1)
+          .get();
+
+      if (existingQuery.docs.isNotEmpty) {
+        // Already migrated, delete from root
+        await doc.reference.delete();
+        return false;
+      }
+
+      // Copy to manager subcollection
+      await targetRef.doc(doc.id).set({
+        ...data,
+        'managerUid': _managerUid,
+        'migratedAt': FieldValue.serverTimestamp(),
+      });
+
+      // Delete from root collection
+      await doc.reference.delete();
+      
+      log('Migrated timeOff entry ${doc.id}', name: 'FirestoreSyncService');
+      return true;
+    } catch (e) {
+      log('Error migrating doc ${doc.id}: $e', name: 'FirestoreSyncService');
+      return false;
+    }
   }
 }
 

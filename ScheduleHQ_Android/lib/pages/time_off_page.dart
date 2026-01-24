@@ -14,6 +14,7 @@ class _TimeOffPageState extends State<TimeOffPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String? _employeeUid;
+  String? _managerUid;
   int? _employeeLocalId;
   String? _employeeName;
 
@@ -36,6 +37,14 @@ class _TimeOffPageState extends State<TimeOffPage>
       setState(() {
         _employeeUid = user.uid;
       });
+
+      // Get managerUid
+      final managerUid = await AuthService.instance.getManagerUid();
+      if (managerUid != null && mounted) {
+        setState(() {
+          _managerUid = managerUid;
+        });
+      }
 
       final data = await AuthService.instance.getEmployeeData();
       if (data != null && mounted) {
@@ -209,8 +218,15 @@ class _TimeOffPageState extends State<TimeOffPage>
   }
 
   Widget _buildUpcomingTab() {
+    // Need managerUid to query the correct subcollection
+    if (_managerUid == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
+          .collection('managers')
+          .doc(_managerUid)
           .collection('timeOff')
           .where('employeeUid', isEqualTo: _employeeUid)
           .where(
@@ -328,6 +344,7 @@ class _TimeOffPageState extends State<TimeOffPage>
         employeeUid: _employeeUid,
         employeeLocalId: _employeeLocalId,
         employeeName: _employeeName,
+        managerUid: _managerUid,
       ),
     );
   }
@@ -337,11 +354,13 @@ class _TimeOffRequestSheet extends StatefulWidget {
   final String? employeeUid;
   final int? employeeLocalId;
   final String? employeeName;
+  final String? managerUid;
 
   const _TimeOffRequestSheet({
     required this.employeeUid,
     required this.employeeLocalId,
     required this.employeeName,
+    required this.managerUid,
   });
 
   @override
@@ -609,9 +628,13 @@ class _TimeOffRequestSheetState extends State<_TimeOffRequestSheet> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // If auto-approved, also create the time-off entry
-      if (!requiresApproval) {
-        await FirebaseFirestore.instance.collection('timeOff').add({
+      // If auto-approved, also create the time-off entry in manager's subcollection
+      if (!requiresApproval && widget.managerUid != null) {
+        await FirebaseFirestore.instance
+            .collection('managers')
+            .doc(widget.managerUid)
+            .collection('timeOff')
+            .add({
           'employeeUid': widget.employeeUid,
           'employeeLocalId': widget.employeeLocalId,
           'employeeName': widget.employeeName,
@@ -626,6 +649,7 @@ class _TimeOffRequestSheetState extends State<_TimeOffRequestSheet> {
               ? null
               : '${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
           'status': 'approved',
+          'managerUid': widget.managerUid,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
