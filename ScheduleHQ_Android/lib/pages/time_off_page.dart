@@ -590,17 +590,21 @@ class _TimeOffRequestSheetState extends State<_TimeOffRequestSheet> {
       // PTO/DayOff require approval if 2+ entries already exist for that day
       bool requiresApproval = false;
 
-      // Check existing time-off for this date
-      final existingCount = await FirebaseFirestore.instance
-          .collection('timeOff')
-          .where(
-            'date',
-            isEqualTo: DateFormat('yyyy-MM-dd').format(_selectedDate),
-          )
-          .count()
-          .get();
+      // Check existing time-off for this date from manager's subcollection
+      if (widget.managerUid != null) {
+        final existingCount = await FirebaseFirestore.instance
+            .collection('managers')
+            .doc(widget.managerUid)
+            .collection('timeOff')
+            .where(
+              'date',
+              isEqualTo: DateFormat('yyyy-MM-dd').format(_selectedDate),
+            )
+            .count()
+            .get();
 
-      requiresApproval = (existingCount.count ?? 0) >= 2;
+        requiresApproval = (existingCount.count ?? 0) >= 2;
+      }
 
       // For Day Off, set hours to 8 for all day, or calculate from time range
       final effectiveHours = _selectedType == 'dayoff'
