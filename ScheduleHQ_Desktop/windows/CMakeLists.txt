@@ -4,9 +4,6 @@ cmake_minimum_required(VERSION 3.14)
 # Allow older CMakeLists.txt files (like Firebase SDK) to work with newer CMake
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum CMake policy version")
 
-# Set install prefix to local build output to avoid needing admin rights
-set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Install path prefix" FORCE)
-
 project(schedulehq LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change

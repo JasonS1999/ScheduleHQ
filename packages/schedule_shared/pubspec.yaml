@@ -1,6 +1,6 @@
 name: schedule_shared
 description: Shared models and services for the Schedule apps
-version: 2.5.0
+version: 2.5.1
 
 environment:
   sdk: ^3.0.0

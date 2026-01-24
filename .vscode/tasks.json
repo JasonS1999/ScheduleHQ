@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "flutter: install windows",
+            "type": "shell",
+            "command": "flutter build windows --debug && cmake --build build/windows/x64 --target INSTALL --config Debug",
+            "options": {
+                "cwd": "${workspaceFolder}/ScheduleHQ_Desktop"
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "flutter: build release",
+            "type": "shell",
+            "command": "flutter build windows --release && cmake --build build/windows/x64 --target INSTALL --config Release",
+            "options": {
+                "cwd": "${workspaceFolder}/ScheduleHQ_Desktop"
+            },
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}
