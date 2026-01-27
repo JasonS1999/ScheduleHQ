@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:rxdart/rxdart.dart';
 import '../services/auth_service.dart';
 
 class SchedulePage extends StatefulWidget {
@@ -28,7 +29,7 @@ class _SchedulePageState extends State<SchedulePage> {
       setState(() {
         _employeeUid = user.uid;
       });
-      
+
       // Get manager UID first
       final managerUid = await AuthService.instance.getManagerUid();
       if (managerUid != null && mounted) {
@@ -36,7 +37,7 @@ class _SchedulePageState extends State<SchedulePage> {
           _managerUid = managerUid;
         });
       }
-      
+
       final data = await AuthService.instance.getEmployeeData();
       if (data != null && mounted) {
         setState(() {
@@ -48,7 +49,9 @@ class _SchedulePageState extends State<SchedulePage> {
 
   // Get start and end of week for querying
   DateTime get _weekStart {
-    final start = _selectedDate.subtract(Duration(days: _selectedDate.weekday % 7));
+    final start = _selectedDate.subtract(
+      Duration(days: _selectedDate.weekday % 7),
+    );
     return DateTime(start.year, start.month, start.day);
   }
 
@@ -122,7 +125,7 @@ class _SchedulePageState extends State<SchedulePage> {
               ],
             ),
           ),
-          
+
           // Schedule content
           Expanded(
             child: _employeeUid == null || _managerUid == null
@@ -135,166 +138,364 @@ class _SchedulePageState extends State<SchedulePage> {
   }
 
   Widget _buildScheduleList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('managers')
-          .doc(_managerUid)
-          .collection('shifts')
-          .where('employeeUid', isEqualTo: _employeeUid)
-          .where('date', isGreaterThanOrEqualTo: DateFormat('yyyy-MM-dd').format(_weekStart))
-          .where('date', isLessThanOrEqualTo: DateFormat('yyyy-MM-dd').format(_weekEnd.subtract(const Duration(days: 1))))
-          .orderBy('date')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    // Get month keys - handle weeks that span two months
+    final startMonthKey =
+        '${_weekStart.year}-${_weekStart.month.toString().padLeft(2, '0')}';
+    final endDate = _weekEnd.subtract(const Duration(days: 1));
+    final endMonthKey =
+        '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}';
+    final spansTwoMonths = startMonthKey != endMonthKey;
 
-        if (snapshot.hasError) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 16),
-                Text('Error loading schedule: ${snapshot.error}'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => setState(() {}),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          );
-        }
+    // Build queries for each month
+    final baseCollection = FirebaseFirestore.instance
+        .collection('managers')
+        .doc(_managerUid)
+        .collection('schedules');
 
-        final shifts = snapshot.data?.docs ?? [];
+    final startDateStr = DateFormat('yyyy-MM-dd').format(_weekStart);
+    final endDateStr = DateFormat('yyyy-MM-dd').format(endDate);
 
-        if (shifts.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.event_busy,
-                  size: 64,
-                  color: Colors.grey.shade400,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No shifts scheduled\nfor this week',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
+    // First month query - no 'published' filter needed
+    // If shift exists in Firestore, it's published
+    final stream1 = baseCollection
+        .doc(startMonthKey)
+        .collection('shifts')
+        .where('employeeUid', isEqualTo: _employeeUid)
+        .where('date', isGreaterThanOrEqualTo: startDateStr)
+        .where('date', isLessThanOrEqualTo: endDateStr)
+        .snapshots();
 
-        // Group shifts by date
-        final shiftsByDate = <String, List<DocumentSnapshot>>{};
-        for (final shift in shifts) {
-          final date = shift['date'] as String;
-          shiftsByDate.putIfAbsent(date, () => []).add(shift);
-        }
+    // If week spans two months, combine both streams
+    final combinedStream = spansTwoMonths
+        ? Rx.combineLatest2<
+            QuerySnapshot,
+            QuerySnapshot,
+            List<DocumentSnapshot>
+          >(
+            stream1,
+            baseCollection
+                .doc(endMonthKey)
+                .collection('shifts')
+                .where('employeeUid', isEqualTo: _employeeUid)
+                .where('date', isGreaterThanOrEqualTo: startDateStr)
+                .where('date', isLessThanOrEqualTo: endDateStr)
+                .snapshots(),
+            (snap1, snap2) => [...snap1.docs, ...snap2.docs],
+          )
+        : stream1.map((snap) => snap.docs);
 
-        // Build list with day headers
-        final sortedDates = shiftsByDate.keys.toList()..sort();
+    // Stream for shift runners
+    final shiftRunnersStream = FirebaseFirestore.instance
+        .collection('managers')
+        .doc(_managerUid)
+        .collection('shiftRunners')
+        .where('date', isGreaterThanOrEqualTo: startDateStr)
+        .where('date', isLessThanOrEqualTo: endDateStr)
+        .snapshots();
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: sortedDates.length,
-          itemBuilder: (context, index) {
-            final dateStr = sortedDates[index];
-            final dayShifts = shiftsByDate[dateStr]!;
-            final date = DateTime.parse(dateStr);
-            final isToday = _isSameDay(date, DateTime.now());
+    // Stream for schedule notes
+    final scheduleNotesStream = FirebaseFirestore.instance
+        .collection('managers')
+        .doc(_managerUid)
+        .collection('scheduleNotes')
+        .where('date', isGreaterThanOrEqualTo: startDateStr)
+        .where('date', isLessThanOrEqualTo: endDateStr)
+        .snapshots();
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Date header
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: isToday 
-                              ? Theme.of(context).colorScheme.primary 
-                              : Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(8),
+    // Combine all three streams
+    return StreamBuilder<List<DocumentSnapshot>>(
+      stream: combinedStream,
+      builder: (context, shiftsSnapshot) {
+        return StreamBuilder<QuerySnapshot>(
+          stream: shiftRunnersStream,
+          builder: (context, runnersSnapshot) {
+            return StreamBuilder<QuerySnapshot>(
+              stream: scheduleNotesStream,
+              builder: (context, notesSnapshot) {
+                if (shiftsSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (shiftsSnapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Colors.red,
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              DateFormat('EEE').format(date).toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: isToday ? Colors.white : Colors.grey.shade600,
-                              ),
-                            ),
-                            Text(
-                              date.day.toString(),
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: isToday ? Colors.white : Colors.black,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 16),
+                        Text('Error loading schedule: ${shiftsSnapshot.error}'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => setState(() {}),
+                          child: const Text('Retry'),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        DateFormat('EEEE, MMMM d').format(date),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 16,
+                      ],
+                    ),
+                  );
+                }
+
+                final shifts = shiftsSnapshot.data ?? [];
+
+                // Build shift runner map: date -> list of runners
+                final runnersByDate = <String, List<Map<String, dynamic>>>{};
+                if (runnersSnapshot.hasData) {
+                  for (final doc in runnersSnapshot.data!.docs) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final date = data['date'] as String;
+                    runnersByDate.putIfAbsent(date, () => []).add(data);
+                  }
+                }
+
+                // Build notes map: date -> note
+                final notesByDate = <String, String>{};
+                if (notesSnapshot.hasData) {
+                  for (final doc in notesSnapshot.data!.docs) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final date = data['date'] as String;
+                    final note = data['note'] as String?;
+                    if (note != null && note.isNotEmpty) {
+                      notesByDate[date] = note;
+                    }
+                  }
+                }
+
+                if (shifts.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.event_busy,
+                          size: 64,
+                          color: Colors.grey.shade400,
                         ),
-                      ),
-                      if (isToday) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'TODAY',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No shifts scheduled\nfor this week',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 16,
                           ),
                         ),
                       ],
-                    ],
-                  ),
-                ),
-                
-                // Shifts for this date
-                ...dayShifts.map((shift) => _buildShiftCard(shift)),
-                
-                const SizedBox(height: 16),
-              ],
+                    ),
+                  );
+                }
+
+                // Group shifts by date
+                final shiftsByDate = <String, List<DocumentSnapshot>>{};
+                for (final shift in shifts) {
+                  final date = shift['date'] as String;
+                  shiftsByDate.putIfAbsent(date, () => []).add(shift);
+                }
+
+                // Build list with day headers
+                final sortedDates = shiftsByDate.keys.toList()..sort();
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: sortedDates.length,
+                  itemBuilder: (context, index) {
+                    final dateStr = sortedDates[index];
+                    final dayShifts = shiftsByDate[dateStr]!;
+                    final date = DateTime.parse(dateStr);
+                    final isToday = _isSameDay(date, DateTime.now());
+                    final dayRunners = runnersByDate[dateStr] ?? [];
+                    final dayNote = notesByDate[dateStr];
+
+                    // Check if employee is running a shift today
+                    final myRunnerShifts = dayRunners
+                        .where((r) => r['runnerName'] == _employeeName)
+                        .map((r) => r['shiftType'] as String)
+                        .toList();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Date header
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: isToday
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      DateFormat(
+                                        'EEE',
+                                      ).format(date).toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isToday
+                                            ? Colors.white
+                                            : Colors.grey.shade600,
+                                      ),
+                                    ),
+                                    Text(
+                                      date.day.toString(),
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: isToday
+                                            ? Colors.white
+                                            : Colors.black,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          DateFormat(
+                                            'EEEE, MMMM d',
+                                          ).format(date),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                        if (isToday) ...[
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: const Text(
+                                              'TODAY',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    // Show if employee is running a shift
+                                    if (myRunnerShifts.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.star,
+                                              size: 14,
+                                              color: Colors.amber.shade700,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Running: ${myRunnerShifts.map(_formatShiftType).join(', ')}',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.amber.shade700,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Schedule note for this day
+                        if (dayNote != null)
+                          Container(
+                            margin: const EdgeInsets.only(left: 60, bottom: 8),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade200),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  size: 18,
+                                  color: Colors.blue.shade700,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    dayNote,
+                                    style: TextStyle(
+                                      color: Colors.blue.shade900,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // Shifts for this date
+                        ...dayShifts.map((shift) => _buildShiftCard(shift)),
+
+                        const SizedBox(height: 16),
+                      ],
+                    );
+                  },
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  String _formatShiftType(String shiftType) {
+    // Convert shift type key to display name
+    switch (shiftType.toLowerCase()) {
+      case 'open':
+        return 'Open';
+      case 'lunch':
+        return 'Lunch';
+      case 'dinner':
+        return 'Dinner';
+      case 'close':
+        return 'Close';
+      default:
+        // Capitalize first letter
+        return shiftType.isNotEmpty
+            ? shiftType[0].toUpperCase() + shiftType.substring(1)
+            : shiftType;
+    }
   }
 
   Widget _buildShiftCard(DocumentSnapshot shift) {
@@ -305,17 +506,20 @@ class _SchedulePageState extends State<SchedulePage> {
     final notes = data['notes'] as String?;
 
     // Check if this is an "OFF" or time-off label
-    final isTimeOff = label?.toUpperCase() == 'OFF' || 
-                      label?.toUpperCase() == 'PTO' || 
-                      label?.toUpperCase() == 'VAC' ||
-                      label?.toUpperCase() == 'REQ OFF';
+    final isTimeOff =
+        label?.toUpperCase() == 'OFF' ||
+        label?.toUpperCase() == 'PTO' ||
+        label?.toUpperCase() == 'VAC' ||
+        label?.toUpperCase() == 'REQ OFF';
 
     return Card(
       margin: const EdgeInsets.only(left: 60, bottom: 8),
       child: ListTile(
         leading: Icon(
           isTimeOff ? Icons.event_busy : Icons.access_time,
-          color: isTimeOff ? Colors.orange : Theme.of(context).colorScheme.primary,
+          color: isTimeOff
+              ? Colors.orange
+              : Theme.of(context).colorScheme.primary,
         ),
         title: isTimeOff
             ? Text(
@@ -329,8 +533,7 @@ class _SchedulePageState extends State<SchedulePage> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!isTimeOff && label != null && label.isNotEmpty)
-              Text(label),
+            if (!isTimeOff && label != null && label.isNotEmpty) Text(label),
             if (notes != null && notes.isNotEmpty)
               Text(
                 notes,
@@ -344,9 +547,7 @@ class _SchedulePageState extends State<SchedulePage> {
         trailing: !isTimeOff
             ? Text(
                 _formatDuration(endTime.difference(startTime)),
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(color: Colors.grey.shade600),
               )
             : null,
       ),

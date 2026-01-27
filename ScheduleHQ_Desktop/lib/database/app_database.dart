@@ -46,6 +46,7 @@ Future<void> _onCreate(Database db, int version) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employeeId INTEGER NOT NULL,
       date TEXT NOT NULL,
+      endDate TEXT,
       timeOffType TEXT NOT NULL,
       hours INTEGER NOT NULL,
       vacationGroupId TEXT,
@@ -272,19 +273,43 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._privateConstructor();
 
   Database? _db;
+  String? _currentManagerUid;
 
   /// Returns an open database instance, initializing it if necessary.
+  /// Note: You should call initForManager() first after user logs in.
   Future<Database> get db async {
     if (_db != null) return _db!;
     await init();
     return _db!;
   }
 
-  /// Initializes and opens the database. Safe to call multiple times.
-  /// Initializes and opens the database. Safe to call multiple times.
+  /// Check if database is initialized for a specific manager
+  bool isInitializedFor(String? managerUid) {
+    return _db != null && _currentManagerUid == managerUid;
+  }
+
+  /// Initialize database for a specific manager.
+  /// Call this after user logs in to ensure correct database is used.
+  Future<void> initForManager(String managerUid) async {
+    // If already initialized for this manager, do nothing
+    if (_db != null && _currentManagerUid == managerUid) return;
+    
+    // Close existing database if open for different manager
+    if (_db != null) {
+      log('Switching database from $_currentManagerUid to $managerUid', name: 'AppDatabase');
+      await _db!.close();
+      _db = null;
+    }
+    
+    _currentManagerUid = managerUid;
+    await init(managerUid: managerUid);
+  }
+
+  /// Close the current database (call on logout)\n  /// Note: Use the close() method at the end of this class\n\n  /// Initializes and opens the database. Safe to call multiple times.
   /// If [dbPath] is provided, it will be used instead of the default file path
   /// which is useful for tests (e.g., ':memory:').
-  Future<void> init({String? dbPath}) async {
+  /// If [managerUid] is provided, uses a per-manager database file.
+  Future<void> init({String? dbPath, String? managerUid}) async {
     if (_db != null) return;
 
     String path;
@@ -297,9 +322,25 @@ class AppDatabase {
       if (!appDir.existsSync()) {
         appDir.createSync(recursive: true);
       }
-      path = join(appDir.path, 'work_schedule.db');
       
-      // Migration: check if old database exists in default location and move it
+      // Use manager-specific database file if UID provided
+      final dbFileName = managerUid != null 
+          ? 'work_schedule_$managerUid.db'
+          : 'work_schedule.db';
+      path = join(appDir.path, dbFileName);
+      
+      // Migration: check if old shared database exists and this is a new per-user db
+      if (managerUid != null) {
+        final oldSharedPath = join(appDir.path, 'work_schedule.db');
+        final oldSharedFile = File(oldSharedPath);
+        final newFile = File(path);
+        if (oldSharedFile.existsSync() && !newFile.existsSync()) {
+          log('Migrating shared database to per-manager database: $path', name: 'AppDatabase');
+          await oldSharedFile.copy(path);
+        }
+      }
+      
+      // Legacy migration: check if old database exists in default getDatabasesPath location
       final oldPath = join(await getDatabasesPath(), 'work_schedule.db');
       final oldFile = File(oldPath);
       final newFile = File(path);
@@ -313,7 +354,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 25,
+      version: 26,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -703,6 +744,19 @@ class AppDatabase {
             )
           ''');
         }
+        if (oldVersion < 26) {
+          // Ensure endDate column exists in time_off table (fix for missed migration)
+          try {
+            final tableInfo = await db.rawQuery("PRAGMA table_info(time_off)");
+            final hasEndDate = tableInfo.any((col) => col['name'] == 'endDate');
+            if (!hasEndDate) {
+              await db.execute('ALTER TABLE time_off ADD COLUMN endDate TEXT');
+              log('Added missing endDate column to time_off', name: 'AppDatabase');
+            }
+          } catch (e) {
+            log('Error checking/adding endDate column: $e', name: 'AppDatabase');
+          }
+        }
       },
     );
   }
@@ -713,6 +767,8 @@ class AppDatabase {
     if (database != null) {
       await database.close();
       _db = null;
+      _currentManagerUid = null;
+      log('Database closed', name: 'AppDatabase');
     }
   }
 }

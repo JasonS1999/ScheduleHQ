@@ -4,6 +4,7 @@
         "git add": true,
         "git commit": true,
         "Set-Location": true,
-        "git restore": true
+        "git restore": true,
+        "firebase": true
     }
 }

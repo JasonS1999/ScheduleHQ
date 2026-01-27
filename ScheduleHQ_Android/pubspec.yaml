@@ -18,6 +18,7 @@ dependencies:
   
   # UI
   intl: ^0.20.2
+  rxdart: ^0.28.0
   
   # Shared models
   schedule_shared:

@@ -605,14 +605,17 @@ export const sendNotificationToEmployee = onCall(async (request) => {
   }
 
   const { employeeUid, title, body, data } = request.data;
+  const managerUid = request.auth.uid;
 
   if (!employeeUid || !title) {
     throw new HttpsError("invalid-argument", "employeeUid and title are required");
   }
 
   try {
-    // Get employee's FCM token
-    const employeeQuery = await db.collection("employees")
+    // Get employee's FCM token from manager's subcollection
+    const employeeQuery = await db.collection("managers")
+      .doc(managerUid)
+      .collection("employees")
       .where("uid", "==", employeeUid)
       .limit(1)
       .get();
@@ -680,17 +683,20 @@ export const sendNotificationToMultiple = onCall(async (request) => {
   }
 
   const { employeeUids, title, body, data } = request.data;
+  const managerUid = request.auth.uid;
 
   if (!employeeUids || !Array.isArray(employeeUids) || !title) {
     throw new HttpsError("invalid-argument", "employeeUids array and title are required");
   }
 
   try {
-    // Get FCM tokens for all employees
+    // Get FCM tokens for all employees from manager's subcollection
     const tokens: string[] = [];
     
     for (const uid of employeeUids) {
-      const employeeQuery = await db.collection("employees")
+      const employeeQuery = await db.collection("managers")
+        .doc(managerUid)
+        .collection("employees")
         .where("uid", "==", uid)
         .limit(1)
         .get();
@@ -831,6 +837,204 @@ export const onSchedulePublished = onDocumentCreated(
   }
 );
 */
+
+/**
+ * Check if a UID looks like a valid Firebase Auth UID.
+ * Firebase UIDs are typically 28 characters of alphanumeric characters.
+ */
+function isValidFirebaseUid(uid: string | undefined | null): boolean {
+  if (!uid || uid.length < 20) return false;
+  if (uid.toLowerCase() === "admin") return false;
+  return /^[a-zA-Z0-9]+$/.test(uid);
+}
+
+/**
+ * Fix employees with invalid UIDs (like "Admin").
+ * This will clear the invalid UID and create a proper Firebase Auth account.
+ * Also updates the users collection appropriately (but won't change existing manager roles).
+ */
+export const fixInvalidEmployeeUids = onCall(async (request) => {
+  // Verify caller is a manager
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be logged in");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data()?.role !== "manager") {
+    throw new HttpsError("permission-denied", "Only managers can fix employee UIDs");
+  }
+
+  const managerUid = request.data?.managerUid || request.auth.uid;
+  const specificEmployeeId = request.data?.employeeId; // Optional: fix specific employee only
+
+  const results = {
+    total: 0,
+    fixed: 0,
+    alreadyValid: 0,
+    noUid: 0,
+    errors: [] as string[],
+  };
+
+  try {
+    let query: admin.firestore.Query = db
+      .collection("managers")
+      .doc(managerUid)
+      .collection("employees");
+    
+    if (specificEmployeeId) {
+      // Get specific employee only
+      const doc = await db
+        .collection("managers")
+        .doc(managerUid)
+        .collection("employees")
+        .doc(specificEmployeeId.toString())
+        .get();
+      
+      if (!doc.exists) {
+        throw new HttpsError("not-found", `Employee ${specificEmployeeId} not found`);
+      }
+      
+      const employeeData = doc.data()!;
+      const existingUid = employeeData.uid;
+      const email = employeeData.email;
+      
+      if (!existingUid) {
+        results.noUid++;
+      } else if (isValidFirebaseUid(existingUid)) {
+        results.alreadyValid++;
+      } else {
+        // Invalid UID - fix it
+        logger.log(`Fixing invalid UID "${existingUid}" for employee ${doc.id}`);
+        
+        const accountEmail = email || `employee_${managerUid}_${doc.id}@schedulehq.internal`;
+        const hasRealEmail = !!email;
+        
+        let userRecord;
+        try {
+          userRecord = await auth.getUserByEmail(accountEmail);
+          logger.log(`Found existing user for ${accountEmail}: ${userRecord.uid}`);
+        } catch (error: unknown) {
+          if ((error as { code?: string }).code === "auth/user-not-found") {
+            userRecord = await auth.createUser({
+              email: accountEmail,
+              emailVerified: false,
+              disabled: !hasRealEmail,
+            });
+            logger.log(`Created new user for ${accountEmail}: ${userRecord.uid}`);
+          } else {
+            throw error;
+          }
+        }
+        
+        // Update employee with correct UID
+        await doc.ref.update({
+          uid: userRecord.uid,
+          previousInvalidUid: existingUid,
+          uidFixedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        
+        // Only create/update users doc if this UID doesn't already have a role
+        const existingUserDoc = await db.collection("users").doc(userRecord.uid).get();
+        if (!existingUserDoc.exists) {
+          await db.collection("users").doc(userRecord.uid).set({
+            email: accountEmail,
+            realEmail: hasRealEmail ? email : null,
+            employeeId: parseInt(doc.id) || doc.id,
+            managerUid: managerUid,
+            role: "employee",
+            hasAppAccess: hasRealEmail,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        
+        results.fixed++;
+      }
+      
+      results.total = 1;
+      return results;
+    }
+
+    // Process all employees
+    const employeesSnapshot = await query.get();
+    results.total = employeesSnapshot.size;
+
+    for (const doc of employeesSnapshot.docs) {
+      const employeeData = doc.data();
+      const existingUid = employeeData.uid;
+      const email = employeeData.email;
+
+      if (!existingUid) {
+        results.noUid++;
+        continue;
+      }
+
+      if (isValidFirebaseUid(existingUid)) {
+        results.alreadyValid++;
+        continue;
+      }
+
+      // Invalid UID - fix it
+      logger.log(`Fixing invalid UID "${existingUid}" for employee ${doc.id} (${employeeData.name})`);
+
+      const accountEmail = email || `employee_${managerUid}_${doc.id}@schedulehq.internal`;
+      const hasRealEmail = !!email;
+
+      try {
+        let userRecord;
+        try {
+          userRecord = await auth.getUserByEmail(accountEmail);
+          logger.log(`Found existing user for ${accountEmail}: ${userRecord.uid}`);
+        } catch (error: unknown) {
+          if ((error as { code?: string }).code === "auth/user-not-found") {
+            userRecord = await auth.createUser({
+              email: accountEmail,
+              emailVerified: false,
+              disabled: !hasRealEmail,
+            });
+            logger.log(`Created new user for ${accountEmail}: ${userRecord.uid}`);
+          } else {
+            throw error;
+          }
+        }
+
+        // Update employee with correct UID
+        await doc.ref.update({
+          uid: userRecord.uid,
+          previousInvalidUid: existingUid,
+          uidFixedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Only create/update users doc if this UID doesn't already have a role
+        // This prevents overwriting manager roles
+        const existingUserDoc = await db.collection("users").doc(userRecord.uid).get();
+        if (!existingUserDoc.exists) {
+          await db.collection("users").doc(userRecord.uid).set({
+            email: accountEmail,
+            realEmail: hasRealEmail ? email : null,
+            employeeId: parseInt(doc.id) || doc.id,
+            managerUid: managerUid,
+            role: "employee",
+            hasAppAccess: hasRealEmail,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+
+        results.fixed++;
+
+      } catch (error) {
+        logger.error(`Error fixing employee ${doc.id}:`, error);
+        results.errors.push(`${doc.id}: ${error}`);
+      }
+    }
+
+    logger.log(`Fix complete:`, results);
+    return results;
+
+  } catch (error) {
+    logger.error("Error fixing employee UIDs:", error);
+    throw new HttpsError("internal", `Error fixing UIDs: ${error}`);
+  }
+});
 
 /**
  * Manually sync all existing employees to create Firebase Auth accounts.

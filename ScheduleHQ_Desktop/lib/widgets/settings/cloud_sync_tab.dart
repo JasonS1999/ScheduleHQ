@@ -46,7 +46,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
       setState(() {
         _autoSyncEnabled = enabled;
         _isLoading = false;
-        _statusMessage = enabled 
+        _statusMessage = enabled
             ? 'Auto-sync enabled! Changes will sync automatically.'
             : 'Auto-sync disabled. Use manual sync buttons below.';
         _isSuccess = true;
@@ -84,37 +84,40 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
     }
   }
 
-  Future<void> _uploadAllSettings() async {
+  Future<void> _uploadToCloud() async {
     setState(() {
       _isLoading = true;
       _statusMessage = null;
     });
 
     try {
+      // Upload both settings and data
       await _settingsSyncService.uploadAllSettings();
+      await _dataSyncService.uploadAllDataToCloud();
       await _checkCloudStatus();
       setState(() {
-        _statusMessage = 'All settings uploaded to cloud successfully!';
+        _statusMessage =
+            'All settings and data uploaded to cloud successfully!';
         _isSuccess = true;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Error uploading settings: $e';
+        _statusMessage = 'Error uploading to cloud: $e';
         _isSuccess = false;
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _downloadAllSettings() async {
+  Future<void> _downloadFromCloud() async {
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Download Cloud Settings?'),
+        title: const Text('Download from Cloud?'),
         content: const Text(
-          'This will overwrite your local settings with the settings from the cloud. '
+          'This will overwrite your local settings and data with the cloud backup. '
           'Any local changes that haven\'t been uploaded will be lost.\n\n'
           'Are you sure you want to continue?',
         ),
@@ -139,85 +142,19 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
     });
 
     try {
-      final result = await _settingsSyncService.downloadAllSettings();
-      setState(() {
-        _statusMessage = result.message;
-        _isSuccess = result.success;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'Error downloading settings: $e';
-        _isSuccess = false;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _uploadAllData() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = null;
-    });
-
-    try {
-      await _dataSyncService.uploadAllDataToCloud();
-      await _checkCloudStatus();
-      setState(() {
-        _statusMessage = 'All data uploaded to cloud successfully!';
-        _isSuccess = true;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'Error uploading data: $e';
-        _isSuccess = false;
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _downloadAllData() async {
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Download Cloud Data?'),
-        content: const Text(
-          'This will download your employee roster, schedules, and time-off from the cloud. '
-          'Existing local data will be updated with cloud data.\n\n'
-          'Are you sure you want to continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Download'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    setState(() {
-      _isLoading = true;
-      _statusMessage = null;
-    });
-
-    try {
+      // Download both settings and data
+      final settingsResult = await _settingsSyncService.downloadAllSettings();
       await _dataSyncService.downloadAllDataFromCloud();
       setState(() {
-        _statusMessage = 'All data downloaded from cloud successfully!';
-        _isSuccess = true;
+        _statusMessage = settingsResult.success
+            ? 'All settings and data downloaded from cloud successfully!'
+            : 'Downloaded data, but settings had issues: ${settingsResult.message}';
+        _isSuccess = settingsResult.success;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _statusMessage = 'Error downloading data: $e';
+        _statusMessage = 'Error downloading from cloud: $e';
         _isSuccess = false;
         _isLoading = false;
       });
@@ -310,7 +247,9 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                     children: [
                       Icon(
                         _autoSyncEnabled ? Icons.sync : Icons.sync_disabled,
-                        color: _autoSyncEnabled ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                        color: _autoSyncEnabled
+                            ? colorScheme.primary
+                            : colorScheme.onSurfaceVariant,
                         size: 28,
                       ),
                       const SizedBox(width: 12),
@@ -346,16 +285,20 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+                        color: colorScheme.primaryContainer.withValues(
+                          alpha: 0.5,
+                        ),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            _autoSyncService.isOnline ? Icons.cloud_done : Icons.cloud_off,
+                            _autoSyncService.isOnline
+                                ? Icons.cloud_done
+                                : Icons.cloud_off,
                             size: 20,
-                            color: _autoSyncService.isOnline 
-                                ? colorScheme.primary 
+                            color: _autoSyncService.isOnline
+                                ? colorScheme.primary
                                 : colorScheme.error,
                           ),
                           const SizedBox(width: 8),
@@ -364,7 +307,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                               _autoSyncService.isOnline
                                   ? 'Online - syncing automatically'
                                   : 'Offline - changes will sync when back online'
-                                    '${_autoSyncService.pendingTaskCount > 0 ? ' (${_autoSyncService.pendingTaskCount} pending)' : ''}',
+                                        '${_autoSyncService.pendingTaskCount > 0 ? ' (${_autoSyncService.pendingTaskCount} pending)' : ''}',
                               style: theme.textTheme.bodySmall,
                             ),
                           ),
@@ -414,7 +357,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
             const SizedBox(height: 16),
           ],
 
-          // Sync actions card - Settings
+          // Cloud Sync card
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -422,14 +365,14 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Settings Sync',
+                    'Cloud Sync',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Sync your app settings (store hours, shift types, PTO rules).',
+                    'Sync your settings, employee roster, and time-off entries to the cloud.',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -439,9 +382,9 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                   // Upload button
                   ListTile(
                     leading: const Icon(Icons.cloud_upload),
-                    title: const Text('Upload Settings to Cloud'),
+                    title: const Text('Upload to Cloud'),
                     subtitle: const Text(
-                      'Save your current local settings to the cloud',
+                      'Backup all settings and data to the cloud',
                     ),
                     trailing: _isLoading
                         ? const SizedBox(
@@ -450,18 +393,18 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : null,
-                    onTap: _isLoading ? null : _uploadAllSettings,
+                    onTap: _isLoading ? null : _uploadToCloud,
                   ),
                   const Divider(),
 
                   // Download button
                   ListTile(
                     leading: const Icon(Icons.cloud_download),
-                    title: const Text('Download Settings from Cloud'),
+                    title: const Text('Download from Cloud'),
                     subtitle: Text(
-                      _hasCloudSettings
-                          ? 'Restore settings from the cloud to this device'
-                          : 'No cloud settings found - upload first',
+                      (_hasCloudSettings || _hasCloudData)
+                          ? 'Restore all settings and data from the cloud'
+                          : 'No cloud backup found - upload first',
                     ),
                     trailing: _isLoading
                         ? const SizedBox(
@@ -470,76 +413,10 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : null,
-                    enabled: _hasCloudSettings && !_isLoading,
-                    onTap: _hasCloudSettings && !_isLoading
-                        ? _downloadAllSettings
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Data Sync card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Data Sync',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Sync your employee roster, schedules, and time-off entries.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Upload data button
-                  ListTile(
-                    leading: const Icon(Icons.backup),
-                    title: const Text('Upload Data to Cloud'),
-                    subtitle: const Text(
-                      'Backup your roster, schedules, and time-off to the cloud',
-                    ),
-                    trailing: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : null,
-                    onTap: _isLoading ? null : _uploadAllData,
-                  ),
-                  const Divider(),
-
-                  // Download data button
-                  ListTile(
-                    leading: const Icon(Icons.cloud_sync),
-                    title: const Text('Download Data from Cloud'),
-                    subtitle: Text(
-                      _hasCloudData
-                          ? 'Restore roster and schedules from the cloud'
-                          : 'No cloud data found - upload first',
-                    ),
-                    trailing: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : null,
-                    enabled: _hasCloudData && !_isLoading,
-                    onTap: _hasCloudData && !_isLoading
-                        ? _downloadAllData
+                    enabled:
+                        (_hasCloudSettings || _hasCloudData) && !_isLoading,
+                    onTap: (_hasCloudSettings || _hasCloudData) && !_isLoading
+                        ? _downloadFromCloud
                         : null,
                   ),
                 ],
@@ -586,9 +463,9 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                   _buildSyncItem(
                     context,
                     icon: Icons.badge,
-                    title: 'Job Codes',
+                    title: 'Job Codes & Groups',
                     description:
-                        'Job code settings including PTO eligibility and max hours.',
+                        'Job code settings, groups, PTO eligibility and max hours.',
                   ),
                   _buildSyncItem(
                     context,
@@ -599,16 +476,20 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                   ),
                   _buildSyncItem(
                     context,
-                    icon: Icons.calendar_month,
-                    title: 'Schedules & Shifts',
-                    description:
-                        'All shifts and schedule data for your employees.',
-                  ),
-                  _buildSyncItem(
-                    context,
                     icon: Icons.beach_access,
                     title: 'Time Off Entries',
                     description: 'PTO, sick days, and other time-off records.',
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Note: Schedules are stored locally and shared with employees '
+                    'when you publish them from the schedule view.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ],
               ),

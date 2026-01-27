@@ -103,33 +103,36 @@ class NotificationService {
     }
 
     try {
-      // Store token in a subcollection under the user's employee document
-      // This allows an employee to have multiple devices
-      await _firestore
-          .collection('employees')
+      // Get user document to find managerUid and employeeId
+      final userDoc = await _firestore
+          .collection('users')
           .doc(user.uid)
-          .collection('fcmTokens')
-          .doc(token)
-          .set({
-            'token': token,
-            'platform': defaultTargetPlatform.name,
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastUpdated': FieldValue.serverTimestamp(),
-          });
+          .get();
 
-      // Also update the main employee document with the latest token
+      if (!userDoc.exists) {
+        log('Cannot save token - user document not found', name: 'NotificationService');
+        return;
+      }
+
+      final userData = userDoc.data()!;
+      final managerUid = userData['managerUid'] as String?;
+      final employeeId = userData['employeeId'];
+
+      if (managerUid == null || employeeId == null) {
+        log('Cannot save token - user document missing managerUid or employeeId', 
+            name: 'NotificationService');
+        return;
+      }
+
+      // Save token to the employee document under manager's subcollection
       await _firestore
+          .collection('managers')
+          .doc(managerUid)
           .collection('employees')
-          .where('uid', isEqualTo: user.uid)
-          .limit(1)
-          .get()
-          .then((snapshot) {
-            if (snapshot.docs.isNotEmpty) {
-              snapshot.docs.first.reference.update({
-                'fcmToken': token,
-                'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-              });
-            }
+          .doc(employeeId.toString())
+          .update({
+            'fcmToken': token,
+            'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
           });
 
       log('FCM token saved to Firestore', name: 'NotificationService');

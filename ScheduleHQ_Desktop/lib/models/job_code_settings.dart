@@ -54,9 +54,13 @@ class JobCodeSettings {
   }
 
   factory JobCodeSettings.fromMap(Map<String, dynamic> map) {
+    // Handle hasPTO as either bool (from cloud) or int (from local DB)
+    final hasPTOValue = map['hasPTO'];
+    final hasPTO = hasPTOValue is bool ? hasPTOValue : (hasPTOValue == 1);
+    
     return JobCodeSettings(
       code: map['code'],
-      hasPTO: map['hasPTO'] == 1,
+      hasPTO: hasPTO,
       maxHoursPerWeek: map['maxHoursPerWeek'] ?? 40,
       defaultScheduledHours: map['defaultScheduledHours'] ?? 40,
       colorHex: map['colorHex'] ?? '#4285F4',
