@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>AIzaSyDddyDP5a52piyS39fesh39XwyzS0-m2pA</string>
+	<key>GCM_SENDER_ID</key>
+	<string>991523306618</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.ScheduleHQ.IOS</string>
+	<key>PROJECT_ID</key>
+	<string>schedulehq-cf87f</string>
+	<key>STORAGE_BUCKET</key>
+	<string>schedulehq-cf87f.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:991523306618:ios:d4b9957d800d5833d58fc3</string>
+</dict>
+</plist>
