@@ -25,8 +25,8 @@ struct ScheduleHQApp: App {
 
 /// Root view that handles authentication state
 struct AuthGateView: View {
-    private let authManager = AuthManager.shared
-    private let networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     
     var body: some View {
         Group {

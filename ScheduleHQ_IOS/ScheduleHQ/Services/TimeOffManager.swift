@@ -1,9 +1,9 @@
 import Foundation
 import FirebaseFirestore
+import Combine
 
 /// Manages time off requests and PTO/vacation tracking
-@Observable
-final class TimeOffManager {
+final class TimeOffManager: ObservableObject {
     static let shared = TimeOffManager()
     
     private let db = Firestore.firestore()
@@ -11,16 +11,16 @@ final class TimeOffManager {
     private var timeOffListener: ListenerRegistration?
     
     /// All time off requests for the current employee
-    private(set) var requests: [TimeOffRequest] = []
+    @Published private(set) var requests: [TimeOffRequest] = []
     
     /// Approved time off entries for the current employee
-    private(set) var approvedTimeOff: [TimeOffEntry] = []
+    @Published private(set) var approvedTimeOff: [TimeOffEntry] = []
     
     /// Whether data is loading
-    private(set) var isLoading: Bool = false
+    @Published private(set) var isLoading: Bool = false
     
     /// PTO usage by date (for trimester calculations)
-    private(set) var ptoUsageByDate: [Date: Int] = [:]
+    @Published private(set) var ptoUsageByDate: [Date: Int] = [:]
     
     private let authManager = AuthManager.shared
     private let alertManager = AlertManager.shared

@@ -2,12 +2,11 @@ import Foundation
 import Combine
 
 /// Manages offline queue for time off requests
-@Observable
-final class OfflineQueueManager {
+final class OfflineQueueManager: ObservableObject {
     static let shared = OfflineQueueManager()
     
     /// Queued requests waiting to be synced
-    private(set) var queuedRequests: [TimeOffRequest] = []
+    @Published private(set) var queuedRequests: [TimeOffRequest] = []
     
     /// Number of queued requests (for badge display)
     var queuedCount: Int {
@@ -20,7 +19,7 @@ final class OfflineQueueManager {
     }
     
     /// Whether sync is in progress
-    private(set) var isSyncing: Bool = false
+    @Published private(set) var isSyncing: Bool = false
     
     private let networkMonitor = NetworkMonitor.shared
     private let timeOffManager = TimeOffManager.shared

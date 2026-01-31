@@ -1,0 +1,551 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 63;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0AAB46BAAB0DD5A0AFF0E7AA /* TimeOffRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */; };
+		0C59C51AE9424942624B5F18 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */; };
+		1D14005DFAA0BFBE39B98167 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */; };
+		2330B8F5BCD266AF8097631F /* Employee.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7790E005D0999BEA1B1390 /* Employee.swift */; };
+		2A8124ACE5EDC253A4A98D89 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1A23909951E3C4CE3B0317 /* AuthManager.swift */; };
+		2B74B11A870A880A9FFFA927 /* DateExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */; };
+		3C68A267424E317F9E436093 /* TimeOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94BCEB5C7FDA763F14A4A7D6 /* TimeOffView.swift */; };
+		3D53801AD2E9F47AB2C8A08B /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0F9FACEAD596FF93CD323A /* LoginView.swift */; };
+		44EBD5EFD316334804F31B97 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 90C7A67BDC79663F94D0E43F /* FirebaseFirestore */; };
+		4566189371A820C4171E3B19 /* TimeOffRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9EA878796EB4258354D037 /* TimeOffRequest.swift */; };
+		4D70A5E0827BEE76BD8CF877 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E66190F1A0B15F8F9B9120EF /* FirebaseAuth */; };
+		525FE206500D8235B0253F6D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7325423BE3D64E7D6DBF0F27 /* AppDelegate.swift */; };
+		5D72CEDEE685C39568C12693 /* TimeOffEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */; };
+		5F9029B115770887D39C3473 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FAFBA57B5EC72EBFD1BDB0 /* NetworkMonitor.swift */; };
+		7351B05CCA6A7636D7E7D1F5 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAEAB20480BFF2ECA17B060F /* ScheduleView.swift */; };
+		7899E56AD5C6CA74AEF5E5A0 /* TimeOffManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E039007796C297B7AC53558 /* TimeOffManager.swift */; };
+		79ED2D42D7B2A2A1B3E45C29 /* ScheduleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */; };
+		8A23DE6CCA08BAA24EE22D9C /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */; };
+		9999D6B1E8B6550EC7F1DB25 /* AppUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0307FE788D9CE086C375A92 /* AppUser.swift */; };
+		A8251BCD82DAADD4DF676BED /* TimeOffRequestCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */; };
+		CFE2B2CB2A5D898D11B8D9FD /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = E6D360FC6FC3009A295D3083 /* FirebaseMessaging */; };
+		D3E1B0E340AEA5764C216AA6 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42165C70E1E92C97580E9F0C /* ProfileView.swift */; };
+		D536BC4F271F7BF0F89DB1F8 /* TrimesterSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */; };
+		D87AB6EFB5495FA063ABBE88 /* CommonComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */; };
+		D98CE09E27DDE60C69E81E86 /* Shift.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92714159901910B938653AB1 /* Shift.swift */; };
+		E592F50A830F1D2064DE8CCC /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A86F846211FE53EF8CBE563 /* MainTabView.swift */; };
+		F4C25B981F6BE6EA8B181E62 /* ScheduleHQApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DB78F4FF757782641B82F7 /* ScheduleHQApp.swift */; };
+		FED0913D8BD596B6076699B2 /* ShiftCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C97A32247DDD600B3359BE /* ShiftCard.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0A86F846211FE53EF8CBE563 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrimesterSummary.swift; sourceTree = "<group>"; };
+		0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequestSheet.swift; sourceTree = "<group>"; };
+		3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffEntry.swift; sourceTree = "<group>"; };
+		3E039007796C297B7AC53558 /* TimeOffManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffManager.swift; sourceTree = "<group>"; };
+		3F1A23909951E3C4CE3B0317 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
+		42165C70E1E92C97580E9F0C /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertManager.swift; sourceTree = "<group>"; };
+		61FAFBA57B5EC72EBFD1BDB0 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
+		6F360A498E798CDBE67F5955 /* ScheduleHQ.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ScheduleHQ.entitlements; sourceTree = "<group>"; };
+		7325423BE3D64E7D6DBF0F27 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		7E7790E005D0999BEA1B1390 /* Employee.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Employee.swift; sourceTree = "<group>"; };
+		87C97A32247DDD600B3359BE /* ShiftCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftCard.swift; sourceTree = "<group>"; };
+		8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequestCard.swift; sourceTree = "<group>"; };
+		8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleManager.swift; sourceTree = "<group>"; };
+		92714159901910B938653AB1 /* Shift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shift.swift; sourceTree = "<group>"; };
+		94BCEB5C7FDA763F14A4A7D6 /* TimeOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffView.swift; sourceTree = "<group>"; };
+		99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueueManager.swift; sourceTree = "<group>"; };
+		9E9EA878796EB4258354D037 /* TimeOffRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequest.swift; sourceTree = "<group>"; };
+		9F0F9FACEAD596FF93CD323A /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		AAEAB20480BFF2ECA17B060F /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
+		C0DB78F4FF757782641B82F7 /* ScheduleHQApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleHQApp.swift; sourceTree = "<group>"; };
+		D0307FE788D9CE086C375A92 /* AppUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUser.swift; sourceTree = "<group>"; };
+		D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtensions.swift; sourceTree = "<group>"; };
+		D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonComponents.swift; sourceTree = "<group>"; };
+		E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScheduleHQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1F8D2EEF238BD4B7E30564FE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D70A5E0827BEE76BD8CF877 /* FirebaseAuth in Frameworks */,
+				44EBD5EFD316334804F31B97 /* FirebaseFirestore in Frameworks */,
+				CFE2B2CB2A5D898D11B8D9FD /* FirebaseMessaging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		10DFF4C8E820AF45ACB1265D /* Schedule */ = {
+			isa = PBXGroup;
+			children = (
+				AAEAB20480BFF2ECA17B060F /* ScheduleView.swift */,
+			);
+			path = Schedule;
+			sourceTree = "<group>";
+		};
+		1101760D630BD079B8024BCF /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				D0307FE788D9CE086C375A92 /* AppUser.swift */,
+				7E7790E005D0999BEA1B1390 /* Employee.swift */,
+				92714159901910B938653AB1 /* Shift.swift */,
+				3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */,
+				9E9EA878796EB4258354D037 /* TimeOffRequest.swift */,
+				0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		29FF9BB4ED5D1E2CF45A16B7 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7325423BE3D64E7D6DBF0F27 /* AppDelegate.swift */,
+				C0DB78F4FF757782641B82F7 /* ScheduleHQApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		37CC2579915D33B34750F7F8 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */,
+				3F1A23909951E3C4CE3B0317 /* AuthManager.swift */,
+				99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */,
+				8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */,
+				3E039007796C297B7AC53558 /* TimeOffManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		50027992C5682EF10813D9D6 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */,
+				61FAFBA57B5EC72EBFD1BDB0 /* NetworkMonitor.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		53723A139B905BFE782F6E1E /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				42165C70E1E92C97580E9F0C /* ProfileView.swift */,
+			);
+			path = Profile;
+			sourceTree = "<group>";
+		};
+		745BEE1BAD14AD6DA46F9708 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		7DC602B35A11650DE0F6C262 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */,
+				87C97A32247DDD600B3359BE /* ShiftCard.swift */,
+				8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		B842AE0529253FB2A325B95D /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				0A86F846211FE53EF8CBE563 /* MainTabView.swift */,
+				BA47F23C3C27D5573F8F11CD /* Auth */,
+				7DC602B35A11650DE0F6C262 /* Components */,
+				53723A139B905BFE782F6E1E /* Profile */,
+				10DFF4C8E820AF45ACB1265D /* Schedule */,
+				E17E862C3E7F05A196666F73 /* TimeOff */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		BA47F23C3C27D5573F8F11CD /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				9F0F9FACEAD596FF93CD323A /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E17E862C3E7F05A196666F73 /* TimeOff */ = {
+			isa = PBXGroup;
+			children = (
+				1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */,
+				94BCEB5C7FDA763F14A4A7D6 /* TimeOffView.swift */,
+			);
+			path = TimeOff;
+			sourceTree = "<group>";
+		};
+		EC41C97B4C01BE15C578E389 = {
+			isa = PBXGroup;
+			children = (
+				0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */,
+				FF3620A8DF021D8532417285 /* ScheduleHQ */,
+				745BEE1BAD14AD6DA46F9708 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FF3620A8DF021D8532417285 /* ScheduleHQ */ = {
+			isa = PBXGroup;
+			children = (
+				6F360A498E798CDBE67F5955 /* ScheduleHQ.entitlements */,
+				29FF9BB4ED5D1E2CF45A16B7 /* App */,
+				1101760D630BD079B8024BCF /* Models */,
+				37CC2579915D33B34750F7F8 /* Services */,
+				50027992C5682EF10813D9D6 /* Utilities */,
+				B842AE0529253FB2A325B95D /* Views */,
+			);
+			path = ScheduleHQ;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F07628E263942AC95FF1F9C5 /* ScheduleHQ */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0AE960B6BD27A182BC03B561 /* Build configuration list for PBXNativeTarget "ScheduleHQ" */;
+			buildPhases = (
+				0CA44A89B405F3F752D1BECC /* Sources */,
+				FDB9524BE7872836116719A7 /* Resources */,
+				1F8D2EEF238BD4B7E30564FE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ScheduleHQ;
+			packageProductDependencies = (
+				E66190F1A0B15F8F9B9120EF /* FirebaseAuth */,
+				90C7A67BDC79663F94D0E43F /* FirebaseFirestore */,
+				E6D360FC6FC3009A295D3083 /* FirebaseMessaging */,
+			);
+			productName = ScheduleHQ;
+			productReference = E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C645AF6267AA840F40939486 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					F07628E263942AC95FF1F9C5 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 687CD608DD36EE995092D8C5 /* Build configuration list for PBXProject "ScheduleHQ" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = EC41C97B4C01BE15C578E389;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F07628E263942AC95FF1F9C5 /* ScheduleHQ */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FDB9524BE7872836116719A7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C59C51AE9424942624B5F18 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0CA44A89B405F3F752D1BECC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D14005DFAA0BFBE39B98167 /* AlertManager.swift in Sources */,
+				525FE206500D8235B0253F6D /* AppDelegate.swift in Sources */,
+				9999D6B1E8B6550EC7F1DB25 /* AppUser.swift in Sources */,
+				2A8124ACE5EDC253A4A98D89 /* AuthManager.swift in Sources */,
+				D87AB6EFB5495FA063ABBE88 /* CommonComponents.swift in Sources */,
+				2B74B11A870A880A9FFFA927 /* DateExtensions.swift in Sources */,
+				2330B8F5BCD266AF8097631F /* Employee.swift in Sources */,
+				3D53801AD2E9F47AB2C8A08B /* LoginView.swift in Sources */,
+				E592F50A830F1D2064DE8CCC /* MainTabView.swift in Sources */,
+				5F9029B115770887D39C3473 /* NetworkMonitor.swift in Sources */,
+				8A23DE6CCA08BAA24EE22D9C /* OfflineQueueManager.swift in Sources */,
+				D3E1B0E340AEA5764C216AA6 /* ProfileView.swift in Sources */,
+				F4C25B981F6BE6EA8B181E62 /* ScheduleHQApp.swift in Sources */,
+				79ED2D42D7B2A2A1B3E45C29 /* ScheduleManager.swift in Sources */,
+				7351B05CCA6A7636D7E7D1F5 /* ScheduleView.swift in Sources */,
+				D98CE09E27DDE60C69E81E86 /* Shift.swift in Sources */,
+				FED0913D8BD596B6076699B2 /* ShiftCard.swift in Sources */,
+				5D72CEDEE685C39568C12693 /* TimeOffEntry.swift in Sources */,
+				7899E56AD5C6CA74AEF5E5A0 /* TimeOffManager.swift in Sources */,
+				4566189371A820C4171E3B19 /* TimeOffRequest.swift in Sources */,
+				A8251BCD82DAADD4DF676BED /* TimeOffRequestCard.swift in Sources */,
+				0AAB46BAAB0DD5A0AFF0E7AA /* TimeOffRequestSheet.swift in Sources */,
+				3C68A267424E317F9E436093 /* TimeOffView.swift in Sources */,
+				D536BC4F271F7BF0F89DB1F8 /* TrimesterSummary.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1ACAEE8CB90318225E869788 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ScheduleHQ/ScheduleHQ.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_CFBundleDisplayName = ScheduleHQ;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schedulehq.app;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D427B4811FF97EF4C4CA2C88 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E1006BF95E51E829006AA6F6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		F14FDC0F063C8B8E6405A512 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ScheduleHQ/ScheduleHQ.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_CFBundleDisplayName = ScheduleHQ;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schedulehq.app;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0AE960B6BD27A182BC03B561 /* Build configuration list for PBXNativeTarget "ScheduleHQ" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1ACAEE8CB90318225E869788 /* Debug */,
+				F14FDC0F063C8B8E6405A512 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		687CD608DD36EE995092D8C5 /* Build configuration list for PBXProject "ScheduleHQ" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1006BF95E51E829006AA6F6 /* Debug */,
+				D427B4811FF97EF4C4CA2C88 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		90C7A67BDC79663F94D0E43F /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		E66190F1A0B15F8F9B9120EF /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		E6D360FC6FC3009A295D3083 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = C645AF6267AA840F40939486 /* Project object */;
+}

@@ -1,9 +1,9 @@
 import Foundation
 import FirebaseFirestore
+import Combine
 
 /// Manages schedule data and Firestore listeners for shifts
-@Observable
-final class ScheduleManager {
+final class ScheduleManager: ObservableObject {
     static let shared = ScheduleManager()
     
     private let db = Firestore.firestore()
@@ -11,19 +11,19 @@ final class ScheduleManager {
     private var timeOffListener: ListenerRegistration?
     
     /// Current week's start date
-    private(set) var currentWeekStart: Date = Date().startOfWeek
+    @Published private(set) var currentWeekStart: Date = Date().startOfWeek
     
     /// Shifts for the current week
-    private(set) var shifts: [Shift] = []
+    @Published private(set) var shifts: [Shift] = []
     
     /// Time off entries for the current week
-    private(set) var timeOffEntries: [TimeOffEntry] = []
+    @Published private(set) var timeOffEntries: [TimeOffEntry] = []
     
     /// Whether data is loading
-    private(set) var isLoading: Bool = false
+    @Published private(set) var isLoading: Bool = false
     
     /// Error message if loading failed
-    private(set) var errorMessage: String?
+    @Published private(set) var errorMessage: String?
     
     private let authManager = AuthManager.shared
     private let alertManager = AlertManager.shared

@@ -1,12 +1,12 @@
 import SwiftUI
+import Combine
 
 /// Centralized alert management for consistent error display across the app
-@Observable
-final class AlertManager {
+final class AlertManager: ObservableObject {
     static let shared = AlertManager()
     
     /// Current alert to display (nil if no alert)
-    var currentAlert: AlertItem?
+    @Published var currentAlert: AlertItem?
     
     /// Whether an alert is currently showing
     var isShowingAlert: Bool {
@@ -124,7 +124,7 @@ struct AlertItem: Identifiable, Equatable {
 
 /// View modifier for presenting alerts from AlertManager
 struct AlertModifier: ViewModifier {
-    @Bindable var alertManager: AlertManager
+    @ObservedObject var alertManager: AlertManager
     
     func body(content: Content) -> some View {
         content

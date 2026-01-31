@@ -13,9 +13,9 @@ struct TimeOffRequestSheet: View {
     @State private var notes = ""
     @State private var isSubmitting = false
     
-    private let authManager = AuthManager.shared
-    private let offlineQueueManager = OfflineQueueManager.shared
-    private let networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
     
     // Supported request types for employees
     private let availableTypes: [TimeOffType] = [.pto, .vacation, .dayOff]

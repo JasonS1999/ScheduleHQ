@@ -1,10 +1,10 @@
 import Foundation
 import FirebaseAuth
 import FirebaseFirestore
+import Combine
 
 /// Manages Firebase authentication and user data
-@Observable
-final class AuthManager {
+final class AuthManager: ObservableObject {
     static let shared = AuthManager()
     
     private let auth = Auth.auth()
@@ -12,22 +12,22 @@ final class AuthManager {
     private var authStateListener: AuthStateDidChangeListenerHandle?
     
     /// Current Firebase user
-    private(set) var currentUser: User?
+    @Published private(set) var currentUser: User?
     
     /// Current app user data from Firestore
-    private(set) var appUser: AppUser?
+    @Published private(set) var appUser: AppUser?
     
     /// Current employee data
-    private(set) var employee: Employee?
+    @Published private(set) var employee: Employee?
     
     /// Manager UID for the current user
-    private(set) var managerUid: String?
+    @Published private(set) var managerUid: String?
     
     /// Whether authentication state is being checked
-    private(set) var isLoading: Bool = true
+    @Published private(set) var isLoading: Bool = true
     
     /// Whether a sign-in operation is in progress
-    private(set) var isSigningIn: Bool = false
+    @Published private(set) var isSigningIn: Bool = false
     
     /// Whether the user is authenticated
     var isAuthenticated: Bool {

@@ -5,8 +5,8 @@ struct TimeOffView: View {
     @State private var selectedTab = 0
     @State private var showNewRequestSheet = false
     
-    private let timeOffManager = TimeOffManager.shared
-    private let offlineQueueManager = OfflineQueueManager.shared
+    @ObservedObject private var timeOffManager = TimeOffManager.shared
+    @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
     
     var body: some View {
         NavigationStack {

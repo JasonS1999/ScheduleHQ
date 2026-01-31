@@ -4,8 +4,8 @@ import SwiftUI
 struct ProfileView: View {
     @State private var showSignOutConfirmation = false
     
-    private let authManager = AuthManager.shared
-    private let timeOffManager = TimeOffManager.shared
+    @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var timeOffManager = TimeOffManager.shared
     
     var body: some View {
         NavigationStack {

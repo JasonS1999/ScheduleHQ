@@ -4,10 +4,10 @@ import SwiftUI
 struct MainTabView: View {
     @State private var selectedTab = 0
     
-    private let networkMonitor = NetworkMonitor.shared
-    private let offlineQueueManager = OfflineQueueManager.shared
-    private let scheduleManager = ScheduleManager.shared
-    private let timeOffManager = TimeOffManager.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
+    @ObservedObject private var scheduleManager = ScheduleManager.shared
+    @ObservedObject private var timeOffManager = TimeOffManager.shared
     
     var body: some View {
         ZStack(alignment: .top) {

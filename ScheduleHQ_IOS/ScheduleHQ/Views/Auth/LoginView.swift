@@ -7,7 +7,7 @@ struct LoginView: View {
     @State private var showPassword = false
     @State private var showForgotPassword = false
     
-    private let authManager = AuthManager.shared
+    @ObservedObject private var authManager = AuthManager.shared
     
     var body: some View {
         NavigationStack {
@@ -167,7 +167,7 @@ struct ForgotPasswordSheet: View {
     @State var email: String
     @State private var isSending = false
     
-    private let authManager = AuthManager.shared
+    @ObservedObject private var authManager = AuthManager.shared
     
     var body: some View {
         NavigationStack {

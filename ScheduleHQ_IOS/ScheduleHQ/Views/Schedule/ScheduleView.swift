@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Main schedule view with week navigation
 struct ScheduleView: View {
-    private let scheduleManager = ScheduleManager.shared
+    @ObservedObject private var scheduleManager = ScheduleManager.shared
     
     var body: some View {
         NavigationStack {

@@ -1,19 +1,19 @@
 import Foundation
 import Network
+import Combine
 
 /// Monitors network connectivity status across the app
-@Observable
-final class NetworkMonitor {
+final class NetworkMonitor: ObservableObject {
     static let shared = NetworkMonitor()
     
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "NetworkMonitor")
     
     /// Whether the device is currently connected to a network
-    private(set) var isConnected: Bool = true
+    @Published private(set) var isConnected: Bool = true
     
     /// The current connection type
-    private(set) var connectionType: ConnectionType = .unknown
+    @Published private(set) var connectionType: ConnectionType = .unknown
     
     enum ConnectionType {
         case wifi
