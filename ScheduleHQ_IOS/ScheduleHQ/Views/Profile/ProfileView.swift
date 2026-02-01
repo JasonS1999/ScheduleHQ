@@ -82,6 +82,34 @@ struct ProfileView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
+            } else {
+                // Debug info when employee not loaded
+                VStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.badge.questionmark")
+                        .font(.system(size: 60))
+                        .foregroundStyle(.secondary)
+                    
+                    Text("Employee data not loaded")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                    
+                    if let appUser = authManager.appUser {
+                        Text("User loaded: managerUid=\(appUser.managerUid), employeeId=\(appUser.employeeId)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("AppUser not loaded")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    
+                    if let uid = authManager.currentUser?.uid {
+                        Text("Auth UID: \(uid)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding()
             }
         }
         .frame(maxWidth: .infinity)
@@ -131,31 +159,29 @@ struct VacationBalanceCard: View {
                     .fontWeight(.semibold)
             }
             
-            // Progress bar
-            VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: employee.vacationProgress)
-                    .tint(.blue)
-                
-                HStack {
-                    Text("\(employee.vacationWeeksUsed) used")
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(employee.vacationWeeksRemaining) remaining")
-                        .foregroundStyle(.blue)
-                        .fontWeight(.medium)
-                }
-                .font(.caption)
-            }
-            
-            // Total
+            // Stats
             HStack {
-                Text("Total Allowed")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("\(employee.vacationWeeksAllowed) weeks")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                VStack(spacing: 4) {
+                    Text("\(employee.vacationWeeksUsed)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.secondary)
+                    Text("Used")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                
+                VStack(spacing: 4) {
+                    Text("\(employee.vacationWeeksRemaining)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.blue)
+                    Text("Remaining")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
         .padding()
@@ -197,31 +223,29 @@ struct PTOSummaryCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             
-            // Progress bar
-            VStack(alignment: .leading, spacing: 8) {
-                ProgressView(value: summary.usageProgress)
-                    .tint(.purple)
-                
-                HStack {
-                    Text("\(summary.used) hrs used")
+            // Stats - just Used and Available
+            HStack {
+                VStack(spacing: 4) {
+                    Text("\(summary.used)")
+                        .font(.title2)
+                        .fontWeight(.bold)
                         .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(summary.remaining) hrs remaining")
-                        .foregroundStyle(.purple)
-                        .fontWeight(.medium)
+                    Text("Used")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-            }
-            
-            // Details grid
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 12) {
-                StatBox(title: "Earned", value: "\(summary.earned)", color: .blue)
-                StatBox(title: "Carryover", value: "+\(summary.carryoverIn)", color: .green)
-                StatBox(title: "Available", value: "\(summary.available)", color: .purple)
+                .frame(maxWidth: .infinity)
+                
+                VStack(spacing: 4) {
+                    Text("\(summary.available)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.purple)
+                    Text("Available")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
         .padding()

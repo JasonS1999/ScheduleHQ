@@ -9,6 +9,8 @@ final class ScheduleManager: ObservableObject {
     private let db = Firestore.firestore()
     private var shiftsListener: ListenerRegistration?
     private var timeOffListener: ListenerRegistration?
+    private var shiftRunnersListener: ListenerRegistration?
+    private var scheduleNotesListener: ListenerRegistration?
     
     /// Current week's start date
     @Published private(set) var currentWeekStart: Date = Date().startOfWeek
@@ -18,6 +20,12 @@ final class ScheduleManager: ObservableObject {
     
     /// Time off entries for the current week
     @Published private(set) var timeOffEntries: [TimeOffEntry] = []
+    
+    /// Shift runners for the current week (who is running each shift)
+    @Published private(set) var shiftRunners: [ShiftRunner] = []
+    
+    /// Daily schedule notes for the current week
+    @Published private(set) var scheduleNotes: [ScheduleNote] = []
     
     /// Whether data is loading
     @Published private(set) var isLoading: Bool = false
@@ -73,12 +81,65 @@ final class ScheduleManager: ObservableObject {
         }
     }
     
+    // MARK: - Runner and Notes Helpers
+    
+    /// Check if the current user is a runner for a given date and shift type
+    func isCurrentUserRunner(forDate date: Date, shiftType: String) -> Bool {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: date)
+        
+        guard let currentUserName = authManager.employee?.name else { return false }
+        
+        return shiftRunners.contains { runner in
+            runner.date == dateStr && 
+            runner.shiftType.lowercased() == shiftType.lowercased() &&
+            runner.runnerName.lowercased() == currentUserName.lowercased()
+        }
+    }
+    
+    /// Get the runner name for a specific shift on a date
+    func getRunnerName(forDate date: Date, shiftType: String) -> String? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: date)
+        
+        return shiftRunners.first { runner in
+            runner.date == dateStr && runner.shiftType.lowercased() == shiftType.lowercased()
+        }?.runnerName
+    }
+    
+    /// Check if current user is a runner for ANY shift on a given date
+    func isCurrentUserRunnerForDate(_ date: Date) -> (isRunner: Bool, shiftType: String?) {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: date)
+        
+        guard let currentUserName = authManager.employee?.name else { return (false, nil) }
+        
+        if let runner = shiftRunners.first(where: { 
+            $0.date == dateStr && $0.runnerName.lowercased() == currentUserName.lowercased() 
+        }) {
+            return (true, runner.shiftType)
+        }
+        return (false, nil)
+    }
+    
+    /// Get schedule note for a specific date
+    func getScheduleNote(forDate date: Date) -> String? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: date)
+        
+        return scheduleNotes.first { $0.date == dateStr }?.note
+    }
+    
     // MARK: - Listeners
     
     /// Start listening to shifts for the current employee and week
     func startListening() {
         guard let managerUid = authManager.managerUid,
-              let employeeId = authManager.employeeLocalId else {
+              let currentUid = authManager.currentUser?.uid else {
             errorMessage = "Not authenticated"
             return
         }
@@ -90,58 +151,80 @@ final class ScheduleManager: ObservableObject {
         let weekStart = currentWeekStart
         let weekEnd = currentWeekStart.endOfWeek
         
-        // Listen to shifts
-        shiftsListener = db.collection("managers")
-            .document(managerUid)
-            .collection("shifts")
-            .whereField("employeeId", isEqualTo: employeeId)
-            .whereField("startTime", isGreaterThanOrEqualTo: Timestamp(date: weekStart))
-            .whereField("startTime", isLessThanOrEqualTo: Timestamp(date: weekEnd))
-            .addSnapshotListener { [weak self] snapshot, error in
-                Task { @MainActor in
-                    self?.isLoading = false
-                    
-                    if let error = error {
-                        self?.errorMessage = error.localizedDescription
-                        self?.alertManager.showError("Schedule Error", message: "Failed to load schedule: \(error.localizedDescription)")
-                        return
-                    }
-                    
-                    guard let documents = snapshot?.documents else {
-                        self?.shifts = []
-                        return
-                    }
-                    
-                    self?.shifts = documents.compactMap { doc in
-                        try? doc.data(as: Shift.self)
-                    }.sorted { $0.startTime < $1.startTime }
-                }
-            }
+        // Format dates as strings like Android does (yyyy-MM-dd)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let weekStartStr = dateFormatter.string(from: weekStart)
+        let weekEndStr = dateFormatter.string(from: weekEnd)  // Saturday end of week
         
-        // Listen to time off entries
-        timeOffListener = db.collection("managers")
+        // Month formatter for collection path (schedules/YYYY-MM/shifts)
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "yyyy-MM"
+        
+        // Check if user is a manager (their UID matches the managerUid)
+        let isManager = currentUid == managerUid
+        
+        // Get the month(s) we need to query - a week can span two months
+        let startMonth = monthFormatter.string(from: weekStart)
+        let endMonth = monthFormatter.string(from: weekEnd)
+        let months = startMonth == endMonth ? [startMonth] : [startMonth, endMonth]
+        
+        // Query shifts from schedules/{YYYY-MM}/shifts collection
+        fetchShiftsFromSchedules(months: months, weekStartStr: weekStartStr, weekEndStr: weekEndStr, 
+                                  currentUid: currentUid, isManager: isManager)
+        
+        // Time off still comes from managers/{uid}/timeOff
+        let timeOffRef = db.collection("managers")
             .document(managerUid)
             .collection("timeOff")
-            .whereField("employeeId", isEqualTo: employeeId)
-            .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: weekStart))
-            .whereField("date", isLessThanOrEqualTo: Timestamp(date: weekEnd))
-            .addSnapshotListener { [weak self] snapshot, error in
-                Task { @MainActor in
-                    if let error = error {
-                        print("Time off listener error: \(error)")
-                        return
+        
+        if isManager {
+            // Manager: get all time off, filter by date client-side
+            timeOffListener = timeOffRef
+                .addSnapshotListener { [weak self, weekStart, weekEnd] snapshot, error in
+                    Task { @MainActor in
+                        if error != nil { return }
+                        
+                        guard let documents = snapshot?.documents else {
+                            self?.timeOffEntries = []
+                            return
+                        }
+                        
+                        // Filter by date range client-side
+                        let filteredEntries = documents.compactMap { doc -> TimeOffEntry? in
+                            guard let entry = try? doc.data(as: TimeOffEntry.self) else { return nil }
+                            return (entry.date >= weekStart && entry.date <= weekEnd) ? entry : nil
+                        }.sorted { $0.date < $1.date }
+                        self?.timeOffEntries = filteredEntries
                     }
-                    
-                    guard let documents = snapshot?.documents else {
-                        self?.timeOffEntries = []
-                        return
-                    }
-                    
-                    self?.timeOffEntries = documents.compactMap { doc in
-                        try? doc.data(as: TimeOffEntry.self)
-                    }.sorted { $0.date < $1.date }
                 }
-            }
+        } else {
+            // Employee: use server-side filtering with index
+            timeOffListener = timeOffRef
+                .whereField("employeeUid", isEqualTo: currentUid)
+                .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: weekStart))
+                .whereField("date", isLessThanOrEqualTo: Timestamp(date: weekEnd))
+                .addSnapshotListener { [weak self] snapshot, error in
+                    Task { @MainActor in
+                        if error != nil { return }
+                        
+                        guard let documents = snapshot?.documents else {
+                            self?.timeOffEntries = []
+                            return
+                        }
+                        
+                        self?.timeOffEntries = documents.compactMap { doc in
+                            try? doc.data(as: TimeOffEntry.self)
+                        }.sorted { $0.date < $1.date }
+                    }
+                }
+        }
+        
+        // Fetch shift runners from managers/{managerUid}/shiftRunners
+        fetchShiftRunners(managerUid: managerUid, weekStartStr: weekStartStr, weekEndStr: weekEndStr)
+        
+        // Fetch schedule notes from managers/{managerUid}/scheduleNotes
+        fetchScheduleNotes(managerUid: managerUid, weekStartStr: weekStartStr, weekEndStr: weekEndStr)
     }
     
     /// Stop all listeners
@@ -150,6 +233,10 @@ final class ScheduleManager: ObservableObject {
         shiftsListener = nil
         timeOffListener?.remove()
         timeOffListener = nil
+        shiftRunnersListener?.remove()
+        shiftRunnersListener = nil
+        scheduleNotesListener?.remove()
+        scheduleNotesListener = nil
     }
     
     /// Restart listeners (e.g., after week change)
@@ -162,6 +249,147 @@ final class ScheduleManager: ObservableObject {
         // Firestore listeners auto-refresh, but we can restart them
         await MainActor.run {
             startListening()
+        }
+    }
+    
+    // MARK: - Private Helpers
+    
+    /// Fetch shifts from managers/{managerUid}/schedules/{YYYY-MM}/shifts collection
+    private func fetchShiftsFromSchedules(months: [String], weekStartStr: String, weekEndStr: String,
+                                          currentUid: String, isManager: Bool) {
+        guard let managerUid = authManager.managerUid else {
+            self.shifts = []
+            self.isLoading = false
+            return
+        }
+        
+        guard let firstMonth = months.first else {
+            self.shifts = []
+            self.isLoading = false
+            return
+        }
+        
+        // Correct path: managers/{managerUid}/schedules/{month}/shifts
+        let basePath = db.collection("managers").document(managerUid).collection("schedules")
+        let shiftsRef = basePath.document(firstMonth).collection("shifts")
+        
+        shiftsListener = shiftsRef.addSnapshotListener { [weak self, weekStartStr, weekEndStr, currentUid, isManager, months, basePath] snapshot, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isLoading = false
+                
+                if let error = error {
+                    print("❌ Shifts error: \(error)")
+                    self.errorMessage = error.localizedDescription
+                    self.alertManager.showError("Schedule Error", message: "Failed to load schedule: \(error.localizedDescription)")
+                    return
+                }
+                
+                var allDocuments = snapshot?.documents ?? []
+                
+                // If week spans two months, also fetch from second month
+                if months.count > 1, let secondMonth = months.last, secondMonth != firstMonth {
+                    do {
+                        let secondSnapshot = try await basePath
+                            .document(secondMonth)
+                            .collection("shifts")
+                            .getDocuments()
+                        allDocuments.append(contentsOf: secondSnapshot.documents)
+                    } catch {
+                        // Continue with first month's data if second month fails
+                    }
+                }
+                
+                // Filter by date range and optionally by employeeUid
+                let filteredShifts = allDocuments.compactMap { doc -> Shift? in
+                    let data = doc.data()
+                    
+                    // Check date range
+                    guard let dateStr = data["date"] as? String else { return nil }
+                    guard dateStr >= weekStartStr && dateStr <= weekEndStr else { return nil }
+                    
+                    // For employees, filter by their UID
+                    if !isManager {
+                        guard let shiftEmployeeUid = data["employeeUid"] as? String,
+                              shiftEmployeeUid == currentUid else {
+                            return nil
+                        }
+                    }
+                    
+                    // Parse the shift
+                    return try? doc.data(as: Shift.self)
+                }.sorted { $0.startTime < $1.startTime }
+                
+                self.shifts = filteredShifts
+            }
+        }
+    }
+    
+    /// Fetch shift runners from managers/{managerUid}/shiftRunners collection
+    private func fetchShiftRunners(managerUid: String, weekStartStr: String, weekEndStr: String) {
+        let shiftRunnersRef = db.collection("managers")
+            .document(managerUid)
+            .collection("shiftRunners")
+        
+        shiftRunnersListener = shiftRunnersRef.addSnapshotListener { [weak self, weekStartStr, weekEndStr] snapshot, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("❌ ShiftRunners error: \(error)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    self.shiftRunners = []
+                    return
+                }
+                
+                // Filter by date range
+                let filteredRunners = documents.compactMap { doc -> ShiftRunner? in
+                    guard let runner = try? doc.data(as: ShiftRunner.self) else { return nil }
+                    // Check if date is within the week
+                    guard runner.date >= weekStartStr && runner.date <= weekEndStr else { return nil }
+                    print("👟 Runner: date=\(runner.date), type=\(runner.shiftType), name=\(runner.runnerName)")
+                    return runner
+                }
+                
+                self.shiftRunners = filteredRunners
+            }
+        }
+    }
+    
+    /// Fetch schedule notes from managers/{managerUid}/scheduleNotes collection
+    private func fetchScheduleNotes(managerUid: String, weekStartStr: String, weekEndStr: String) {
+        let scheduleNotesRef = db.collection("managers")
+            .document(managerUid)
+            .collection("scheduleNotes")
+        
+        scheduleNotesListener = scheduleNotesRef.addSnapshotListener { [weak self, weekStartStr, weekEndStr] snapshot, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    print("❌ ScheduleNotes error: \(error)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    self.scheduleNotes = []
+                    return
+                }
+                
+                // Filter by date range
+                let filteredNotes = documents.compactMap { doc -> ScheduleNote? in
+                    guard let note = try? doc.data(as: ScheduleNote.self) else { return nil }
+                    // Check if date is within the week
+                    guard note.date >= weekStartStr && note.date <= weekEndStr else { return nil }
+                    print("📝 DailyNote: date=\(note.date), note=\(note.note ?? "nil")")
+                    return note
+                }
+                
+                self.scheduleNotes = filteredNotes
+            }
         }
     }
 }

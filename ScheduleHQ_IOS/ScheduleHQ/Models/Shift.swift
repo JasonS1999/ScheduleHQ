@@ -5,9 +5,11 @@ import FirebaseFirestore
 struct Shift: Codable, Identifiable, Equatable {
     @DocumentID var documentId: String?
     let id: Int?
-    let employeeId: Int
+    let employeeId: Int?
+    let employeeUid: String?
     let startTime: Date
     let endTime: Date
+    let dateString: String?  // "yyyy-MM-dd" format
     let label: String?
     let notes: String?
     let createdAt: Date?
@@ -46,12 +48,19 @@ struct Shift: Codable, Identifiable, Equatable {
         Calendar.current.isDateInToday(startTime)
     }
     
+    /// Check if this is an "off" day (no work scheduled)
+    var isOff: Bool {
+        label?.uppercased() == "OFF"
+    }
+    
     enum CodingKeys: String, CodingKey {
         case documentId
         case id
         case employeeId
+        case employeeUid
         case startTime
         case endTime
+        case dateString = "date"
         case label
         case notes
         case createdAt
@@ -63,7 +72,9 @@ struct Shift: Codable, Identifiable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         documentId = try container.decodeIfPresent(String.self, forKey: .documentId)
         id = try container.decodeIfPresent(Int.self, forKey: .id)
-        employeeId = try container.decode(Int.self, forKey: .employeeId)
+        employeeId = try container.decodeIfPresent(Int.self, forKey: .employeeId)
+        employeeUid = try container.decodeIfPresent(String.self, forKey: .employeeUid)
+        dateString = try container.decodeIfPresent(String.self, forKey: .dateString)
         
         // Handle Firestore Timestamp or Date
         if let timestamp = try? container.decode(Timestamp.self, forKey: .startTime) {
@@ -103,9 +114,11 @@ struct Shift: Codable, Identifiable, Equatable {
     init(
         documentId: String? = nil,
         id: Int? = nil,
-        employeeId: Int,
+        employeeId: Int? = nil,
+        employeeUid: String? = nil,
         startTime: Date,
         endTime: Date,
+        dateString: String? = nil,
         label: String? = nil,
         notes: String? = nil,
         createdAt: Date? = nil,
@@ -115,8 +128,10 @@ struct Shift: Codable, Identifiable, Equatable {
         self.documentId = documentId
         self.id = id
         self.employeeId = employeeId
+        self.employeeUid = employeeUid
         self.startTime = startTime
         self.endTime = endTime
+        self.dateString = dateString
         self.label = label
         self.notes = notes
         self.createdAt = createdAt

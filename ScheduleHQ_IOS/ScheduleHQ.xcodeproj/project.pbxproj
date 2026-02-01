@@ -9,7 +9,9 @@
 /* Begin PBXBuildFile section */
 		0AAB46BAAB0DD5A0AFF0E7AA /* TimeOffRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */; };
 		0C59C51AE9424942624B5F18 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */; };
+		182813827F4BDFDDFDB72C45 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7C953C3D6DA36FAE700E7D /* Theme.swift */; };
 		1D14005DFAA0BFBE39B98167 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */; };
+		200B1DC7A0FE639DBD12B4A4 /* ShiftRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 204C6421844ED0D5E031961A /* ShiftRunner.swift */; };
 		2330B8F5BCD266AF8097631F /* Employee.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7790E005D0999BEA1B1390 /* Employee.swift */; };
 		2A8124ACE5EDC253A4A98D89 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1A23909951E3C4CE3B0317 /* AuthManager.swift */; };
 		2B74B11A870A880A9FFFA927 /* DateExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */; };
@@ -42,6 +44,7 @@
 		0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrimesterSummary.swift; sourceTree = "<group>"; };
 		0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequestSheet.swift; sourceTree = "<group>"; };
+		204C6421844ED0D5E031961A /* ShiftRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftRunner.swift; sourceTree = "<group>"; };
 		3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffEntry.swift; sourceTree = "<group>"; };
 		3E039007796C297B7AC53558 /* TimeOffManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffManager.swift; sourceTree = "<group>"; };
 		3F1A23909951E3C4CE3B0317 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
@@ -53,6 +56,7 @@
 		7E7790E005D0999BEA1B1390 /* Employee.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Employee.swift; sourceTree = "<group>"; };
 		87C97A32247DDD600B3359BE /* ShiftCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftCard.swift; sourceTree = "<group>"; };
 		8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequestCard.swift; sourceTree = "<group>"; };
+		8F7C953C3D6DA36FAE700E7D /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleManager.swift; sourceTree = "<group>"; };
 		92714159901910B938653AB1 /* Shift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shift.swift; sourceTree = "<group>"; };
 		94BCEB5C7FDA763F14A4A7D6 /* TimeOffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffView.swift; sourceTree = "<group>"; };
@@ -95,6 +99,7 @@
 				D0307FE788D9CE086C375A92 /* AppUser.swift */,
 				7E7790E005D0999BEA1B1390 /* Employee.swift */,
 				92714159901910B938653AB1 /* Shift.swift */,
+				204C6421844ED0D5E031961A /* ShiftRunner.swift */,
 				3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */,
 				9E9EA878796EB4258354D037 /* TimeOffRequest.swift */,
 				0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */,
@@ -153,6 +158,7 @@
 			children = (
 				D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */,
 				87C97A32247DDD600B3359BE /* ShiftCard.swift */,
+				8F7C953C3D6DA36FAE700E7D /* Theme.swift */,
 				8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */,
 			);
 			path = Components;
@@ -303,6 +309,8 @@
 				7351B05CCA6A7636D7E7D1F5 /* ScheduleView.swift in Sources */,
 				D98CE09E27DDE60C69E81E86 /* Shift.swift in Sources */,
 				FED0913D8BD596B6076699B2 /* ShiftCard.swift in Sources */,
+				200B1DC7A0FE639DBD12B4A4 /* ShiftRunner.swift in Sources */,
+				182813827F4BDFDDFDB72C45 /* Theme.swift in Sources */,
 				5D72CEDEE685C39568C12693 /* TimeOffEntry.swift in Sources */,
 				7899E56AD5C6CA74AEF5E5A0 /* TimeOffManager.swift in Sources */,
 				4566189371A820C4171E3B19 /* TimeOffRequest.swift in Sources */,
@@ -320,15 +328,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = ScheduleHQ/ScheduleHQ.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C4TP727P3K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
-				INFOPLIST_KEY_CFBundleDisplayName = ScheduleHQ;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -469,15 +475,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = ScheduleHQ/ScheduleHQ.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S4LN25J73K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
-				INFOPLIST_KEY_CFBundleDisplayName = ScheduleHQ;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

@@ -127,28 +127,72 @@ final class AuthManager: ObservableObject {
         do {
             // Fetch app user document
             let userDoc = try await db.collection("users").document(uid).getDocument()
-            guard let appUser = try? userDoc.data(as: AppUser.self) else {
+            
+            guard userDoc.exists else {
+                print("❌ User document does not exist for uid: \(uid)")
                 alertManager.showError("Account Error", message: "Your account is not properly configured. Please contact your manager.")
                 try? signOut()
                 return
             }
             
+            print("📄 User document data: \(userDoc.data() ?? [:])")
+            
+            guard let appUser = try? userDoc.data(as: AppUser.self) else {
+                print("❌ Failed to decode AppUser from document")
+                alertManager.showError("Account Error", message: "Your account is not properly configured. Please contact your manager.")
+                try? signOut()
+                return
+            }
+            
+            print("✅ AppUser loaded: managerUid=\(appUser.managerUid), employeeId=\(appUser.employeeId)")
+            
             self.appUser = appUser
             self.managerUid = appUser.managerUid
             
             // Fetch employee details
+            let employeePath = "managers/\(appUser.managerUid)/employees/\(appUser.employeeId)"
+            print("📍 Fetching employee from: \(employeePath)")
+            
             let employeeDoc = try await db.collection("managers")
                 .document(appUser.managerUid)
                 .collection("employees")
                 .document(String(appUser.employeeId))
                 .getDocument()
             
-            if let employee = try? employeeDoc.data(as: Employee.self) {
-                self.employee = employee
+            if employeeDoc.exists {
+                print("📄 Employee document data: \(employeeDoc.data() ?? [:])")
+                do {
+                    let employee = try employeeDoc.data(as: Employee.self)
+                    self.employee = employee
+                    print("✅ Employee loaded: \(employee.name)")
+                } catch {
+                    print("⚠️ Failed to decode Employee: \(error)")
+                    // Try manual decode as fallback
+                    if let data = employeeDoc.data() {
+                        let name = data["name"] as? String ?? "Unknown"
+                        let jobCode = data["jobCode"] as? String ?? ""
+                        let email = data["email"] as? String
+                        let uid = data["uid"] as? String
+                        let employee = Employee(
+                            documentId: employeeDoc.documentID,
+                            id: data["id"] as? Int,
+                            name: name,
+                            jobCode: jobCode,
+                            email: email,
+                            uid: uid,
+                            vacationWeeksAllowed: data["vacationWeeksAllowed"] as? Int ?? 0,
+                            vacationWeeksUsed: data["vacationWeeksUsed"] as? Int ?? 0
+                        )
+                        self.employee = employee
+                        print("✅ Employee loaded (manual): \(employee.name)")
+                    }
+                }
+            } else {
+                print("⚠️ Employee document not found at: \(employeePath)")
             }
         } catch {
-            alertManager.showError("Data Error", message: "Failed to load your profile. Please try again.")
-            print("Error fetching user data: \(error)")
+            alertManager.showError("Data Error", message: "Failed to load your profile: \(error.localizedDescription)")
+            print("❌ Error fetching user data: \(error)")
         }
     }
     

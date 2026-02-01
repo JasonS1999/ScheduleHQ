@@ -137,7 +137,8 @@ struct TimeOffRequestSheet: View {
     // MARK: - Submit
     
     private func submitRequest() {
-        guard let employee = authManager.employee else { return }
+        guard let employee = authManager.employee,
+              let employeeId = employee.id ?? authManager.employeeLocalId else { return }
         
         isSubmitting = true
         
@@ -146,7 +147,7 @@ struct TimeOffRequestSheet: View {
         
         Task {
             await offlineQueueManager.submitOrQueue(
-                employeeId: employee.id,
+                employeeId: employeeId,
                 employeeEmail: employee.email ?? "",
                 employeeName: employee.name,
                 date: selectedDate,

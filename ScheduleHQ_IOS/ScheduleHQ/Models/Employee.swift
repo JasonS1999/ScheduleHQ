@@ -4,7 +4,7 @@ import FirebaseFirestore
 /// Represents an employee in the scheduling system
 struct Employee: Codable, Identifiable, Equatable {
     @DocumentID var documentId: String?
-    let id: Int
+    let id: Int?
     let name: String
     let jobCode: String
     let email: String?
@@ -42,8 +42,8 @@ struct Employee: Codable, Identifiable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         documentId = try container.decodeIfPresent(String.self, forKey: .documentId)
-        id = try container.decode(Int.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
+        id = try container.decodeIfPresent(Int.self, forKey: .id)
+        name = (try? container.decode(String.self, forKey: .name)) ?? "Unknown"
         jobCode = try container.decodeIfPresent(String.self, forKey: .jobCode) ?? ""
         email = try container.decodeIfPresent(String.self, forKey: .email)
         uid = try container.decodeIfPresent(String.self, forKey: .uid)
@@ -53,7 +53,7 @@ struct Employee: Codable, Identifiable, Equatable {
     
     init(
         documentId: String? = nil,
-        id: Int,
+        id: Int? = nil,
         name: String,
         jobCode: String = "",
         email: String? = nil,

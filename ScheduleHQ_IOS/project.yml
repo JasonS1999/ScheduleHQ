@@ -34,6 +34,7 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         SWIFT_VERSION: "5.9"
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: S4LN25J73K
         ENABLE_PREVIEWS: YES
     dependencies:
       - package: FirebaseAuth
@@ -42,10 +43,6 @@ targets:
         product: FirebaseFirestore
       - package: FirebaseAuth
         product: FirebaseMessaging
-    entitlements:
-      path: ScheduleHQ/ScheduleHQ.entitlements
-      properties:
-        aps-environment: development
 
 schemes:
   ScheduleHQ:
