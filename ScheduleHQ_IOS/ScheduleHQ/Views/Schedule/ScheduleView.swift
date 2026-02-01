@@ -173,30 +173,26 @@ struct ScheduleView: View {
     
     private var scheduleList: some View {
         ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+            LazyVStack(spacing: AppTheme.Spacing.md) {
                 // Week summary card at the top
                 weekSummaryCard
                     .padding(.horizontal, AppTheme.Spacing.lg)
                     .padding(.top, AppTheme.Spacing.sm)
-                    .padding(.bottom, AppTheme.Spacing.md)
                 
+                // Combined day cards - date + shift info in one card
                 ForEach(scheduleManager.shiftsByDate, id: \.date) { dayData in
                     let runnerInfo = scheduleManager.isCurrentUserRunnerForDate(dayData.date)
                     let dailyNote = scheduleManager.getScheduleNote(forDate: dayData.date)
                     
-                    Section {
-                        dayContent(for: dayData, isRunner: runnerInfo.isRunner, runnerShiftType: runnerInfo.shiftType)
-                    } header: {
-                        DateHeader(
-                            date: dayData.date,
-                            isToday: dayData.date.isToday,
-                            shift: dayData.shifts.first,
-                            hasTimeOff: !dayData.timeOff.isEmpty,
-                            dailyNote: dailyNote
-                        )
-                        .padding(.horizontal, AppTheme.Spacing.lg)
-                        .background(.ultraThinMaterial)
-                    }
+                    CombinedDayCard(
+                        date: dayData.date,
+                        shifts: dayData.shifts,
+                        timeOff: dayData.timeOff,
+                        isRunner: runnerInfo.isRunner,
+                        runnerShiftType: runnerInfo.shiftType,
+                        dailyNote: dailyNote
+                    )
+                    .padding(.horizontal, AppTheme.Spacing.lg)
                 }
             }
             .padding(.bottom, AppTheme.Spacing.xxl)

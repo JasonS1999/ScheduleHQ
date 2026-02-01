@@ -1,5 +1,198 @@
 import SwiftUI
 
+/// Combined day card - shows date box on left, shift info on right in one compact card
+struct CombinedDayCard: View {
+    let date: Date
+    let shifts: [Shift]
+    let timeOff: [TimeOffEntry]
+    var isRunner: Bool = false
+    var runnerShiftType: String? = nil
+    var dailyNote: String? = nil
+    
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var shift: Shift? { shifts.first }
+    private var isToday: Bool { date.isToday }
+    
+    private var shiftType: ShiftTimeType {
+        shift?.shiftTimeType ?? .off
+    }
+    
+    private var accentGradient: LinearGradient {
+        if isRunner {
+            return LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EA580C")], startPoint: .top, endPoint: .bottom)
+        }
+        return shiftType.gradient
+    }
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // Left accent bar
+            accentGradient
+                .frame(width: 4)
+                .clipShape(RoundedRectangle(cornerRadius: 2))
+            
+            HStack(spacing: AppTheme.Spacing.md) {
+                // Date box on left
+                dateBox
+                
+                // Shift info on right
+                VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
+                    // Top row: badges and duration
+                    HStack(alignment: .center) {
+                        // Show appropriate badge
+                        if isRunner {
+                            RunnerIndicatorBadge(shiftType: runnerShiftType)
+                        } else if shift?.isOff == true {
+                            DayOffBadge()
+                        } else if !timeOff.isEmpty {
+                            TimeOffBadgeCompact()
+                        }
+                        
+                        Spacer()
+                        
+                        // Duration for working shifts
+                        if let shift = shift, !shift.isOff {
+                            Text(shift.formattedDuration)
+                                .font(AppTheme.Typography.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(AppTheme.Colors.textSecondary)
+                                .padding(.horizontal, AppTheme.Spacing.sm)
+                                .padding(.vertical, AppTheme.Spacing.xs)
+                                .background(
+                                    Capsule()
+                                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+                                )
+                        }
+                    }
+                    
+                    // Shift time or day off message
+                    if let shift = shift {
+                        if shift.isOff {
+                            HStack(spacing: AppTheme.Spacing.sm) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(AppTheme.Colors.success)
+                                    .font(.system(size: 14))
+                                
+                                Text("Enjoy your day off!")
+                                    .font(AppTheme.Typography.subheadline)
+                                    .foregroundStyle(AppTheme.Colors.textSecondary)
+                            }
+                        } else {
+                            HStack(spacing: AppTheme.Spacing.sm) {
+                                Image(systemName: "clock.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(shiftType.color)
+                                
+                                Text(shift.formattedTimeRange)
+                                    .font(AppTheme.Typography.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(AppTheme.Colors.textPrimary)
+                            }
+                        }
+                    } else if !timeOff.isEmpty {
+                        // Time off entry
+                        if let entry = timeOff.first {
+                            Text(entry.timeOffType.rawValue)
+                                .font(AppTheme.Typography.subheadline)
+                                .foregroundStyle(AppTheme.Colors.textSecondary)
+                        }
+                    } else {
+                        // No shift scheduled
+                        Text("No shift scheduled")
+                            .font(AppTheme.Typography.subheadline)
+                            .foregroundStyle(AppTheme.Colors.textTertiary)
+                    }
+                    
+                    // Daily note if exists
+                    if let note = dailyNote, !note.isEmpty {
+                        HStack(spacing: AppTheme.Spacing.xs) {
+                            Image(systemName: "note.text")
+                                .font(.system(size: 10))
+                            Text(note)
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(AppTheme.Colors.textSecondary)
+                    }
+                    
+                    // Shift notes
+                    if let notes = shift?.notes, !notes.isEmpty {
+                        HStack(alignment: .top, spacing: AppTheme.Spacing.xs) {
+                            Image(systemName: "text.alignleft")
+                                .font(.system(size: 10))
+                            Text(notes)
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                        }
+                        .foregroundStyle(AppTheme.Colors.textTertiary)
+                    }
+                }
+                .padding(.vertical, AppTheme.Spacing.md)
+                .padding(.trailing, AppTheme.Spacing.md)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.large)
+                .fill(AppTheme.Colors.cardBackground)
+                .shadow(
+                    color: AppTheme.Shadows.card.color,
+                    radius: AppTheme.Shadows.card.radius,
+                    x: AppTheme.Shadows.card.x,
+                    y: AppTheme.Shadows.card.y
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.large)
+                .strokeBorder(
+                    isToday ? AppTheme.Colors.primaryGradientStart.opacity(0.5) : (colorScheme == .dark ? Color.white.opacity(0.08) : Color.clear),
+                    lineWidth: isToday ? 2 : 1
+                )
+        )
+    }
+    
+    private var dateBox: some View {
+        VStack(spacing: 2) {
+            Text(date.dayAbbreviation.uppercased())
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(0.5)
+                .foregroundStyle(isToday ? .white : AppTheme.Colors.textSecondary)
+            
+            Text(date.dayNumber)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(isToday ? .white : AppTheme.Colors.textPrimary)
+        }
+        .frame(width: 52, height: 58)
+        .background(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
+                .fill(isToday ? AnyShapeStyle(AppTheme.Gradients.today) : AnyShapeStyle(colorScheme == .dark ? Color.white.opacity(0.08) : Color(.systemGray6)))
+        )
+        .padding(.leading, AppTheme.Spacing.md)
+        .padding(.vertical, AppTheme.Spacing.sm)
+    }
+}
+
+/// Compact time off badge for combined card
+struct TimeOffBadgeCompact: View {
+    var body: some View {
+        HStack(spacing: AppTheme.Spacing.xs) {
+            Image(systemName: "calendar.badge.clock")
+                .font(.system(size: 10, weight: .semibold))
+            
+            Text("TIME OFF")
+                .font(.system(size: 9, weight: .black, design: .rounded))
+                .tracking(0.5)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, AppTheme.Spacing.sm)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(AppTheme.Colors.pto)
+        )
+    }
+}
+
 /// Modern card view displaying a shift's details with shift type indicator
 struct ShiftCard: View {
     let shift: Shift
@@ -439,6 +632,66 @@ struct ModernTimeOffTypeBadge: View {
             timeOffType: .sick,
             hours: 4
         ))
+    }
+    .padding()
+    .background(Color(.systemGroupedBackground))
+}
+
+#Preview("Combined Day Card") {
+    VStack(spacing: 16) {
+        // Regular shift
+        CombinedDayCard(
+            date: Date(),
+            shifts: [Shift(
+                id: 1,
+                startTime: Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: Date())!,
+                endTime: Calendar.current.date(bySettingHour: 19, minute: 0, second: 0, of: Date())!,
+                notes: "Training session"
+            )],
+            timeOff: [],
+            isRunner: false,
+            dailyNote: "Team meeting at 2pm"
+        )
+        
+        // Runner shift
+        CombinedDayCard(
+            date: Calendar.current.date(byAdding: .day, value: 1, to: Date())!,
+            shifts: [Shift(
+                id: 2,
+                startTime: Calendar.current.date(bySettingHour: 6, minute: 0, second: 0, of: Date())!,
+                endTime: Calendar.current.date(bySettingHour: 14, minute: 0, second: 0, of: Date())!
+            )],
+            timeOff: [],
+            isRunner: true,
+            runnerShiftType: "AM",
+            dailyNote: nil
+        )
+        
+        // Day off
+        CombinedDayCard(
+            date: Calendar.current.date(byAdding: .day, value: 2, to: Date())!,
+            shifts: [Shift(
+                id: 3,
+                startTime: Date(),
+                endTime: Date(),
+                label: "OFF"
+            )],
+            timeOff: [],
+            isRunner: false
+        )
+        
+        // Time off
+        CombinedDayCard(
+            date: Calendar.current.date(byAdding: .day, value: 3, to: Date())!,
+            shifts: [],
+            timeOff: [TimeOffEntry(
+                employeeId: 1,
+                date: Date(),
+                timeOffType: .vacation,
+                hours: 8
+            )],
+            isRunner: false
+        )
     }
     .padding()
     .background(Color(.systemGroupedBackground))
