@@ -2,7 +2,7 @@ name: schedulehq_desktop
 description: "ScheduleHQ Desktop - Workforce scheduling and PTO management app."
 publish_to: 'none'
 
-version: 2.6.2+1
+version: 2.6.3+1
 
 environment:
   sdk: ^3.10.7
@@ -65,8 +65,11 @@ msix_config:
   publisher_display_name: JasonSjogren
   identity_name: JasonSjogren.ScheduleHQ
   publisher: CN=993C831D-9B99-4BD8-AA74-403CC55DF8EF
-  msix_version: 2.6.2.0
-  logo_path: windows/runner/resources/app_icon.ico
+  msix_version: 2.6.3.0
+  logo_path: windows/runner/resources/app_icon_256.png
+  square_150x150_logo_path: windows/runner/resources/app_icon_256.png
+  square_44x44_logo_path: windows/runner/resources/app_icon_48.png
   store: true
   capabilities: internetClient
   languages: en-us
+  icons_background_color: transparent

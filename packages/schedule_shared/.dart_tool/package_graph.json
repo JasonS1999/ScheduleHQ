@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "schedule_shared",
-      "version": "1.0.0",
+      "version": "2.5.1",
       "dependencies": [
         "cloud_firestore"
       ],
