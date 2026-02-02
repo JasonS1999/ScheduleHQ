@@ -147,7 +147,6 @@ final class ScheduleManager: ObservableObject {
             }
             .sorted { $0.shift.startTime < $1.shift.startTime }
             
-            print("✅ fetchTeamShiftsForDate: Found \(teamShifts.count) working shifts for \(dateStr)")
             return teamShifts
             
         } catch {
