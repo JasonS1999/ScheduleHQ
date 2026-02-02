@@ -41,19 +41,19 @@ struct CombinedDayCard: View {
                 VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
                     // Top row: badges and duration
                     HStack(alignment: .center) {
-                        // Show appropriate badge
+                        // Show appropriate badge on left (runner or time off, but NOT day off)
                         if isRunner {
                             RunnerIndicatorBadge(shiftType: runnerShiftType)
-                        } else if shift?.isOff == true {
-                            DayOffBadge()
                         } else if !timeOff.isEmpty {
                             TimeOffBadgeCompact()
                         }
                         
                         Spacer()
                         
-                        // Duration for working shifts
-                        if let shift = shift, !shift.isOff {
+                        // Right side: Day off badge OR duration for working shifts
+                        if shift?.isOff == true {
+                            DayOffBadge()
+                        } else if let shift = shift, !shift.isOff {
                             Text(shift.formattedDuration)
                                 .font(AppTheme.Typography.caption)
                                 .fontWeight(.semibold)
