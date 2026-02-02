@@ -81,6 +81,73 @@ final class ScheduleManager: ObservableObject {
         }
     }
     
+    // MARK: - Team Schedule
+    
+    /// Represents a shift with the employee's name for team schedule display
+    struct TeamShift: Identifiable {
+        let id = UUID()
+        let employeeName: String
+        let shift: Shift
+    }
+    
+    /// Fetch all working shifts for a specific date across all employees
+    /// - Parameter date: The date to fetch shifts for
+    /// - Returns: Array of TeamShift sorted by start time, or empty if no one is working
+    func fetchTeamShiftsForDate(_ date: Date) async -> [TeamShift] {
+        guard let managerUid = authManager.managerUid else {
+            print("❌ fetchTeamShiftsForDate: No manager UID")
+            return []
+        }
+        
+        // Ensure employee cache is loaded
+        await EmployeeCache.shared.loadEmployees()
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: date)
+        
+        // Month formatter for collection path
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "yyyy-MM"
+        let monthStr = monthFormatter.string(from: date)
+        
+        do {
+            let snapshot = try await db.collection("managers")
+                .document(managerUid)
+                .collection("schedules")
+                .document(monthStr)
+                .collection("shifts")
+                .whereField("date", isEqualTo: dateStr)
+                .getDocuments()
+            
+            let teamShifts = snapshot.documents.compactMap { doc -> TeamShift? in
+                guard let shift = try? doc.data(as: Shift.self) else { return nil }
+                
+                // Skip "off" shifts
+                if shift.isOff { return nil }
+                
+                // Get employee name from cache
+                let employeeName: String
+                if let uid = shift.employeeUid,
+                   let name = EmployeeCache.shared.name(for: uid) {
+                    employeeName = name
+                } else {
+                    employeeName = "Unknown Employee"
+                }
+                
+                return TeamShift(employeeName: employeeName, shift: shift)
+            }
+            .sorted { $0.shift.startTime < $1.shift.startTime }
+            
+            print("✅ fetchTeamShiftsForDate: Found \(teamShifts.count) working shifts for \(dateStr)")
+            return teamShifts
+            
+        } catch {
+            print("❌ fetchTeamShiftsForDate: Error fetching shifts: \(error.localizedDescription)")
+            return []
+        }
+    }
+    
     // MARK: - Runner and Notes Helpers
     
     /// Check if the current user is a runner for a given date and shift type
