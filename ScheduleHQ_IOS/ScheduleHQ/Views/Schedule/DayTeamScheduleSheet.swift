@@ -38,7 +38,8 @@ struct DayTeamScheduleSheet: View {
                         ForEach(teamShifts) { teamShift in
                             TeamShiftRow(
                                 employeeName: teamShift.employeeName,
-                                shift: teamShift.shift
+                                shift: teamShift.shift,
+                                runnerShiftType: teamShift.runnerShiftType
                             )
                         }
                     }
@@ -70,6 +71,7 @@ struct DayTeamScheduleSheet: View {
 struct TeamShiftRow: View {
     let employeeName: String
     let shift: Shift
+    let runnerShiftType: String?
     
     @Environment(\.colorScheme) private var colorScheme
     
@@ -77,35 +79,56 @@ struct TeamShiftRow: View {
         shift.shiftTimeType
     }
     
+    /// Format runner shift type for display (e.g., "lunch" -> "RUNNER (LUNCH)")
+    private var runnerBadgeText: String? {
+        guard let type = runnerShiftType else { return nil }
+        return "RUNNER (\(type.uppercased()))"
+    }
+    
     var body: some View {
         HStack(spacing: AppTheme.Spacing.md) {
-            // Shift type indicator
-            shiftType.gradient
+            // Shift type indicator - use orange for runners
+            (runnerShiftType != nil ? LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EA580C")], startPoint: .top, endPoint: .bottom) : shiftType.gradient)
                 .frame(width: 4, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 2))
             
             // Employee avatar
             ZStack {
                 Circle()
-                    .fill(shiftType.color.opacity(0.15))
+                    .fill((runnerShiftType != nil ? Color(hex: "F97316") : shiftType.color).opacity(0.15))
                 
                 Text(employeeName.prefix(1).uppercased())
                     .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(shiftType.color)
+                    .foregroundStyle(runnerShiftType != nil ? Color(hex: "F97316") : shiftType.color)
             }
             .frame(width: 36, height: 36)
             
             // Name and time
             VStack(alignment: .leading, spacing: 2) {
-                Text(employeeName)
-                    .font(AppTheme.Typography.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(AppTheme.Colors.textPrimary)
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Text(employeeName)
+                        .font(AppTheme.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppTheme.Colors.textPrimary)
+                    
+                    // Runner badge
+                    if let badgeText = runnerBadgeText {
+                        Text(badgeText)
+                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EA580C")], startPoint: .leading, endPoint: .trailing))
+                            )
+                    }
+                }
                 
                 HStack(spacing: AppTheme.Spacing.xs) {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 10))
-                        .foregroundStyle(shiftType.color)
+                        .foregroundStyle(runnerShiftType != nil ? Color(hex: "F97316") : shiftType.color)
                     
                     Text(shift.formattedTimeRange)
                         .font(AppTheme.Typography.caption)
@@ -161,7 +184,8 @@ struct TeamShiftRow: View {
                     dateString: "2026-02-01",
                     label: nil,
                     notes: nil
-                )
+                ),
+                runnerShiftType: "lunch"
             ),
             ScheduleManager.TeamShift(
                 employeeName: "Jane Doe",
@@ -175,7 +199,8 @@ struct TeamShiftRow: View {
                     dateString: "2026-02-01",
                     label: nil,
                     notes: nil
-                )
+                ),
+                runnerShiftType: nil
             )
         ]
     )

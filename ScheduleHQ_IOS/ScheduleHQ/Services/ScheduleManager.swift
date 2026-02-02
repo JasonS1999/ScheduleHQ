@@ -88,10 +88,12 @@ final class ScheduleManager: ObservableObject {
         let id = UUID()
         let employeeName: String
         let shift: Shift
+        let runnerShiftType: String?  // e.g., "lunch", "dinner" - nil if not a runner
         
-        init(employeeName: String, shift: Shift) {
+        init(employeeName: String, shift: Shift, runnerShiftType: String? = nil) {
             self.employeeName = employeeName
             self.shift = shift
+            self.runnerShiftType = runnerShiftType
         }
     }
     
@@ -117,7 +119,8 @@ final class ScheduleManager: ObservableObject {
         let monthStr = monthFormatter.string(from: date)
         
         do {
-            let snapshot = try await db.collection("managers")
+            // Fetch shifts for the date
+            let shiftsSnapshot = try await db.collection("managers")
                 .document(managerUid)
                 .collection("schedules")
                 .document(monthStr)
@@ -125,7 +128,22 @@ final class ScheduleManager: ObservableObject {
                 .whereField("date", isEqualTo: dateStr)
                 .getDocuments()
             
-            let teamShifts = snapshot.documents.compactMap { doc -> TeamShift? in
+            // Fetch runners for the date
+            let runnersSnapshot = try await db.collection("managers")
+                .document(managerUid)
+                .collection("shiftRunners")
+                .whereField("date", isEqualTo: dateStr)
+                .getDocuments()
+            
+            // Build a map of runner name -> shift type
+            var runnersByName: [String: String] = [:]
+            for doc in runnersSnapshot.documents {
+                if let runner = try? doc.data(as: ShiftRunner.self) {
+                    runnersByName[runner.runnerName.lowercased()] = runner.shiftType
+                }
+            }
+            
+            let teamShifts = shiftsSnapshot.documents.compactMap { doc -> TeamShift? in
                 guard let shift = try? doc.data(as: Shift.self) else { return nil }
                 
                 // Skip "off" shifts
@@ -143,7 +161,10 @@ final class ScheduleManager: ObservableObject {
                     employeeName = "Unknown Employee"
                 }
                 
-                return TeamShift(employeeName: employeeName, shift: shift)
+                // Check if this employee is a runner
+                let runnerShiftType = runnersByName[employeeName.lowercased()]
+                
+                return TeamShift(employeeName: employeeName, shift: shift, runnerShiftType: runnerShiftType)
             }
             .sorted { $0.shift.startTime < $1.shift.startTime }
             
