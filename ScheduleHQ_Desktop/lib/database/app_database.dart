@@ -386,7 +386,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 27,
+      version: 28,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -822,6 +822,17 @@ class AppDatabase {
             ON pnl_line_items(periodId)
           ''');
           log('Added P&L tables', name: 'AppDatabase');
+        }
+        if (oldVersion < 28) {
+          // Add percentage column to pnl_line_items if it doesn't exist
+          // This handles the case where P&L tables were created in v27 without the percentage column
+          try {
+            await db.execute('ALTER TABLE pnl_line_items ADD COLUMN percentage REAL NOT NULL DEFAULT 0.0');
+            log('Added percentage column to pnl_line_items', name: 'AppDatabase');
+          } catch (e) {
+            // Column may already exist if table was created fresh with v28 schema
+            log('percentage column already exists or table not found: $e', name: 'AppDatabase');
+          }
         }
       },
     );
