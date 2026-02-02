@@ -260,6 +260,37 @@ Future<void> _onCreate(Database db, int version) async {
     )
   ''');
 
+  // P&L Tables
+  await db.execute('''
+    CREATE TABLE pnl_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      month INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      avgWage REAL NOT NULL DEFAULT 0.0,
+      UNIQUE(month, year)
+    )
+  ''');
+
+  await db.execute('''
+    CREATE TABLE pnl_line_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      periodId INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      value REAL NOT NULL DEFAULT 0.0,
+      comment TEXT NOT NULL DEFAULT '',
+      isCalculated INTEGER NOT NULL DEFAULT 0,
+      isUserAdded INTEGER NOT NULL DEFAULT 0,
+      sortOrder INTEGER NOT NULL,
+      category TEXT NOT NULL,
+      FOREIGN KEY(periodId) REFERENCES pnl_periods(id) ON DELETE CASCADE
+    )
+  ''');
+
+  await db.execute('''
+    CREATE INDEX IF NOT EXISTS idx_pnl_line_items_period 
+    ON pnl_line_items(periodId)
+  ''');
+
   log("✅ Schema created", name: 'AppDatabase');
 } 
 
@@ -354,7 +385,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 26,
+      version: 27,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -756,6 +787,39 @@ class AppDatabase {
           } catch (e) {
             log('Error checking/adding endDate column: $e', name: 'AppDatabase');
           }
+        }
+        if (oldVersion < 27) {
+          // Add P&L tables
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS pnl_periods (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              month INTEGER NOT NULL,
+              year INTEGER NOT NULL,
+              avgWage REAL NOT NULL DEFAULT 0.0,
+              UNIQUE(month, year)
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS pnl_line_items (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              periodId INTEGER NOT NULL,
+              label TEXT NOT NULL,
+              value REAL NOT NULL DEFAULT 0.0,
+              comment TEXT NOT NULL DEFAULT '',
+              isCalculated INTEGER NOT NULL DEFAULT 0,
+              isUserAdded INTEGER NOT NULL DEFAULT 0,
+              sortOrder INTEGER NOT NULL,
+              category TEXT NOT NULL,
+              FOREIGN KEY(periodId) REFERENCES pnl_periods(id) ON DELETE CASCADE
+            )
+          ''');
+
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_pnl_line_items_period 
+            ON pnl_line_items(periodId)
+          ''');
+          log('Added P&L tables', name: 'AppDatabase');
         }
       },
     );
