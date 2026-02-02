@@ -249,20 +249,47 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   Future<void> _selectPeriod() async {
-    final result = await showDialog<PnlPeriod>(
+    final result = await showDialog<PnlPeriod?>(
       context: context,
       builder: (context) => _PeriodSelectorDialog(
         periods: _allPeriods,
         currentPeriod: _currentPeriod,
         onCreateNew: _createNewPeriod,
+        onDelete: _deletePeriod,
       ),
     );
+
+    // Reload periods list in case any were deleted
+    _allPeriods = await _dao.getAllPeriods();
 
     if (result != null && result.id != _currentPeriod?.id) {
       setState(() => _isLoading = true);
       _currentPeriod = result;
       await _loadPeriodData();
       setState(() => _isLoading = false);
+    } else if (result == null && _currentPeriod != null) {
+      // Current period may have been deleted, check if it still exists
+      final stillExists = _allPeriods.any((p) => p.id == _currentPeriod!.id);
+      if (!stillExists) {
+        // Load most recent period or create new one
+        setState(() => _isLoading = true);
+        if (_allPeriods.isNotEmpty) {
+          _currentPeriod = _allPeriods.first;
+        } else {
+          final now = DateTime.now();
+          _currentPeriod = await _dao.getOrCreatePeriod(now.month, now.year);
+          _allPeriods = await _dao.getAllPeriods();
+        }
+        await _loadPeriodData();
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _deletePeriod(PnlPeriod period) async {
+    if (period.id != null) {
+      await _dao.deletePeriod(period.id!);
+      _allPeriods = await _dao.getAllPeriods();
     }
   }
 
@@ -740,11 +767,13 @@ class _PeriodSelectorDialog extends StatefulWidget {
   final List<PnlPeriod> periods;
   final PnlPeriod? currentPeriod;
   final Future<PnlPeriod?> Function(int month, int year) onCreateNew;
+  final Future<void> Function(PnlPeriod period) onDelete;
 
   const _PeriodSelectorDialog({
     required this.periods,
     required this.currentPeriod,
     required this.onCreateNew,
+    required this.onDelete,
   });
 
   @override
@@ -754,6 +783,13 @@ class _PeriodSelectorDialog extends StatefulWidget {
 class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
   int _newMonth = DateTime.now().month;
   int _newYear = DateTime.now().year;
+  late List<PnlPeriod> _periods;
+
+  @override
+  void initState() {
+    super.initState();
+    _periods = List.from(widget.periods);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -766,21 +802,26 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Existing periods
-            if (widget.periods.isNotEmpty) ...[
+            if (_periods.isNotEmpty) ...[
               const Text('Existing Periods:', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               SizedBox(
                 height: 200,
                 child: ListView.builder(
                   shrinkWrap: true,
-                  itemCount: widget.periods.length,
+                  itemCount: _periods.length,
                   itemBuilder: (context, index) {
-                    final period = widget.periods[index];
+                    final period = _periods[index];
                     final isSelected = period.id == widget.currentPeriod?.id;
                     return ListTile(
                       title: Text(period.periodDisplay),
                       selected: isSelected,
                       onTap: () => Navigator.pop(context, period),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        tooltip: 'Delete period',
+                        onPressed: () => _confirmDelete(period),
+                      ),
                     );
                   },
                 ),
@@ -853,6 +894,39 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
         ),
       ],
     );
+  }
+
+  Future<void> _confirmDelete(PnlPeriod period) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Period'),
+        content: Text('Are you sure you want to delete ${period.periodDisplay}? This will delete all P&L data for this period.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await widget.onDelete(period);
+      setState(() {
+        _periods.removeWhere((p) => p.id == period.id);
+      });
+      
+      // If the deleted period was the current period, close dialog with null
+      if (period.id == widget.currentPeriod?.id && mounted) {
+        Navigator.pop(context, null);
+      }
+    }
   }
 }
 
