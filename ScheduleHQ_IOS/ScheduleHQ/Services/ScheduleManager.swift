@@ -88,6 +88,11 @@ final class ScheduleManager: ObservableObject {
         let id = UUID()
         let employeeName: String
         let shift: Shift
+        
+        init(employeeName: String, shift: Shift) {
+            self.employeeName = employeeName
+            self.shift = shift
+        }
     }
     
     /// Fetch all working shifts for a specific date across all employees
