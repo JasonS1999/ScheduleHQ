@@ -346,10 +346,10 @@ class _PnlPageState extends State<PnlPage> {
       return isDark ? Colors.cyan.shade900 : Colors.cyan.shade100;
     }
     if (item.isCalculated) {
-      return isDark ? Colors.yellow.shade900.withOpacity(0.3) : Colors.yellow.shade100;
+      return isDark ? Colors.yellow.shade900.withValues(alpha: 0.3) : Colors.yellow.shade100;
     }
     if (item.category == PnlCategory.sales && item.label != 'SALES (ALL NET)') {
-      return isDark ? Colors.green.shade900.withOpacity(0.3) : Colors.green.shade50;
+      return isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50;
     }
     return Colors.transparent;
   }
@@ -730,7 +730,7 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _newMonth,
+                    initialValue: _newMonth,
                     decoration: const InputDecoration(
                       labelText: 'Month',
                       border: OutlineInputBorder(),
@@ -750,7 +750,7 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<int>(
-                    value: _newYear,
+                    initialValue: _newYear,
                     decoration: const InputDecoration(
                       labelText: 'Year',
                       border: OutlineInputBorder(),
@@ -839,7 +839,7 @@ class _CopyFromPreviousDialogState extends State<_CopyFromPreviousDialog> {
           children: [
             // Period selector
             DropdownButtonFormField<PnlPeriod>(
-              value: _selectedPeriod,
+              initialValue: _selectedPeriod,
               decoration: const InputDecoration(
                 labelText: 'Copy from',
                 border: OutlineInputBorder(),
