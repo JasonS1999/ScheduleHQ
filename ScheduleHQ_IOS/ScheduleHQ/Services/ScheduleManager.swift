@@ -246,7 +246,7 @@ final class ScheduleManager: ObservableObject {
         
         // Query shifts from schedules/{YYYY-MM}/shifts collection
         fetchShiftsFromSchedules(months: months, weekStartStr: weekStartStr, weekEndStr: weekEndStr, 
-                                  currentUid: currentUid, isManager: isManager)
+                                  currentUid: currentUid)
         
         // Time off still comes from managers/{uid}/timeOff
         let timeOffRef = db.collection("managers")
@@ -340,7 +340,7 @@ final class ScheduleManager: ObservableObject {
     
     /// Fetch shifts from managers/{managerUid}/schedules/{YYYY-MM}/shifts collection
     private func fetchShiftsFromSchedules(months: [String], weekStartStr: String, weekEndStr: String,
-                                          currentUid: String, isManager: Bool) {
+                                          currentUid: String) {
         guard let managerUid = authManager.managerUid else {
             self.shifts = []
             self.isLoading = false
@@ -357,7 +357,7 @@ final class ScheduleManager: ObservableObject {
         let basePath = db.collection("managers").document(managerUid).collection("schedules")
         let shiftsRef = basePath.document(firstMonth).collection("shifts")
         
-        shiftsListener = shiftsRef.addSnapshotListener { [weak self, weekStartStr, weekEndStr, currentUid, isManager, months, basePath] snapshot, error in
+        shiftsListener = shiftsRef.addSnapshotListener { [weak self, weekStartStr, weekEndStr, currentUid, months, basePath] snapshot, error in
             Task { @MainActor in
                 guard let self = self else { return }
                 self.isLoading = false
@@ -384,7 +384,7 @@ final class ScheduleManager: ObservableObject {
                     }
                 }
                 
-                // Filter by date range and optionally by employeeUid
+                // Filter by date range and by employeeUid (everyone sees only their own schedule)
                 let filteredShifts = allDocuments.compactMap { doc -> Shift? in
                     let data = doc.data()
                     
@@ -392,12 +392,10 @@ final class ScheduleManager: ObservableObject {
                     guard let dateStr = data["date"] as? String else { return nil }
                     guard dateStr >= weekStartStr && dateStr <= weekEndStr else { return nil }
                     
-                    // For employees, filter by their UID
-                    if !isManager {
-                        guard let shiftEmployeeUid = data["employeeUid"] as? String,
-                              shiftEmployeeUid == currentUid else {
-                            return nil
-                        }
+                    // Filter by current user's UID (everyone sees only their own schedule)
+                    guard let shiftEmployeeUid = data["employeeUid"] as? String,
+                          shiftEmployeeUid == currentUid else {
+                        return nil
                     }
                     
                     // Parse the shift
