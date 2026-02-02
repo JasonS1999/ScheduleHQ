@@ -8,6 +8,7 @@ struct CombinedDayCard: View {
     var isRunner: Bool = false
     var runnerShiftType: String? = nil
     var dailyNote: String? = nil
+    var onLongPress: ((Date) -> Void)? = nil
     
     @Environment(\.colorScheme) private var colorScheme
     
@@ -149,6 +150,12 @@ struct CombinedDayCard: View {
                     lineWidth: isToday ? 2 : 1
                 )
         )
+        .contentShape(Rectangle())
+        .onLongPressGesture(minimumDuration: 0.5) {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            onLongPress?(date)
+        }
     }
     
     private var dateBox: some View {
