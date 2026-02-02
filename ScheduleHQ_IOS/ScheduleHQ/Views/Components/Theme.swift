@@ -32,23 +32,23 @@ struct AppTheme {
         static let requestedOff = Color(hex: "6B7280")
         
         // Background colors (adapts to light/dark)
-        static let backgroundPrimary = Color(.systemBackground)
-        static let backgroundSecondary = Color(.secondarySystemBackground)
-        static let backgroundTertiary = Color(.tertiarySystemBackground)
-        static let backgroundGrouped = Color(.systemGroupedBackground)
+        static let backgroundPrimary = Color(uiColor: .systemBackground)
+        static let backgroundSecondary = Color(uiColor: .secondarySystemBackground)
+        static let backgroundTertiary = Color(uiColor: .tertiarySystemBackground)
+        static let backgroundGrouped = Color(uiColor: .systemGroupedBackground)
         
         // Card backgrounds
-        static let cardBackground = Color(.systemBackground)
-        static let cardBackgroundElevated = Color(.secondarySystemBackground)
+        static let cardBackground = Color(uiColor: .systemBackground)
+        static let cardBackgroundElevated = Color(uiColor: .secondarySystemBackground)
         
         // Text colors
-        static let textPrimary = Color(.label)
-        static let textSecondary = Color(.secondaryLabel)
-        static let textTertiary = Color(.tertiaryLabel)
+        static let textPrimary = Color(uiColor: .label)
+        static let textSecondary = Color(uiColor: .secondaryLabel)
+        static let textTertiary = Color(uiColor: .tertiaryLabel)
         
         // Border & Separator
-        static let border = Color(.separator)
-        static let borderLight = Color(.separator).opacity(0.5)
+        static let border = Color(uiColor: .separator)
+        static let borderLight = Color(uiColor: .separator).opacity(0.5)
     }
     
     // MARK: - Gradients
