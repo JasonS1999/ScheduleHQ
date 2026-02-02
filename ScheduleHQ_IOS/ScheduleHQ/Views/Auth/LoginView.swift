@@ -11,24 +11,29 @@ struct LoginView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 32) {
-                    // Logo and title
-                    headerSection
-                    
-                    // Login form
-                    formSection
-                    
-                    // Sign in button
-                    signInButton
-                    
-                    // Forgot password
-                    forgotPasswordButton
+            ZStack {
+                // Background gradient
+                AppBackgroundGradient()
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 32) {
+                        // Logo and title
+                        headerSection
+                        
+                        // Login form
+                        formSection
+                        
+                        // Sign in button
+                        signInButton
+                        
+                        // Forgot password
+                        forgotPasswordButton
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 60)
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 60)
             }
-            .background(Color(.systemGroupedBackground))
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showForgotPassword) {
                 ForgotPasswordSheet(email: email)
