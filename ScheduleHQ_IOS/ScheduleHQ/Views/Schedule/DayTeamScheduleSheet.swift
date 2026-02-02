@@ -123,7 +123,7 @@ struct TeamShiftRow: View {
             
             Spacer()
             
-            // Runner badge OR duration badge (not both)
+            // Runner badge (only shown for runners)
             if let badgeText = runnerBadgeText {
                 Text(badgeText)
                     .font(.system(size: 10, weight: .black, design: .rounded))
@@ -133,16 +133,6 @@ struct TeamShiftRow: View {
                     .background(
                         Capsule()
                             .fill(LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EA580C")], startPoint: .leading, endPoint: .trailing))
-                    )
-            } else {
-                Text(shift.formattedDuration)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(AppTheme.Colors.textSecondary)
-                    .padding(.horizontal, AppTheme.Spacing.sm)
-                    .padding(.vertical, AppTheme.Spacing.xs)
-                    .background(
-                        Capsule()
-                            .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
                     )
             }
         }
