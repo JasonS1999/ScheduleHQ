@@ -4,27 +4,36 @@ import SwiftUI
 struct TimeOffView: View {
     @State private var selectedTab = 0
     @State private var showNewRequestSheet = false
+    @State private var entryToEdit: TimeOffEntry?
+    @State private var entryToDelete: TimeOffEntry?
+    @State private var showDeleteConfirmation = false
     
     @ObservedObject private var timeOffManager = TimeOffManager.shared
     @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Segmented control
-                Picker("View", selection: $selectedTab) {
-                    Text("My Requests").tag(0)
-                    Text("Upcoming").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding()
+            ZStack {
+                // Background gradient
+                AppBackgroundGradient()
+                    .ignoresSafeArea()
                 
-                // Content
-                Group {
-                    if selectedTab == 0 {
-                        requestsListView
-                    } else {
-                        upcomingListView
+                VStack(spacing: 0) {
+                    // Segmented control
+                    Picker("View", selection: $selectedTab) {
+                        Text("My Requests").tag(0)
+                        Text("Upcoming").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding()
+                    
+                    // Content
+                    Group {
+                        if selectedTab == 0 {
+                            requestsListView
+                        } else {
+                            upcomingListView
+                        }
                     }
                 }
             }
@@ -41,6 +50,21 @@ struct TimeOffView: View {
             .sheet(isPresented: $showNewRequestSheet) {
                 TimeOffRequestSheet()
             }
+            .sheet(item: $entryToEdit) { entry in
+                TimeOffRequestSheet(editingEntry: entry)
+            }
+            .alert("Delete Request?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    if let entry = entryToDelete {
+                        deleteEntry(entry)
+                    }
+                }
+            } message: {
+                if let entry = entryToDelete {
+                    Text("Delete your \(entry.timeOffType.displayName) request for \(entry.formattedDate)?")
+                }
+            }
         }
     }
     
@@ -49,11 +73,11 @@ struct TimeOffView: View {
     private var requestsListView: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                // Queued requests section (offline)
+                // Queued entries section (offline)
                 if offlineQueueManager.hasQueuedRequests {
                     Section {
-                        ForEach(offlineQueueManager.queuedRequests) { request in
-                            TimeOffRequestCard(request: request)
+                        ForEach(offlineQueueManager.queuedRequests) { entry in
+                            TimeOffEntryCard(entry: entry, isQueued: true)
                         }
                     } header: {
                         HStack {
@@ -74,15 +98,17 @@ struct TimeOffView: View {
                 // Pending requests
                 if !timeOffManager.pendingRequests.isEmpty {
                     Section {
-                        ForEach(timeOffManager.pendingRequests) { request in
-                            TimeOffRequestCard(request: request)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        deleteRequest(request)
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
+                        ForEach(timeOffManager.pendingRequests) { entry in
+                            SwipeableTimeOffCard(
+                                entry: entry,
+                                canEdit: true,
+                                canDelete: true,
+                                onEdit: { entryToEdit = entry },
+                                onDelete: {
+                                    entryToDelete = entry
+                                    showDeleteConfirmation = true
                                 }
+                            )
                         }
                     } header: {
                         sectionHeader("Pending", count: timeOffManager.pendingRequests.count)
@@ -92,8 +118,14 @@ struct TimeOffView: View {
                 // Approved requests
                 if !timeOffManager.approvedRequests.isEmpty {
                     Section {
-                        ForEach(timeOffManager.approvedRequests) { request in
-                            TimeOffRequestCard(request: request)
+                        ForEach(timeOffManager.approvedRequests) { entry in
+                            SwipeableTimeOffCard(
+                                entry: entry,
+                                canEdit: false,
+                                canDelete: false,
+                                onEdit: { },
+                                onDelete: { }
+                            )
                         }
                     } header: {
                         sectionHeader("Approved", count: timeOffManager.approvedRequests.count)
@@ -103,8 +135,17 @@ struct TimeOffView: View {
                 // Denied requests
                 if !timeOffManager.deniedRequests.isEmpty {
                     Section {
-                        ForEach(timeOffManager.deniedRequests) { request in
-                            TimeOffRequestCard(request: request)
+                        ForEach(timeOffManager.deniedRequests) { entry in
+                            SwipeableTimeOffCard(
+                                entry: entry,
+                                canEdit: false,
+                                canDelete: true,
+                                onEdit: { },
+                                onDelete: {
+                                    entryToDelete = entry
+                                    showDeleteConfirmation = true
+                                }
+                            )
                         }
                     } header: {
                         sectionHeader("Denied", count: timeOffManager.deniedRequests.count)
@@ -126,7 +167,6 @@ struct TimeOffView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
     }
     
     // MARK: - Upcoming List
@@ -152,7 +192,6 @@ struct TimeOffView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
     }
     
     // MARK: - Helpers
@@ -171,9 +210,9 @@ struct TimeOffView: View {
         .padding(.bottom, 4)
     }
     
-    private func deleteRequest(_ request: TimeOffRequest) {
+    private func deleteEntry(_ entry: TimeOffEntry) {
         Task {
-            try? await timeOffManager.deleteRequest(request)
+            try? await timeOffManager.deleteTimeOff(entry)
         }
     }
 }
@@ -246,6 +285,115 @@ struct UpcomingTimeOffCard: View {
         let entryDate = calendar.startOfDay(for: entry.date)
         let components = calendar.dateComponents([.day], from: today, to: entryDate)
         return components.day
+    }
+}
+
+// MARK: - Swipeable Time Off Card
+
+struct SwipeableTimeOffCard: View {
+    let entry: TimeOffEntry
+    let canEdit: Bool
+    let canDelete: Bool
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    
+    @State private var offset: CGFloat = 0
+    @State private var isSwiped = false
+    
+    private let buttonWidth: CGFloat = 70
+    private var totalButtonWidth: CGFloat {
+        var width: CGFloat = 0
+        if canEdit { width += buttonWidth }
+        if canDelete { width += buttonWidth }
+        return width
+    }
+    
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            // Action buttons (revealed on swipe)
+            HStack(spacing: 0) {
+                if canEdit {
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            offset = 0
+                            isSwiped = false
+                        }
+                        onEdit()
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: "pencil")
+                                .font(.title2)
+                            Text("Edit")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: buttonWidth, height: 80)
+                        .background(Color.blue)
+                    }
+                }
+                
+                if canDelete {
+                    Button {
+                        withAnimation(.spring(response: 0.3)) {
+                            offset = 0
+                            isSwiped = false
+                        }
+                        onDelete()
+                    } label: {
+                        VStack(spacing: 4) {
+                            Image(systemName: "trash")
+                                .font(.title2)
+                            Text("Delete")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.white)
+                        .frame(width: buttonWidth, height: 80)
+                        .background(Color.red)
+                    }
+                }
+            }
+            .cornerRadius(12)
+            
+            // Main card content
+            TimeOffEntryCard(entry: entry)
+                .offset(x: offset)
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            if totalButtonWidth > 0 {
+                                let dragAmount = value.translation.width
+                                if dragAmount < 0 {
+                                    // Swiping left (revealing buttons)
+                                    offset = max(dragAmount, -totalButtonWidth - 20)
+                                } else if isSwiped {
+                                    // Swiping right (hiding buttons)
+                                    offset = min(-totalButtonWidth + dragAmount, 0)
+                                }
+                            }
+                        }
+                        .onEnded { value in
+                            if totalButtonWidth > 0 {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    if value.translation.width < -50 {
+                                        offset = -totalButtonWidth
+                                        isSwiped = true
+                                    } else {
+                                        offset = 0
+                                        isSwiped = false
+                                    }
+                                }
+                            }
+                        }
+                )
+                .onTapGesture {
+                    if isSwiped {
+                        withAnimation(.spring(response: 0.3)) {
+                            offset = 0
+                            isSwiped = false
+                        }
+                    }
+                }
+        }
     }
 }
 

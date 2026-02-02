@@ -29,7 +29,12 @@ enum TimeOffRequestStatus: String, Codable {
 /// Represents a time off request submitted by an employee
 struct TimeOffRequest: Codable, Identifiable, Equatable {
     @DocumentID var documentId: String?
-    var id: String? { documentId }
+    
+    /// Always returns a valid ID - uses documentId, localId, or generates one from date
+    var id: String { 
+        documentId ?? localId ?? "\(employeeId)_\(date.timeIntervalSince1970)_\(timeOffType.rawValue)"
+    }
+    
     let employeeId: Int
     let employeeEmail: String
     let employeeName: String

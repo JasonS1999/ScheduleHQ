@@ -1,45 +1,48 @@
 import SwiftUI
 
-/// Card view for time off requests
-struct TimeOffRequestCard: View {
-    let request: TimeOffRequest
+/// Card view for time off entries (unified model for requests)
+struct TimeOffEntryCard: View {
+    let entry: TimeOffEntry
+    var isQueued: Bool = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header row with type and status
             HStack {
                 HStack(spacing: 8) {
-                    Image(systemName: request.timeOffType.iconName)
+                    Image(systemName: entry.timeOffType.iconName)
                         .foregroundStyle(typeColor)
                     
-                    Text(request.timeOffType.displayName)
+                    Text(entry.timeOffType.displayName)
                         .font(.headline)
                 }
                 
                 Spacer()
                 
-                if request.isQueued {
+                if isQueued {
                     QueuedBadge()
                 } else {
-                    StatusBadge(status: request.status)
+                    StatusBadge(status: entry.status)
                 }
             }
             
             // Date and hours
             HStack {
-                Label(request.formattedDate, systemImage: "calendar")
+                Label(entry.formattedDate, systemImage: "calendar")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 
                 Spacer()
                 
-                Text("\(request.hours) hours")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if entry.hours > 0 {
+                    Text("\(entry.hours) hours")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
             
             // Time range for partial days
-            if !request.isAllDay, let start = request.startTime, let end = request.endTime {
+            if !entry.isAllDay, let start = entry.startTime, let end = entry.endTime {
                 HStack {
                     Label("\(start.formattedTime ?? start) - \(end.formattedTime ?? end)", systemImage: "clock")
                         .font(.caption)
@@ -48,7 +51,7 @@ struct TimeOffRequestCard: View {
             }
             
             // Notes if present
-            if let notes = request.notes, !notes.isEmpty {
+            if let notes = entry.notes, !notes.isEmpty {
                 Text(notes)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -56,7 +59,7 @@ struct TimeOffRequestCard: View {
             }
             
             // Denial reason if denied
-            if request.status == .denied, let reason = request.denialReason, !reason.isEmpty {
+            if entry.status == .denied, let reason = entry.denialReason, !reason.isEmpty {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "exclamationmark.circle")
                         .foregroundStyle(.red)
@@ -70,15 +73,17 @@ struct TimeOffRequestCard: View {
             }
             
             // Footer with request date
-            HStack {
-                Text("Requested \(request.formattedRequestedAt)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                
-                if request.autoApproved {
-                    Text("• Auto-approved")
+            if let requestedAt = entry.formattedRequestedAt {
+                HStack {
+                    Text("Requested \(requestedAt)")
                         .font(.caption2)
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.tertiary)
+                    
+                    if entry.autoApproved {
+                        Text("• Auto-approved")
+                            .font(.caption2)
+                            .foregroundStyle(.green)
+                    }
                 }
             }
         }
@@ -89,7 +94,7 @@ struct TimeOffRequestCard: View {
     }
     
     private var typeColor: Color {
-        switch request.timeOffType {
+        switch entry.timeOffType {
         case .pto: return .purple
         case .vacation: return .blue
         case .sick: return .red
@@ -99,19 +104,23 @@ struct TimeOffRequestCard: View {
     }
 }
 
+// Keep old name for backwards compatibility
+typealias TimeOffRequestCard = TimeOffEntryCard
+
 #Preview {
     VStack {
-        TimeOffRequestCard(request: TimeOffRequest(
+        TimeOffEntryCard(entry: TimeOffEntry(
             employeeId: 1,
             employeeEmail: "test@example.com",
             employeeName: "John Doe",
             date: Date(),
             timeOffType: .pto,
             hours: 8,
-            status: .pending
+            status: .pending,
+            requestedAt: Date()
         ))
         
-        TimeOffRequestCard(request: TimeOffRequest(
+        TimeOffEntryCard(entry: TimeOffEntry(
             employeeId: 1,
             employeeEmail: "test@example.com",
             employeeName: "John Doe",
@@ -119,10 +128,11 @@ struct TimeOffRequestCard: View {
             timeOffType: .vacation,
             hours: 8,
             status: .approved,
-            autoApproved: true
+            autoApproved: true,
+            requestedAt: Date()
         ))
         
-        TimeOffRequestCard(request: TimeOffRequest(
+        TimeOffEntryCard(entry: TimeOffEntry(
             employeeId: 1,
             employeeEmail: "test@example.com",
             employeeName: "John Doe",
@@ -133,6 +143,7 @@ struct TimeOffRequestCard: View {
             startTime: "09:00",
             endTime: "13:00",
             status: .denied,
+            requestedAt: Date(),
             denialReason: "Too many employees already off"
         ))
     }

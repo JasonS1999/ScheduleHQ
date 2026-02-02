@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Desktop (Debug)",
             "request": "launch",
@@ -32,6 +33,21 @@
             "type": "dart",
             "cwd": "${workspaceFolder}/ScheduleHQ_Android",
             "program": "lib/main.dart"
+        },
+        {
+            "name": "iOS (Debug)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${env:HOME}/Library/Developer/Xcode/DerivedData/ScheduleHQ-alpwrfuqtzckfabxauvdppkylndw/Build/Products/Debug-iphonesimulator/ScheduleHQ.app",
+            "cwd": "${workspaceFolder}/ScheduleHQ_IOS",
+            "preLaunchTask": "xcode: build iOS"
+        },
+        {
+            "name": "iOS (Attach)",
+            "type": "lldb",
+            "request": "attach",
+            "program": "${env:HOME}/Library/Developer/Xcode/DerivedData/ScheduleHQ-alpwrfuqtzckfabxauvdppkylndw/Build/Products/Debug-iphonesimulator/ScheduleHQ.app",
+            "waitFor": true
         }
     ]
 }

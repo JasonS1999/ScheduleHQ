@@ -186,6 +186,41 @@ extension Color {
     }
 }
 
+// MARK: - App Background Gradient
+
+/// Reusable gradient background for all tabs
+struct AppBackgroundGradient: View {
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        Group {
+            if colorScheme == .dark {
+                // Darker navy/purple gradient for dark mode
+                LinearGradient(
+                    colors: [
+                        Color(hex: "1e1b4b"), // Deep indigo
+                        Color(hex: "1e1b4b").opacity(0.9),
+                        Color(hex: "0f172a")  // Dark slate
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            } else {
+                // Soft light gradient for light mode
+                LinearGradient(
+                    colors: [
+                        Color(hex: "f8fafc"),
+                        Color(hex: "e0e7ff").opacity(0.5),
+                        Color(hex: "f1f5f9")
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Shift Time Classification
 
 enum ShiftTimeType {

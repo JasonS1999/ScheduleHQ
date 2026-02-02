@@ -1,19 +1,20 @@
+
 import Foundation
 import Combine
 
-/// Manages offline queue for time off requests
+/// Manages offline queue for time off entries
 final class OfflineQueueManager: ObservableObject {
     static let shared = OfflineQueueManager()
     
-    /// Queued requests waiting to be synced
-    @Published private(set) var queuedRequests: [TimeOffRequest] = []
+    /// Queued entries waiting to be synced
+    @Published private(set) var queuedRequests: [TimeOffEntry] = []
     
-    /// Number of queued requests (for badge display)
+    /// Number of queued entries (for badge display)
     var queuedCount: Int {
         queuedRequests.count
     }
     
-    /// Whether there are queued requests
+    /// Whether there are queued entries
     var hasQueuedRequests: Bool {
         !queuedRequests.isEmpty
     }
@@ -27,6 +28,9 @@ final class OfflineQueueManager: ObservableObject {
     
     private let queueFileURL: URL
     private var cancellables = Set<AnyCancellable>()
+    
+    /// Local ID for queued items (stored separately since TimeOffEntry doesn't have localId)
+    private var localIds: [String: String] = [:] // documentId -> localId
     
     private init() {
         // Set up queue file in documents directory
@@ -42,12 +46,14 @@ final class OfflineQueueManager: ObservableObject {
     
     // MARK: - Queue Management
     
-    /// Add a request to the offline queue
-    func enqueue(_ request: TimeOffRequest) {
-        var queuedRequest = request
-        queuedRequest.localId = UUID().uuidString
+    /// Add an entry to the offline queue
+    func enqueue(_ entry: TimeOffEntry) {
+        var queuedEntry = entry
+        let localId = UUID().uuidString
+        // Use a synthetic documentId for tracking
+        queuedEntry.documentId = "local_\(localId)"
         
-        queuedRequests.append(queuedRequest)
+        queuedRequests.append(queuedEntry)
         saveQueue()
         
         alertManager.showInfo("Request Queued", message: "Your request will be submitted when you're back online.")
@@ -60,13 +66,14 @@ final class OfflineQueueManager: ObservableObject {
         }
     }
     
-    /// Remove a request from the queue
-    func dequeue(_ localId: String) {
-        queuedRequests.removeAll { $0.localId == localId }
+    /// Remove an entry from the queue
+    func dequeue(_ documentId: String?) {
+        guard let documentId = documentId else { return }
+        queuedRequests.removeAll { $0.documentId == documentId }
         saveQueue()
     }
     
-    /// Clear all queued requests
+    /// Clear all queued entries
     func clearQueue() {
         queuedRequests.removeAll()
         saveQueue()
@@ -74,7 +81,7 @@ final class OfflineQueueManager: ObservableObject {
     
     // MARK: - Sync
     
-    /// Sync queued requests when online
+    /// Sync queued entries when online
     func syncQueue() async {
         guard networkMonitor.isConnected else { return }
         guard !queuedRequests.isEmpty else { return }
@@ -85,23 +92,35 @@ final class OfflineQueueManager: ObservableObject {
         }
         
         var successCount = 0
-        var failedRequests: [TimeOffRequest] = []
+        var failedEntries: [TimeOffEntry] = []
         
-        for request in queuedRequests {
+        for entry in queuedRequests {
             do {
-                try await timeOffManager.submitRequest(request)
+                try await timeOffManager.submitTimeOff(
+                    employeeId: entry.employeeId,
+                    employeeEmail: entry.employeeEmail ?? "",
+                    employeeName: entry.employeeName ?? "",
+                    date: entry.date,
+                    timeOffType: entry.timeOffType,
+                    hours: entry.hours,
+                    isAllDay: entry.isAllDay,
+                    startTime: entry.startTime,
+                    endTime: entry.endTime,
+                    vacationGroupId: entry.vacationGroupId,
+                    notes: entry.notes
+                )
                 successCount += 1
                 
                 // Remove from queue on success
-                if let localId = request.localId {
+                if let documentId = entry.documentId {
                     await MainActor.run {
-                        queuedRequests.removeAll { $0.localId == localId }
+                        queuedRequests.removeAll { $0.documentId == documentId }
                     }
                 }
             } catch {
-                // Keep failed requests in queue
-                failedRequests.append(request)
-                print("Failed to sync request: \(error)")
+                // Keep failed entries in queue
+                failedEntries.append(entry)
+                print("Failed to sync entry: \(error)")
             }
         }
         
@@ -109,15 +128,15 @@ final class OfflineQueueManager: ObservableObject {
             isSyncing = false
             saveQueue()
             
-            if successCount > 0 && failedRequests.isEmpty {
+            if successCount > 0 && failedEntries.isEmpty {
                 alertManager.showSuccess(
                     "Sync Complete",
                     message: "\(successCount) request(s) submitted successfully."
                 )
-            } else if !failedRequests.isEmpty {
+            } else if !failedEntries.isEmpty {
                 alertManager.showWarning(
                     "Partial Sync",
-                    message: "\(successCount) submitted, \(failedRequests.count) failed. Will retry later."
+                    message: "\(successCount) submitted, \(failedEntries.count) failed. Will retry later."
                 )
             }
         }
@@ -148,7 +167,7 @@ final class OfflineQueueManager: ObservableObject {
             let data = try Data(contentsOf: queueFileURL)
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            queuedRequests = try decoder.decode([TimeOffRequest].self, from: data)
+            queuedRequests = try decoder.decode([TimeOffEntry].self, from: data)
         } catch {
             print("Failed to load offline queue: \(error)")
             queuedRequests = []
@@ -175,7 +194,7 @@ final class OfflineQueueManager: ObservableObject {
     
     // MARK: - Request Creation Helper
     
-    /// Create a time off request and either submit or queue based on connectivity
+    /// Create a time off entry and either submit or queue based on connectivity
     func submitOrQueue(
         employeeId: Int,
         employeeEmail: String,
@@ -189,29 +208,57 @@ final class OfflineQueueManager: ObservableObject {
         vacationGroupId: String?,
         notes: String?
     ) async {
-        let request = TimeOffRequest(
-            employeeId: employeeId,
-            employeeEmail: employeeEmail,
-            employeeName: employeeName,
-            date: date,
-            timeOffType: timeOffType,
-            hours: hours,
-            isAllDay: isAllDay,
-            startTime: startTime,
-            endTime: endTime,
-            vacationGroupId: vacationGroupId,
-            notes: notes
-        )
-        
         if networkMonitor.isConnected {
             do {
-                try await timeOffManager.submitRequest(request)
+                try await timeOffManager.submitTimeOff(
+                    employeeId: employeeId,
+                    employeeEmail: employeeEmail,
+                    employeeName: employeeName,
+                    date: date,
+                    timeOffType: timeOffType,
+                    hours: hours,
+                    isAllDay: isAllDay,
+                    startTime: startTime,
+                    endTime: endTime,
+                    vacationGroupId: vacationGroupId,
+                    notes: notes
+                )
             } catch {
                 // If submission fails, queue it
-                enqueue(request)
+                let entry = TimeOffEntry(
+                    employeeId: employeeId,
+                    employeeEmail: employeeEmail,
+                    employeeName: employeeName,
+                    date: date,
+                    timeOffType: timeOffType,
+                    hours: hours,
+                    vacationGroupId: vacationGroupId,
+                    isAllDay: isAllDay,
+                    startTime: startTime,
+                    endTime: endTime,
+                    status: .pending,
+                    requestedAt: Date(),
+                    notes: notes
+                )
+                enqueue(entry)
             }
         } else {
-            enqueue(request)
+            let entry = TimeOffEntry(
+                employeeId: employeeId,
+                employeeEmail: employeeEmail,
+                employeeName: employeeName,
+                date: date,
+                timeOffType: timeOffType,
+                hours: hours,
+                vacationGroupId: vacationGroupId,
+                isAllDay: isAllDay,
+                startTime: startTime,
+                endTime: endTime,
+                status: .pending,
+                requestedAt: Date(),
+                notes: notes
+            )
+            enqueue(entry)
         }
     }
 }

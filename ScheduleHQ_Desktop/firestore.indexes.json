@@ -9,6 +9,22 @@
       ]
     },
     {
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "employeeUid", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "shifts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "employeeId", "order": "ASCENDING" },
+        { "fieldPath": "startTime", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "timeOff",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

@@ -9,27 +9,32 @@ struct ProfileView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Profile header
-                    profileHeader
-                    
-                    // Vacation balance card
-                    if let employee = authManager.employee {
-                        VacationBalanceCard(employee: employee)
+            ZStack {
+                // Background gradient
+                AppBackgroundGradient()
+                    .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Profile header
+                        profileHeader
+                        
+                        // Vacation balance card
+                        if let employee = authManager.employee {
+                            VacationBalanceCard(employee: employee)
+                        }
+                        
+                        // PTO summary card
+                        if let summary = timeOffManager.currentTrimesterSummary {
+                            PTOSummaryCard(summary: summary)
+                        }
+                        
+                        // Sign out button
+                        signOutSection
                     }
-                    
-                    // PTO summary card
-                    if let summary = timeOffManager.currentTrimesterSummary {
-                        PTOSummaryCard(summary: summary)
-                    }
-                    
-                    // Sign out button
-                    signOutSection
+                    .padding()
                 }
-                .padding()
             }
-            .background(Color(.systemGroupedBackground))
             .navigationTitle("Profile")
             .confirmationDialog(
                 "Sign Out",
@@ -223,7 +228,7 @@ struct PTOSummaryCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             
-            // Stats - just Used and Available
+            // Stats - Used, Remaining, and Available
             HStack {
                 VStack(spacing: 4) {
                     Text("\(summary.used)")
@@ -237,16 +242,41 @@ struct PTOSummaryCard: View {
                 .frame(maxWidth: .infinity)
                 
                 VStack(spacing: 4) {
-                    Text("\(summary.available)")
+                    Text("\(summary.remaining)")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundStyle(.purple)
-                    Text("Available")
+                    Text("Remaining")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                
+                VStack(spacing: 4) {
+                    Text("\(summary.available)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.secondary.opacity(0.7))
+                    Text("Total")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
             }
+            
+            // Progress bar showing usage
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.purple.opacity(0.2))
+                        .frame(height: 8)
+                    
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.purple)
+                        .frame(width: geometry.size.width * summary.usageProgress, height: 8)
+                }
+            }
+            .frame(height: 8)
         }
         .padding()
         .background(Color(.systemBackground))

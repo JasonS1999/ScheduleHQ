@@ -163,6 +163,7 @@ final class ScheduleManager: ObservableObject {
         
         // Check if user is a manager (their UID matches the managerUid)
         let isManager = currentUid == managerUid
+        print("ScheduleManager: currentUid=\(currentUid), managerUid=\(managerUid), isManager=\(isManager)")
         
         // Get the month(s) we need to query - a week can span two months
         let startMonth = monthFormatter.string(from: weekStart)
@@ -178,47 +179,56 @@ final class ScheduleManager: ObservableObject {
             .document(managerUid)
             .collection("timeOff")
         
-        if isManager {
-            // Manager: get all time off, filter by date client-side
-            timeOffListener = timeOffRef
-                .addSnapshotListener { [weak self, weekStart, weekEnd] snapshot, error in
-                    Task { @MainActor in
-                        if error != nil { return }
-                        
-                        guard let documents = snapshot?.documents else {
-                            self?.timeOffEntries = []
-                            return
+        // Get employee local ID for filtering
+        let employeeLocalId = authManager.employeeLocalId
+        print("ScheduleManager: employeeLocalId = \(employeeLocalId ?? -1), isManager = \(isManager)")
+        
+        // Always filter time off by current user's employeeLocalId (even for managers)
+        // Managers see their own time off in Schedule view, not everyone's
+        timeOffListener = timeOffRef
+            .addSnapshotListener { [weak self, weekStart, weekEnd, employeeLocalId] snapshot, error in
+                Task { @MainActor in
+                    if error != nil { 
+                        print("ScheduleManager: timeOff listener error: \(error!)")
+                        return 
+                    }
+                    
+                    guard let documents = snapshot?.documents else {
+                        self?.timeOffEntries = []
+                        return
+                    }
+                    
+                    print("ScheduleManager: Found \(documents.count) total timeOff docs, filtering for employeeLocalId=\(employeeLocalId ?? -1)")
+                    
+                    // Filter by employee ID and date range in memory
+                    let filteredEntries = documents.compactMap { doc -> TimeOffEntry? in
+                        guard let entry = try? doc.data(as: TimeOffEntry.self) else { 
+                            print("  - Failed to decode doc: \(doc.documentID)")
+                            return nil 
                         }
                         
-                        // Filter by date range client-side
-                        let filteredEntries = documents.compactMap { doc -> TimeOffEntry? in
-                            guard let entry = try? doc.data(as: TimeOffEntry.self) else { return nil }
-                            return (entry.date >= weekStart && entry.date <= weekEnd) ? entry : nil
-                        }.sorted { $0.date < $1.date }
-                        self?.timeOffEntries = filteredEntries
-                    }
-                }
-        } else {
-            // Employee: use server-side filtering with index
-            timeOffListener = timeOffRef
-                .whereField("employeeUid", isEqualTo: currentUid)
-                .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: weekStart))
-                .whereField("date", isLessThanOrEqualTo: Timestamp(date: weekEnd))
-                .addSnapshotListener { [weak self] snapshot, error in
-                    Task { @MainActor in
-                        if error != nil { return }
-                        
-                        guard let documents = snapshot?.documents else {
-                            self?.timeOffEntries = []
-                            return
+                        // Check if this entry belongs to the current employee
+                        guard let empId = employeeLocalId else {
+                            print("  - No employeeLocalId available")
+                            return nil
                         }
                         
-                        self?.timeOffEntries = documents.compactMap { doc in
-                            try? doc.data(as: TimeOffEntry.self)
-                        }.sorted { $0.date < $1.date }
-                    }
+                        if entry.employeeId != empId {
+                            return nil // Skip entries for other employees
+                        }
+                        
+                        // Check date range
+                        if entry.date >= weekStart && entry.date <= weekEnd {
+                            print("  - Including entry: \(entry.formattedDate) for employee \(entry.employeeId)")
+                            return entry
+                        }
+                        return nil
+                    }.sorted { $0.date < $1.date }
+                    
+                    print("ScheduleManager: Filtered to \(filteredEntries.count) entries for current user")
+                    self?.timeOffEntries = filteredEntries
                 }
-        }
+            }
         
         // Fetch shift runners from managers/{managerUid}/shiftRunners
         fetchShiftRunners(managerUid: managerUid, weekStartStr: weekStartStr, weekEndStr: weekEndStr)

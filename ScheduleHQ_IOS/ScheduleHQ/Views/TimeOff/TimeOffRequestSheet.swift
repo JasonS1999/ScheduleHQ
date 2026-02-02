@@ -1,24 +1,31 @@
 import SwiftUI
 
-/// Sheet for creating new time off requests
+/// Sheet for creating or editing time off requests
 struct TimeOffRequestSheet: View {
     @Environment(\.dismiss) private var dismiss
     
-    @State private var requestType: TimeOffType = .pto
+    // Editing mode
+    let editingEntry: TimeOffEntry?
+    var isEditing: Bool { editingEntry != nil }
+    
+    @State private var requestType: TimeOffType = .dayOff
     @State private var selectedDate = Date()
     @State private var endDate = Date()
-    @State private var isAllDay = true
-    @State private var startTime = Calendar.current.date(from: DateComponents(hour: 9, minute: 0)) ?? Date()
-    @State private var endTime = Calendar.current.date(from: DateComponents(hour: 17, minute: 0)) ?? Date()
+    @State private var ptoHours: Int = 9
     @State private var notes = ""
     @State private var isSubmitting = false
     
     @ObservedObject private var authManager = AuthManager.shared
     @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var timeOffManager = TimeOffManager.shared
     
-    // Supported request types for employees
-    private let availableTypes: [TimeOffType] = [.pto, .vacation, .dayOff]
+    // Supported request types for employees - Day Off first
+    private let availableTypes: [TimeOffType] = [.dayOff, .pto, .vacation]
+    
+    init(editingEntry: TimeOffEntry? = nil) {
+        self.editingEntry = editingEntry
+    }
     
     var body: some View {
         NavigationStack {
@@ -44,27 +51,19 @@ struct TimeOffRequestSheet: View {
                     }
                 }
                 
-                // Time selection (for partial days)
-                Section("Time") {
-                    Toggle("All Day", isOn: $isAllDay)
-                    
-                    if !isAllDay {
-                        DatePicker("Start Time", selection: $startTime, displayedComponents: .hourAndMinute)
-                        DatePicker("End Time", selection: $endTime, displayedComponents: .hourAndMinute)
-                    }
-                }
-                
-                // Hours summary
-                Section {
-                    HStack {
-                        Text("Hours")
-                        Spacer()
-                        Text("\(calculatedHours)")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.blue)
-                    }
-                } footer: {
-                    if requestType == .pto {
+                // Hours - only show for PTO (editable)
+                if requestType == .pto {
+                    Section {
+                        Stepper(value: $ptoHours, in: 1...12) {
+                            HStack {
+                                Text("Hours")
+                                Spacer()
+                                Text("\(ptoHours)")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    } footer: {
                         if let summary = TimeOffManager.shared.currentTrimesterSummary {
                             Text("PTO remaining this trimester: \(summary.remaining) hours")
                         }
@@ -90,7 +89,7 @@ struct TimeOffRequestSheet: View {
                     }
                 }
             }
-            .navigationTitle("New Request")
+            .navigationTitle(isEditing ? "Edit Request" : "New Request")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -100,10 +99,24 @@ struct TimeOffRequestSheet: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Submit") {
-                        submitRequest()
+                    Button(isEditing ? "Save" : "Submit") {
+                        if isEditing {
+                            updateRequest()
+                        } else {
+                            submitRequest()
+                        }
                     }
-                    .disabled(isSubmitting || calculatedHours <= 0)
+                    .disabled(isSubmitting)
+                }
+            }
+            .onAppear {
+                // Populate fields if editing
+                if let entry = editingEntry {
+                    requestType = entry.timeOffType
+                    selectedDate = entry.date
+                    endDate = entry.date
+                    ptoHours = entry.hours > 0 ? entry.hours : 9
+                    notes = entry.notes ?? ""
                 }
             }
             .overlay {
@@ -117,20 +130,20 @@ struct TimeOffRequestSheet: View {
     // MARK: - Calculated Hours
     
     private var calculatedHours: Int {
-        if isAllDay {
-            if requestType == .vacation {
-                // Calculate days between dates
-                let calendar = Calendar.current
-                let components = calendar.dateComponents([.day], from: selectedDate, to: endDate)
-                let days = (components.day ?? 0) + 1
-                return days * 8
-            }
+        switch requestType {
+        case .pto:
+            return ptoHours
+        case .vacation:
+            // Calculate days between dates, 8 hours per day
+            let calendar = Calendar.current
+            let components = calendar.dateComponents([.day], from: selectedDate, to: endDate)
+            let days = (components.day ?? 0) + 1
+            return days * 8
+        case .dayOff:
+            // Day off doesn't track hours
+            return 0
+        default:
             return 8
-        } else {
-            // Calculate hours from time range
-            let interval = endTime.timeIntervalSince(startTime)
-            let hours = max(0, Int(interval / 3600))
-            return hours
         }
     }
     
@@ -142,9 +155,6 @@ struct TimeOffRequestSheet: View {
         
         isSubmitting = true
         
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm"
-        
         Task {
             await offlineQueueManager.submitOrQueue(
                 employeeId: employeeId,
@@ -153,12 +163,39 @@ struct TimeOffRequestSheet: View {
                 date: selectedDate,
                 timeOffType: requestType,
                 hours: calculatedHours,
-                isAllDay: isAllDay,
-                startTime: isAllDay ? nil : timeFormatter.string(from: startTime),
-                endTime: isAllDay ? nil : timeFormatter.string(from: endTime),
+                isAllDay: true,
+                startTime: nil,
+                endTime: nil,
                 vacationGroupId: requestType == .vacation ? UUID().uuidString : nil,
                 notes: notes.isEmpty ? nil : notes
             )
+            
+            await MainActor.run {
+                isSubmitting = false
+                dismiss()
+            }
+        }
+    }
+    
+    // MARK: - Update
+    
+    private func updateRequest() {
+        guard let entry = editingEntry else { return }
+        
+        isSubmitting = true
+        
+        Task {
+            do {
+                try await timeOffManager.updateTimeOff(
+                    entry,
+                    newDate: selectedDate,
+                    newType: requestType,
+                    newHours: calculatedHours,
+                    newNotes: notes.isEmpty ? nil : notes
+                )
+            } catch {
+                print("Failed to update request: \(error)")
+            }
             
             await MainActor.run {
                 isSubmitting = false

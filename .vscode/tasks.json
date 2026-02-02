@@ -20,6 +20,37 @@
             },
             "group": "build",
             "problemMatcher": []
+        },
+        {
+            "label": "xcode: build iOS",
+            "type": "shell",
+            "command": "xcodebuild -project ScheduleHQ.xcodeproj -scheme ScheduleHQ -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build",
+            "options": {
+                "cwd": "${workspaceFolder}/ScheduleHQ_IOS"
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "xcode: clean build iOS",
+            "type": "shell",
+            "command": "xcodebuild clean -project ScheduleHQ.xcodeproj -scheme ScheduleHQ && xcodebuild -project ScheduleHQ.xcodeproj -scheme ScheduleHQ -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build",
+            "options": {
+                "cwd": "${workspaceFolder}/ScheduleHQ_IOS"
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "xcode: run iOS simulator",
+            "type": "shell",
+            "command": "xcrun simctl terminate booted com.schedulehq.app 2>/dev/null; xcrun simctl install booted \"$HOME/Library/Developer/Xcode/DerivedData/ScheduleHQ-alpwrfuqtzckfabxauvdppkylndw/Build/Products/Debug-iphonesimulator/ScheduleHQ.app\" && xcrun simctl launch booted com.schedulehq.app",
+            "options": {
+                "cwd": "${workspaceFolder}/ScheduleHQ_IOS"
+            },
+            "group": "test",
+            "problemMatcher": [],
+            "dependsOn": "xcode: build iOS"
         }
     ]
 }
