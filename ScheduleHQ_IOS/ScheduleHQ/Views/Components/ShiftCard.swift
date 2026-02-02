@@ -37,96 +37,95 @@ struct CombinedDayCard: View {
                 // Date box on left
                 dateBox
                 
-                // Shift info on right
-                VStack(alignment: .leading, spacing: AppTheme.Spacing.sm) {
-                    // Top row: badges and duration
-                    HStack(alignment: .center) {
-                        // Show appropriate badge on left (runner or time off, but NOT day off)
+                // Shift info on right - centered vertically
+                HStack {
+                    VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+                        // Runner badge on its own line if present
                         if isRunner {
                             RunnerIndicatorBadge(shiftType: runnerShiftType)
                         } else if !timeOff.isEmpty {
                             TimeOffBadgeCompact()
                         }
                         
-                        Spacer()
-                        
-                        // Right side: Day off badge OR duration for working shifts
-                        if shift?.isOff == true {
-                            DayOffBadge()
-                        } else if let shift = shift, !shift.isOff {
-                            Text(shift.formattedDuration)
-                                .font(AppTheme.Typography.caption)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(AppTheme.Colors.textSecondary)
-                                .padding(.horizontal, AppTheme.Spacing.sm)
-                                .padding(.vertical, AppTheme.Spacing.xs)
-                                .background(
-                                    Capsule()
-                                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
-                                )
-                        }
-                    }
-                    
-                    // Shift time or day off message
-                    if let shift = shift {
-                        if shift.isOff {
-                            HStack(spacing: AppTheme.Spacing.sm) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(AppTheme.Colors.success)
-                                    .font(.system(size: 14))
-                                
-                                Text("Enjoy your day off!")
+                        // Shift time or day off message
+                        if let shift = shift {
+                            if shift.isOff {
+                                HStack(spacing: AppTheme.Spacing.sm) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(AppTheme.Colors.success)
+                                        .font(.system(size: 14))
+                                    
+                                    Text("Enjoy your day off!")
+                                        .font(AppTheme.Typography.subheadline)
+                                        .foregroundStyle(AppTheme.Colors.textSecondary)
+                                }
+                            } else {
+                                HStack(spacing: AppTheme.Spacing.sm) {
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(shiftType.color)
+                                    
+                                    Text(shift.formattedTimeRange)
+                                        .font(AppTheme.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(AppTheme.Colors.textPrimary)
+                                }
+                            }
+                        } else if !timeOff.isEmpty {
+                            // Time off entry
+                            if let entry = timeOff.first {
+                                Text(entry.timeOffType.rawValue)
                                     .font(AppTheme.Typography.subheadline)
                                     .foregroundStyle(AppTheme.Colors.textSecondary)
                             }
                         } else {
-                            HStack(spacing: AppTheme.Spacing.sm) {
-                                Image(systemName: "clock.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(shiftType.color)
-                                
-                                Text(shift.formattedTimeRange)
-                                    .font(AppTheme.Typography.subheadline)
-                                    .fontWeight(.semibold)
-                                    .foregroundStyle(AppTheme.Colors.textPrimary)
-                            }
-                        }
-                    } else if !timeOff.isEmpty {
-                        // Time off entry
-                        if let entry = timeOff.first {
-                            Text(entry.timeOffType.rawValue)
+                            // No shift scheduled
+                            Text("No shift scheduled")
                                 .font(AppTheme.Typography.subheadline)
-                                .foregroundStyle(AppTheme.Colors.textSecondary)
+                                .foregroundStyle(AppTheme.Colors.textTertiary)
                         }
-                    } else {
-                        // No shift scheduled
-                        Text("No shift scheduled")
-                            .font(AppTheme.Typography.subheadline)
+                        
+                        // Daily note if exists
+                        if let note = dailyNote, !note.isEmpty {
+                            HStack(spacing: AppTheme.Spacing.xs) {
+                                Image(systemName: "note.text")
+                                    .font(.system(size: 10))
+                                Text(note)
+                                    .font(.system(size: 11))
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(AppTheme.Colors.textSecondary)
+                        }
+                        
+                        // Shift notes
+                        if let notes = shift?.notes, !notes.isEmpty {
+                            HStack(alignment: .top, spacing: AppTheme.Spacing.xs) {
+                                Image(systemName: "text.alignleft")
+                                    .font(.system(size: 10))
+                                Text(notes)
+                                    .font(.system(size: 11))
+                                    .lineLimit(1)
+                            }
                             .foregroundStyle(AppTheme.Colors.textTertiary)
+                        }
                     }
                     
-                    // Daily note if exists
-                    if let note = dailyNote, !note.isEmpty {
-                        HStack(spacing: AppTheme.Spacing.xs) {
-                            Image(systemName: "note.text")
-                                .font(.system(size: 10))
-                            Text(note)
-                                .font(.system(size: 11))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(AppTheme.Colors.textSecondary)
-                    }
+                    Spacer()
                     
-                    // Shift notes
-                    if let notes = shift?.notes, !notes.isEmpty {
-                        HStack(alignment: .top, spacing: AppTheme.Spacing.xs) {
-                            Image(systemName: "text.alignleft")
-                                .font(.system(size: 10))
-                            Text(notes)
-                                .font(.system(size: 11))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(AppTheme.Colors.textTertiary)
+                    // Right side: Day off badge OR duration for working shifts
+                    if shift?.isOff == true {
+                        DayOffBadge()
+                    } else if let shift = shift, !shift.isOff {
+                        Text(shift.formattedDuration)
+                            .font(AppTheme.Typography.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(AppTheme.Colors.textSecondary)
+                            .padding(.horizontal, AppTheme.Spacing.sm)
+                            .padding(.vertical, AppTheme.Spacing.xs)
+                            .background(
+                                Capsule()
+                                    .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+                            )
                     }
                 }
                 .padding(.vertical, AppTheme.Spacing.md)
