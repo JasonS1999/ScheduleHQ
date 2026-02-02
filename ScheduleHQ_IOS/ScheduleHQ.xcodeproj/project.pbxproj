@@ -29,6 +29,8 @@
 		8A23DE6CCA08BAA24EE22D9C /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */; };
 		9999D6B1E8B6550EC7F1DB25 /* AppUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0307FE788D9CE086C375A92 /* AppUser.swift */; };
 		A8251BCD82DAADD4DF676BED /* TimeOffRequestCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */; };
+		BE1ACAFBC8D3946E8C00B4E6 /* DayTeamScheduleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8D6CAE99B7A0FB9D43907C9 /* DayTeamScheduleSheet.swift */; };
+		C86EDA36CDD1865C119F0CF1 /* EmployeeCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */; };
 		CFE2B2CB2A5D898D11B8D9FD /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = E6D360FC6FC3009A295D3083 /* FirebaseMessaging */; };
 		D3E1B0E340AEA5764C216AA6 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42165C70E1E92C97580E9F0C /* ProfileView.swift */; };
 		D536BC4F271F7BF0F89DB1F8 /* TrimesterSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */; };
@@ -45,6 +47,7 @@
 		0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequestSheet.swift; sourceTree = "<group>"; };
 		204C6421844ED0D5E031961A /* ShiftRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftRunner.swift; sourceTree = "<group>"; };
+		3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmployeeCache.swift; sourceTree = "<group>"; };
 		3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffEntry.swift; sourceTree = "<group>"; };
 		3E039007796C297B7AC53558 /* TimeOffManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffManager.swift; sourceTree = "<group>"; };
 		3F1A23909951E3C4CE3B0317 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
@@ -69,6 +72,7 @@
 		D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtensions.swift; sourceTree = "<group>"; };
 		D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonComponents.swift; sourceTree = "<group>"; };
 		E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScheduleHQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E8D6CAE99B7A0FB9D43907C9 /* DayTeamScheduleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTeamScheduleSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +92,7 @@
 		10DFF4C8E820AF45ACB1265D /* Schedule */ = {
 			isa = PBXGroup;
 			children = (
+				E8D6CAE99B7A0FB9D43907C9 /* DayTeamScheduleSheet.swift */,
 				AAEAB20480BFF2ECA17B060F /* ScheduleView.swift */,
 			);
 			path = Schedule;
@@ -121,6 +126,7 @@
 			children = (
 				4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */,
 				3F1A23909951E3C4CE3B0317 /* AuthManager.swift */,
+				3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */,
 				99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */,
 				8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */,
 				3E039007796C297B7AC53558 /* TimeOffManager.swift */,
@@ -298,7 +304,9 @@
 				2A8124ACE5EDC253A4A98D89 /* AuthManager.swift in Sources */,
 				D87AB6EFB5495FA063ABBE88 /* CommonComponents.swift in Sources */,
 				2B74B11A870A880A9FFFA927 /* DateExtensions.swift in Sources */,
+				BE1ACAFBC8D3946E8C00B4E6 /* DayTeamScheduleSheet.swift in Sources */,
 				2330B8F5BCD266AF8097631F /* Employee.swift in Sources */,
+				C86EDA36CDD1865C119F0CF1 /* EmployeeCache.swift in Sources */,
 				3D53801AD2E9F47AB2C8A08B /* LoginView.swift in Sources */,
 				E592F50A830F1D2064DE8CCC /* MainTabView.swift in Sources */,
 				5F9029B115770887D39C3473 /* NetworkMonitor.swift in Sources */,
@@ -345,7 +353,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.schedulehq.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schedulehq.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";

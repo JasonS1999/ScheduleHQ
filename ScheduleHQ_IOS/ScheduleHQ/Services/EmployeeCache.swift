@@ -11,6 +11,9 @@ final class EmployeeCache: ObservableObject {
     /// Cached employees keyed by their UID
     @Published private(set) var employeesByUid: [String: Employee] = [:]
     
+    /// Cached employees keyed by their local ID (Int)
+    @Published private(set) var employeesById: [Int: Employee] = [:]
+    
     /// Whether the cache has been loaded
     @Published private(set) var isLoaded: Bool = false
     
@@ -30,11 +33,25 @@ final class EmployeeCache: ObservableObject {
         employeesByUid[uid]?.name
     }
     
+    /// Get employee name for a given local ID
+    /// - Parameter id: The employee's local numeric ID
+    /// - Returns: The employee's name, or nil if not found
+    func name(forId id: Int) -> String? {
+        employeesById[id]?.name
+    }
+    
     /// Get full employee for a given UID
     /// - Parameter uid: The employee's Firebase UID
     /// - Returns: The Employee object, or nil if not found
     func employee(for uid: String) -> Employee? {
         employeesByUid[uid]
+    }
+    
+    /// Get full employee for a given local ID
+    /// - Parameter id: The employee's local numeric ID
+    /// - Returns: The Employee object, or nil if not found
+    func employee(forId id: Int) -> Employee? {
+        employeesById[id]
     }
     
     /// Load all employees for the current manager
@@ -63,22 +80,30 @@ final class EmployeeCache: ObservableObject {
                 .collection("employees")
                 .getDocuments()
             
-            var cache: [String: Employee] = [:]
+            var cacheByUid: [String: Employee] = [:]
+            var cacheById: [Int: Employee] = [:]
             
             for document in snapshot.documents {
-                if let employee = try? document.data(as: Employee.self),
-                   let uid = employee.uid {
-                    cache[uid] = employee
+                if let employee = try? document.data(as: Employee.self) {
+                    // Cache by UID if available
+                    if let uid = employee.uid {
+                        cacheByUid[uid] = employee
+                    }
+                    // Cache by local ID if available
+                    if let id = employee.id {
+                        cacheById[id] = employee
+                    }
                 }
             }
             
             await MainActor.run {
-                self.employeesByUid = cache
+                self.employeesByUid = cacheByUid
+                self.employeesById = cacheById
                 self.isLoaded = true
                 self.isLoading = false
             }
             
-            print("✅ EmployeeCache: Loaded \(cache.count) employees")
+            print("✅ EmployeeCache: Loaded \(cacheByUid.count) employees by UID, \(cacheById.count) by ID")
             
         } catch {
             print("❌ EmployeeCache: Failed to load employees: \(error.localizedDescription)")
@@ -111,17 +136,25 @@ final class EmployeeCache: ObservableObject {
                 
                 guard let documents = snapshot?.documents else { return }
                 
-                var cache: [String: Employee] = [:]
+                var cacheByUid: [String: Employee] = [:]
+                var cacheById: [Int: Employee] = [:]
                 
                 for document in documents {
-                    if let employee = try? document.data(as: Employee.self),
-                       let uid = employee.uid {
-                        cache[uid] = employee
+                    if let employee = try? document.data(as: Employee.self) {
+                        // Cache by UID if available
+                        if let uid = employee.uid {
+                            cacheByUid[uid] = employee
+                        }
+                        // Cache by local ID if available
+                        if let id = employee.id {
+                            cacheById[id] = employee
+                        }
                     }
                 }
                 
                 Task { @MainActor in
-                    self.employeesByUid = cache
+                    self.employeesByUid = cacheByUid
+                    self.employeesById = cacheById
                     self.isLoaded = true
                     self.isLoading = false
                 }
@@ -138,6 +171,7 @@ final class EmployeeCache: ObservableObject {
     func clearCache() {
         stopListening()
         employeesByUid = [:]
+        employeesById = [:]
         isLoaded = false
     }
 }

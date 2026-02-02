@@ -131,10 +131,13 @@ final class ScheduleManager: ObservableObject {
                 // Skip "off" shifts
                 if shift.isOff { return nil }
                 
-                // Get employee name from cache
+                // Get employee name from cache - try UID first, then local ID
                 let employeeName: String
                 if let uid = shift.employeeUid,
                    let name = EmployeeCache.shared.name(for: uid) {
+                    employeeName = name
+                } else if let id = shift.employeeId,
+                          let name = EmployeeCache.shared.name(forId: id) {
                     employeeName = name
                 } else {
                     employeeName = "Unknown Employee"
