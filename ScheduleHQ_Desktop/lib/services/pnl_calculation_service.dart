@@ -88,16 +88,19 @@ class PnlCalculationService {
   static List<PnlLineItem> recalculateAll(List<PnlLineItem> items) {
     final updatedItems = List<PnlLineItem>.from(items);
 
-    // Get input values
-    final nonProductSales = _getValue(items, 'NON-PRODUCT SALES');
+    // SALES (ALL NET) is user input (primary sales figure)
+    final salesAllNet = _getValue(items, 'SALES (ALL NET)');
     final productNetSales = _getValue(items, 'PRODUCT NET SALES');
+    
+    // NON-PRODUCT SALES is calculated: Sales (All Net) - Product Net Sales
+    final nonProductSales = salesAllNet - productNetSales;
+    
     final foodCost = _getValue(items, 'FOOD COST');
     final paperCost = _getValue(items, 'PAPER COST');
     final laborManagement = _getValue(items, 'LABOR - MANAGEMENT');
     final laborCrew = _getValue(items, 'LABOR - CREW');
 
     // Calculate totals
-    final salesAllNet = nonProductSales + productNetSales;
     final grossProfit = salesAllNet - foodCost - paperCost;
     final laborTotal = laborManagement + laborCrew;
 
@@ -125,8 +128,8 @@ class PnlCalculationService {
 
       double newValue;
       switch (item.label) {
-        case 'SALES (ALL NET)':
-          newValue = salesAllNet;
+        case 'NON-PRODUCT SALES':
+          newValue = nonProductSales;
           break;
         case 'GROSS PROFIT':
           newValue = grossProfit;

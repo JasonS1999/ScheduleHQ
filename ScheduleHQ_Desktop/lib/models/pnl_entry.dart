@@ -176,10 +176,10 @@ class PnlLineItem {
 /// Default line item labels with their configuration
 class PnlDefaults {
   static const List<Map<String, dynamic>> defaultLineItems = [
-    // Sales
-    {'label': 'NON-PRODUCT SALES', 'category': 'sales', 'isCalculated': false, 'sortOrder': 1},
+    // Sales - SALES (ALL NET) is the primary input at top
+    {'label': 'SALES (ALL NET)', 'category': 'sales', 'isCalculated': false, 'sortOrder': 1},
     {'label': 'PRODUCT NET SALES', 'category': 'sales', 'isCalculated': false, 'sortOrder': 2},
-    {'label': 'SALES (ALL NET)', 'category': 'sales', 'isCalculated': true, 'sortOrder': 3},
+    {'label': 'NON-PRODUCT SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 3},
     
     // COGS
     {'label': 'FOOD COST', 'category': 'cogs', 'isCalculated': false, 'sortOrder': 4},

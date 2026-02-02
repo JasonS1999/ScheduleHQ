@@ -93,11 +93,13 @@ class _PnlPageState extends State<PnlPage> {
         _valueControllers[item.id!] = TextEditingController(
           text: item.value != 0 ? item.value.toStringAsFixed(2) : '',
         );
-        _percentControllers[item.id!] = TextEditingController(
-          text: item.value != 0 
-              ? PnlCalculationService.calculatePercentage(item.value, productNetSales).toStringAsFixed(1)
-              : '',
-        );
+        // SALES (ALL NET) always shows 100%
+        final percentText = item.label == 'SALES (ALL NET)'
+            ? '100.0'
+            : (item.value != 0 
+                ? PnlCalculationService.calculatePercentage(item.value, productNetSales).toStringAsFixed(1)
+                : '');
+        _percentControllers[item.id!] = TextEditingController(text: percentText);
         _commentControllers[item.id!] = TextEditingController(text: item.comment);
       }
     }
@@ -124,10 +126,14 @@ class _PnlPageState extends State<PnlPage> {
       // Recalculate all
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
       
-      // Update percentage field
-      final productNetSales = _getProductNetSales();
-      final percent = PnlCalculationService.calculatePercentage(value, productNetSales);
-      _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
+      // Update percentage field (SALES (ALL NET) always stays 100%)
+      if (item.label == 'SALES (ALL NET)') {
+        _percentControllers[item.id!]?.text = '100.0';
+      } else {
+        final productNetSales = _getProductNetSales();
+        final percent = PnlCalculationService.calculatePercentage(value, productNetSales);
+        _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
+      }
 
       // Update all calculated rows' controllers
       _updateCalculatedRowControllers();
@@ -165,9 +171,21 @@ class _PnlPageState extends State<PnlPage> {
     for (final item in _lineItems) {
       if (item.isCalculated && item.id != null) {
         _valueControllers[item.id!]?.text = item.value.toStringAsFixed(2);
-        final percent = PnlCalculationService.calculatePercentage(item.value, productNetSales);
+        // SALES (ALL NET) always shows 100%
+        final percent = item.label == 'SALES (ALL NET)'
+            ? 100.0
+            : PnlCalculationService.calculatePercentage(item.value, productNetSales);
         _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
       }
+    }
+    
+    // Also update SALES (ALL NET) percentage if it exists (it's an input row but % is always 100%)
+    final salesAllNetItem = _lineItems.firstWhere(
+      (i) => i.label == 'SALES (ALL NET)',
+      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+    );
+    if (salesAllNetItem.id != null) {
+      _percentControllers[salesAllNetItem.id!]?.text = '100.0';
     }
   }
 
@@ -578,18 +596,20 @@ class _PnlPageState extends State<PnlPage> {
                 ),
         ),
 
-        // Projected % - editable for input rows, read-only for calculated
+        // Projected % - read-only for calculated rows and SALES (ALL NET) (always 100%)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: item.isCalculated
+          child: (item.isCalculated || item.label == 'SALES (ALL NET)')
               ? Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    isGoalRow 
-                        ? '${_percentFormat.format(goalPercent)}%'
-                        : '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, productNetSales))}%',
+                    item.label == 'SALES (ALL NET)'
+                        ? '100.0%'
+                        : (isGoalRow 
+                            ? '${_percentFormat.format(goalPercent)}%'
+                            : '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, productNetSales))}%'),
                     textAlign: TextAlign.right,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(fontWeight: item.isCalculated ? FontWeight.bold : FontWeight.normal),
                   ),
                 )
               : TextField(
