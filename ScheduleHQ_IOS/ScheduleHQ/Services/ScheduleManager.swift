@@ -97,13 +97,19 @@ final class ScheduleManager: ObservableObject {
         }
     }
     
+    /// Result of fetching team schedule for a date
+    struct TeamScheduleResult {
+        let shifts: [TeamShift]
+        let dailyNote: String?
+    }
+    
     /// Fetch all working shifts for a specific date across all employees
     /// - Parameter date: The date to fetch shifts for
-    /// - Returns: Array of TeamShift sorted by start time, or empty if no one is working
-    func fetchTeamShiftsForDate(_ date: Date) async -> [TeamShift] {
+    /// - Returns: TeamScheduleResult with shifts sorted by start time and daily note
+    func fetchTeamShiftsForDate(_ date: Date) async -> TeamScheduleResult {
         guard let managerUid = authManager.managerUid else {
             print("❌ fetchTeamShiftsForDate: No manager UID")
-            return []
+            return TeamScheduleResult(shifts: [], dailyNote: nil)
         }
         
         // Ensure employee cache is loaded
@@ -134,6 +140,18 @@ final class ScheduleManager: ObservableObject {
                 .collection("shiftRunners")
                 .whereField("date", isEqualTo: dateStr)
                 .getDocuments()
+            
+            // Fetch daily note for the date
+            let notesSnapshot = try await db.collection("managers")
+                .document(managerUid)
+                .collection("scheduleNotes")
+                .whereField("date", isEqualTo: dateStr)
+                .getDocuments()
+            
+            let dailyNote = notesSnapshot.documents.first.flatMap { doc -> String? in
+                guard let note = try? doc.data(as: ScheduleNote.self) else { return nil }
+                return note.note
+            }
             
             // Build a map of runner name -> shift type
             var runnersByName: [String: String] = [:]
@@ -168,11 +186,11 @@ final class ScheduleManager: ObservableObject {
             }
             .sorted { $0.shift.startTime < $1.shift.startTime }
             
-            return teamShifts
+            return TeamScheduleResult(shifts: teamShifts, dailyNote: dailyNote)
             
         } catch {
             print("❌ fetchTeamShiftsForDate: Error fetching shifts: \(error.localizedDescription)")
-            return []
+            return TeamScheduleResult(shifts: [], dailyNote: nil)
         }
     }
     

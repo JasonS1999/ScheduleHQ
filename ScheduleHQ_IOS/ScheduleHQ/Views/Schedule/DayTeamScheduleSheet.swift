@@ -4,6 +4,7 @@ import SwiftUI
 struct DayTeamScheduleSheet: View {
     let date: Date
     let teamShifts: [ScheduleManager.TeamShift]
+    let dailyNote: String?
     
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -32,6 +33,27 @@ struct DayTeamScheduleSheet: View {
                     }
                     .padding(.horizontal, AppTheme.Spacing.lg)
                     .padding(.top, AppTheme.Spacing.sm)
+                    
+                    // Daily note if exists
+                    if let note = dailyNote, !note.isEmpty {
+                        HStack(spacing: AppTheme.Spacing.sm) {
+                            Image(systemName: "note.text")
+                                .font(.system(size: 12))
+                                .foregroundStyle(AppTheme.Colors.warning)
+                            
+                            Text(note)
+                                .font(AppTheme.Typography.subheadline)
+                                .foregroundStyle(AppTheme.Colors.textPrimary)
+                            
+                            Spacer()
+                        }
+                        .padding(AppTheme.Spacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
+                                .fill(AppTheme.Colors.warning.opacity(0.1))
+                        )
+                        .padding(.horizontal, AppTheme.Spacing.lg)
+                    }
                     
                     // Team shifts list
                     LazyVStack(spacing: AppTheme.Spacing.sm) {
@@ -105,10 +127,20 @@ struct TeamShiftRow: View {
             
             // Name and time
             VStack(alignment: .leading, spacing: 2) {
-                Text(employeeName)
-                    .font(AppTheme.Typography.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(AppTheme.Colors.textPrimary)
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    Text(employeeName)
+                        .font(AppTheme.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(AppTheme.Colors.textPrimary)
+                    
+                    // Shift notes next to name
+                    if let notes = shift.notes, !notes.isEmpty {
+                        Text("• \(notes)")
+                            .font(AppTheme.Typography.caption)
+                            .foregroundStyle(AppTheme.Colors.textTertiary)
+                            .lineLimit(1)
+                    }
+                }
                 
                 HStack(spacing: AppTheme.Spacing.xs) {
                     Image(systemName: "clock.fill")
@@ -170,7 +202,7 @@ struct TeamShiftRow: View {
                     endTime: Calendar.current.date(bySettingHour: 16, minute: 30, second: 0, of: Date())!,
                     dateString: "2026-02-01",
                     label: nil,
-                    notes: nil
+                    notes: "Training new hire"
                 ),
                 runnerShiftType: "lunch"
             ),
@@ -189,6 +221,7 @@ struct TeamShiftRow: View {
                 ),
                 runnerShiftType: nil
             )
-        ]
+        ],
+        dailyNote: "$8 and $5 EVM deals end"
     )
 }

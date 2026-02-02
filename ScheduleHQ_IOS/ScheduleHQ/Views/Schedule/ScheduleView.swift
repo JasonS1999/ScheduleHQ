@@ -9,6 +9,7 @@ struct ScheduleView: View {
     @State private var showTeamSchedule = false
     @State private var selectedDate: Date = Date()
     @State private var teamShifts: [ScheduleManager.TeamShift] = []
+    @State private var teamDailyNote: String? = nil
     
     var body: some View {
         NavigationStack {
@@ -65,7 +66,7 @@ struct ScheduleView: View {
                     }
             )
             .sheet(isPresented: $showTeamSchedule) {
-                DayTeamScheduleSheet(date: selectedDate, teamShifts: teamShifts)
+                DayTeamScheduleSheet(date: selectedDate, teamShifts: teamShifts, dailyNote: teamDailyNote)
             }
         }
     }
@@ -171,12 +172,13 @@ struct ScheduleView: View {
                         dailyNote: dailyNote,
                         onLongPress: { date in
                             Task {
-                                let shifts = await scheduleManager.fetchTeamShiftsForDate(date)
+                                let result = await scheduleManager.fetchTeamShiftsForDate(date)
                                 // Only show sheet if someone is working
-                                if !shifts.isEmpty {
+                                if !result.shifts.isEmpty {
                                     await MainActor.run {
                                         selectedDate = date
-                                        teamShifts = shifts
+                                        teamShifts = result.shifts
+                                        teamDailyNote = result.dailyNote
                                         showTeamSchedule = true
                                     }
                                 }
