@@ -416,23 +416,27 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   Color _getRowColor(PnlLineItem item, bool isDark) {
-    // Color coding matching Excel
-    // P.A.C. row - cyan
+    // Color coding matching Excel - only highlight totals/headers
+    
+    // P.A.C. row - cyan (special highlight)
     if (item.label == 'P.A.C.') {
       return isDark ? Colors.cyan.shade900 : Colors.cyan.shade100;
     }
-    // SALES (ALL NET) - the main input row, no special color (or could be highlighted)
-    if (item.label == 'SALES (ALL NET)') {
-      return Colors.transparent;
-    }
-    // Calculated/total rows - yellow (includes PRODUCT NET SALES, NON-PRODUCT SALES, GROSS PROFIT, etc.)
-    if (item.isCalculated) {
+    
+    // Yellow highlight for group headers/totals only
+    final yellowRows = [
+      'SALES (ALL NET)',      // Sales group header
+      'GROSS PROFIT',         // COGS total
+      'LABOR - TOTAL',        // Labor total
+      'CONTROLLABLES',        // Controllables total
+      'GOAL',                 // Final total
+    ];
+    
+    if (yellowRows.contains(item.label)) {
       return isDark ? Colors.yellow.shade900.withValues(alpha: 0.3) : Colors.yellow.shade100;
     }
-    // PRODUCT NET SALES is special - it's marked calculated but % is editable, give it green
-    if (item.label == 'PRODUCT NET SALES') {
-      return isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50;
-    }
+    
+    // All other rows - no special color
     return Colors.transparent;
   }
 
