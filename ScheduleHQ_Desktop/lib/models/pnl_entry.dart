@@ -80,7 +80,8 @@ class PnlLineItem {
   final int? id;
   final int periodId;
   final String label;
-  final double value; // Dollar amount (source of truth)
+  final double value; // Dollar amount
+  final double percentage; // Percentage (used for PRODUCT NET SALES where % is the input)
   final String comment;
   final bool isCalculated; // true = auto-calculated row (totals)
   final bool isUserAdded; // true = user added this row (only in controllables)
@@ -92,6 +93,7 @@ class PnlLineItem {
     required this.periodId,
     required this.label,
     this.value = 0.0,
+    this.percentage = 0.0,
     this.comment = '',
     this.isCalculated = false,
     this.isUserAdded = false,
@@ -105,6 +107,7 @@ class PnlLineItem {
       'periodId': periodId,
       'label': label,
       'value': value,
+      'percentage': percentage,
       'comment': comment,
       'isCalculated': isCalculated ? 1 : 0,
       'isUserAdded': isUserAdded ? 1 : 0,
@@ -119,6 +122,7 @@ class PnlLineItem {
       periodId: map['periodId'] as int,
       label: map['label'] as String,
       value: (map['value'] as num?)?.toDouble() ?? 0.0,
+      percentage: (map['percentage'] as num?)?.toDouble() ?? 0.0,
       comment: map['comment'] as String? ?? '',
       isCalculated: (map['isCalculated'] as int?) == 1,
       isUserAdded: (map['isUserAdded'] as int?) == 1,
@@ -135,6 +139,7 @@ class PnlLineItem {
     int? periodId,
     String? label,
     double? value,
+    double? percentage,
     String? comment,
     bool? isCalculated,
     bool? isUserAdded,
@@ -146,6 +151,7 @@ class PnlLineItem {
       periodId: periodId ?? this.periodId,
       label: label ?? this.label,
       value: value ?? this.value,
+      percentage: percentage ?? this.percentage,
       comment: comment ?? this.comment,
       isCalculated: isCalculated ?? this.isCalculated,
       isUserAdded: isUserAdded ?? this.isUserAdded,
@@ -176,10 +182,10 @@ class PnlLineItem {
 /// Default line item labels with their configuration
 class PnlDefaults {
   static const List<Map<String, dynamic>> defaultLineItems = [
-    // Sales - SALES (ALL NET) is the primary input at top
+    // Sales - SALES (ALL NET) is the primary $ input, others are derived
     {'label': 'SALES (ALL NET)', 'category': 'sales', 'isCalculated': false, 'sortOrder': 1},
-    {'label': 'PRODUCT NET SALES', 'category': 'sales', 'isCalculated': false, 'sortOrder': 2},
-    {'label': 'NON-PRODUCT SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 3},
+    {'label': 'PRODUCT NET SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 2}, // $ calculated from %, % is editable
+    {'label': 'NON-PRODUCT SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 3}, // Both $ and % calculated
     
     // COGS
     {'label': 'FOOD COST', 'category': 'cogs', 'isCalculated': false, 'sortOrder': 4},

@@ -86,25 +86,42 @@ class _PnlPageState extends State<PnlPage> {
     _percentControllers.clear();
     _commentControllers.clear();
 
-    final productNetSales = _getProductNetSales();
+    final salesAllNet = _getSalesAllNet();
 
     for (final item in _lineItems) {
       if (item.id != null) {
         _valueControllers[item.id!] = TextEditingController(
           text: item.value != 0 ? item.value.toStringAsFixed(2) : '',
         );
-        // SALES (ALL NET) always shows 100%
-        final percentText = item.label == 'SALES (ALL NET)'
-            ? '100.0'
-            : (item.value != 0 
-                ? PnlCalculationService.calculatePercentage(item.value, productNetSales).toStringAsFixed(1)
-                : '');
+        
+        // Determine percentage text based on item type
+        String percentText;
+        if (item.label == 'SALES (ALL NET)') {
+          // SALES (ALL NET) always shows 100%
+          percentText = '100.0';
+        } else if (item.label == 'PRODUCT NET SALES') {
+          // PRODUCT NET SALES uses stored percentage (this is the editable field)
+          percentText = item.percentage != 0 ? item.percentage.toStringAsFixed(1) : '';
+        } else {
+          // All other items calculate % from SALES (ALL NET)
+          percentText = item.value != 0 
+              ? PnlCalculationService.calculatePercentage(item.value, salesAllNet).toStringAsFixed(1)
+              : '';
+        }
         _percentControllers[item.id!] = TextEditingController(text: percentText);
         _commentControllers[item.id!] = TextEditingController(text: item.comment);
       }
     }
 
     _hasChanges = false;
+  }
+
+  double _getSalesAllNet() {
+    final item = _lineItems.firstWhere(
+      (i) => i.label == 'SALES (ALL NET)',
+      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+    );
+    return item.value;
   }
 
   double _getProductNetSales() {
@@ -130,8 +147,8 @@ class _PnlPageState extends State<PnlPage> {
       if (item.label == 'SALES (ALL NET)') {
         _percentControllers[item.id!]?.text = '100.0';
       } else {
-        final productNetSales = _getProductNetSales();
-        final percent = PnlCalculationService.calculatePercentage(value, productNetSales);
+        final salesAllNet = _getSalesAllNet();
+        final percent = PnlCalculationService.calculatePercentage(value, salesAllNet);
         _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
       }
 
@@ -144,13 +161,18 @@ class _PnlPageState extends State<PnlPage> {
 
   void _onPercentChanged(PnlLineItem item, String newPercent) {
     final percent = double.tryParse(newPercent) ?? 0;
-    final productNetSales = _getProductNetSales();
-    final value = PnlCalculationService.calculateValueFromPercentage(percent, productNetSales);
+    final salesAllNet = _getSalesAllNet();
+    final value = PnlCalculationService.calculateValueFromPercentage(percent, salesAllNet);
 
-    // Update item value
+    // Update item value and percentage
     final index = _lineItems.indexWhere((i) => i.id == item.id);
     if (index >= 0) {
-      _lineItems[index] = _lineItems[index].copyWith(value: value);
+      // For PRODUCT NET SALES, store the percentage since that's the user input
+      if (item.label == 'PRODUCT NET SALES') {
+        _lineItems[index] = _lineItems[index].copyWith(value: value, percentage: percent);
+      } else {
+        _lineItems[index] = _lineItems[index].copyWith(value: value);
+      }
 
       // Recalculate all
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
@@ -166,26 +188,28 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   void _updateCalculatedRowControllers() {
-    final productNetSales = _getProductNetSales();
+    final salesAllNet = _getSalesAllNet();
     
     for (final item in _lineItems) {
-      if (item.isCalculated && item.id != null) {
-        _valueControllers[item.id!]?.text = item.value.toStringAsFixed(2);
-        // SALES (ALL NET) always shows 100%
-        final percent = item.label == 'SALES (ALL NET)'
-            ? 100.0
-            : PnlCalculationService.calculatePercentage(item.value, productNetSales);
-        _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
+      if (item.id != null) {
+        // Update value controllers for all calculated items
+        if (item.isCalculated) {
+          _valueControllers[item.id!]?.text = item.value.toStringAsFixed(2);
+        }
+        
+        // Update percentage controllers
+        if (item.label == 'SALES (ALL NET)') {
+          // Always 100%
+          _percentControllers[item.id!]?.text = '100.0';
+        } else if (item.label == 'PRODUCT NET SALES') {
+          // Use stored percentage (don't recalculate, it's user input)
+          _percentControllers[item.id!]?.text = item.percentage.toStringAsFixed(1);
+        } else if (item.isCalculated) {
+          // Calculate % for other calculated items
+          final percent = PnlCalculationService.calculatePercentage(item.value, salesAllNet);
+          _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
+        }
       }
-    }
-    
-    // Also update SALES (ALL NET) percentage if it exists (it's an input row but % is always 100%)
-    final salesAllNetItem = _lineItems.firstWhere(
-      (i) => i.label == 'SALES (ALL NET)',
-      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
-    );
-    if (salesAllNetItem.id != null) {
-      _percentControllers[salesAllNetItem.id!]?.text = '100.0';
     }
   }
 
@@ -483,7 +507,7 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   Widget _buildTable(bool isDark) {
-    final productNetSales = _getProductNetSales();
+    final salesAllNet = _getSalesAllNet();
 
     return Table(
       border: TableBorder.all(
@@ -530,15 +554,36 @@ class _PnlPageState extends State<PnlPage> {
         ),
 
         // Data rows
-        ..._lineItems.map((item) => _buildTableRow(item, productNetSales, isDark)),
+        ..._lineItems.map((item) => _buildTableRow(item, salesAllNet, isDark)),
       ],
     );
   }
 
-  TableRow _buildTableRow(PnlLineItem item, double productNetSales, bool isDark) {
+  TableRow _buildTableRow(PnlLineItem item, double salesAllNet, bool isDark) {
     final rowColor = _getRowColor(item, isDark);
     final isGoalRow = item.label == 'GOAL';
     final goalPercent = isGoalRow ? PnlCalculationService.getGoalPercentage(_lineItems) : null;
+    
+    // Special handling for sales section items
+    final isSalesAllNet = item.label == 'SALES (ALL NET)';
+    final isProductNetSales = item.label == 'PRODUCT NET SALES';
+    final isNonProductSales = item.label == 'NON-PRODUCT SALES';
+    
+    // Determine if $ is editable:
+    // - SALES (ALL NET): $ is editable (user input)
+    // - PRODUCT NET SALES: $ is read-only (calculated from %)
+    // - NON-PRODUCT SALES: $ is read-only (calculated)
+    // - Other calculated rows: $ is read-only
+    // - Other input rows: $ is editable
+    final isDollarReadOnly = item.isCalculated || isProductNetSales;
+    
+    // Determine if % is editable:
+    // - SALES (ALL NET): % is always 100% (read-only)
+    // - PRODUCT NET SALES: % is editable (user input)
+    // - NON-PRODUCT SALES: % is read-only (calculated)
+    // - Other calculated rows: % is read-only
+    // - Other input rows: % is editable
+    final isPercentReadOnly = isSalesAllNet || isNonProductSales || (item.isCalculated && !isProductNetSales);
 
     // Check if this is a section break (before certain rows)
     final needsTopBorder = [
@@ -567,16 +612,16 @@ class _PnlPageState extends State<PnlPage> {
           ),
         ),
 
-        // Projected $ - editable for input rows, read-only for calculated
+        // Projected $ - editable only for SALES (ALL NET) and non-calculated, non-PRODUCT NET SALES items
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: item.isCalculated
+          child: isDollarReadOnly
               ? Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
                     _currencyFormat.format(item.value),
                     textAlign: TextAlign.right,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    style: TextStyle(fontWeight: item.isCalculated ? FontWeight.bold : FontWeight.normal),
                   ),
                 )
               : TextField(
@@ -596,18 +641,18 @@ class _PnlPageState extends State<PnlPage> {
                 ),
         ),
 
-        // Projected % - read-only for calculated rows and SALES (ALL NET) (always 100%)
+        // Projected % - special handling for different item types
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: (item.isCalculated || item.label == 'SALES (ALL NET)')
+          child: isPercentReadOnly
               ? Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                    item.label == 'SALES (ALL NET)'
+                    isSalesAllNet
                         ? '100.0%'
                         : (isGoalRow 
                             ? '${_percentFormat.format(goalPercent)}%'
-                            : '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, productNetSales))}%'),
+                            : '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, salesAllNet))}%'),
                     textAlign: TextAlign.right,
                     style: TextStyle(fontWeight: item.isCalculated ? FontWeight.bold : FontWeight.normal),
                   ),
