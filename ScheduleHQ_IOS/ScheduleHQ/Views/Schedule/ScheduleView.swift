@@ -5,6 +5,11 @@ struct ScheduleView: View {
     @ObservedObject private var scheduleManager = ScheduleManager.shared
     @Environment(\.colorScheme) private var colorScheme
     
+    // State for team schedule sheet
+    @State private var showTeamSchedule = false
+    @State private var selectedDate: Date = Date()
+    @State private var teamShifts: [ScheduleManager.TeamShift] = []
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -59,6 +64,9 @@ struct ScheduleView: View {
                         }
                     }
             )
+            .sheet(isPresented: $showTeamSchedule) {
+                DayTeamScheduleSheet(date: selectedDate, teamShifts: teamShifts)
+            }
         }
     }
     
@@ -160,7 +168,20 @@ struct ScheduleView: View {
                         timeOff: dayData.timeOff,
                         isRunner: runnerInfo.isRunner,
                         runnerShiftType: runnerInfo.shiftType,
-                        dailyNote: dailyNote
+                        dailyNote: dailyNote,
+                        onLongPress: { date in
+                            Task {
+                                let shifts = await scheduleManager.fetchTeamShiftsForDate(date)
+                                // Only show sheet if someone is working
+                                if !shifts.isEmpty {
+                                    await MainActor.run {
+                                        selectedDate = date
+                                        teamShifts = shifts
+                                        showTeamSchedule = true
+                                    }
+                                }
+                            }
+                        }
                     )
                     .padding(.horizontal, AppTheme.Spacing.lg)
                 }
