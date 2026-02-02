@@ -160,6 +160,11 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   void _onPercentChanged(PnlLineItem item, String newPercent) {
+    // Don't process incomplete input (e.g., "0." while user is still typing)
+    if (newPercent.isEmpty || newPercent.endsWith('.')) {
+      return;
+    }
+    
     final percent = double.tryParse(newPercent) ?? 0;
     final salesAllNet = _getSalesAllNet();
     final value = PnlCalculationService.calculateValueFromPercentage(percent, salesAllNet);
@@ -197,13 +202,14 @@ class _PnlPageState extends State<PnlPage> {
           _valueControllers[item.id!]?.text = item.value.toStringAsFixed(2);
         }
         
-        // Update percentage controllers
+        // Update percentage controllers for calculated items only
+        // Do NOT update PRODUCT NET SALES % - it's user input, let them type freely
         if (item.label == 'SALES (ALL NET)') {
           // Always 100%
           _percentControllers[item.id!]?.text = '100.0';
         } else if (item.label == 'PRODUCT NET SALES') {
-          // Use stored percentage (don't recalculate, it's user input)
-          _percentControllers[item.id!]?.text = item.percentage.toStringAsFixed(1);
+          // Don't overwrite - this is user input
+          // The percentage is already stored in the model
         } else if (item.isCalculated) {
           // Calculate % for other calculated items
           final percent = PnlCalculationService.calculatePercentage(item.value, salesAllNet);
@@ -411,13 +417,20 @@ class _PnlPageState extends State<PnlPage> {
 
   Color _getRowColor(PnlLineItem item, bool isDark) {
     // Color coding matching Excel
+    // P.A.C. row - cyan
     if (item.label == 'P.A.C.') {
       return isDark ? Colors.cyan.shade900 : Colors.cyan.shade100;
     }
+    // SALES (ALL NET) - the main input row, no special color (or could be highlighted)
+    if (item.label == 'SALES (ALL NET)') {
+      return Colors.transparent;
+    }
+    // Calculated/total rows - yellow (includes PRODUCT NET SALES, NON-PRODUCT SALES, GROSS PROFIT, etc.)
     if (item.isCalculated) {
       return isDark ? Colors.yellow.shade900.withValues(alpha: 0.3) : Colors.yellow.shade100;
     }
-    if (item.category == PnlCategory.sales && item.label != 'SALES (ALL NET)') {
+    // PRODUCT NET SALES is special - it's marked calculated but % is editable, give it green
+    if (item.label == 'PRODUCT NET SALES') {
       return isDark ? Colors.green.shade900.withValues(alpha: 0.3) : Colors.green.shade50;
     }
     return Colors.transparent;
