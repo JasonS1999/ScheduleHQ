@@ -105,25 +105,10 @@ struct TeamShiftRow: View {
             
             // Name and time
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: AppTheme.Spacing.sm) {
-                    Text(employeeName)
-                        .font(AppTheme.Typography.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(AppTheme.Colors.textPrimary)
-                    
-                    // Runner badge
-                    if let badgeText = runnerBadgeText {
-                        Text(badgeText)
-                            .font(.system(size: 8, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule()
-                                    .fill(LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EA580C")], startPoint: .leading, endPoint: .trailing))
-                            )
-                    }
-                }
+                Text(employeeName)
+                    .font(AppTheme.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(AppTheme.Colors.textPrimary)
                 
                 HStack(spacing: AppTheme.Spacing.xs) {
                     Image(systemName: "clock.fill")
@@ -138,16 +123,28 @@ struct TeamShiftRow: View {
             
             Spacer()
             
-            // Duration badge
-            Text(shift.formattedDuration)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.Colors.textSecondary)
-                .padding(.horizontal, AppTheme.Spacing.sm)
-                .padding(.vertical, AppTheme.Spacing.xs)
-                .background(
-                    Capsule()
-                        .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
-                )
+            // Runner badge OR duration badge (not both)
+            if let badgeText = runnerBadgeText {
+                Text(badgeText)
+                    .font(.system(size: 10, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AppTheme.Spacing.sm)
+                    .padding(.vertical, AppTheme.Spacing.xs)
+                    .background(
+                        Capsule()
+                            .fill(LinearGradient(colors: [Color(hex: "F97316"), Color(hex: "EA580C")], startPoint: .leading, endPoint: .trailing))
+                    )
+            } else {
+                Text(shift.formattedDuration)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(AppTheme.Colors.textSecondary)
+                    .padding(.horizontal, AppTheme.Spacing.sm)
+                    .padding(.vertical, AppTheme.Spacing.xs)
+                    .background(
+                        Capsule()
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+                    )
+            }
         }
         .padding(.vertical, AppTheme.Spacing.sm)
         .padding(.horizontal, AppTheme.Spacing.md)
