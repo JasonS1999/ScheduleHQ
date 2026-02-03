@@ -89,11 +89,13 @@ final class ScheduleManager: ObservableObject {
         let employeeName: String
         let shift: Shift
         let runnerShiftType: String?  // e.g., "lunch", "dinner" - nil if not a runner
+        let profileImageURL: String?  // Employee's profile image URL
         
-        init(employeeName: String, shift: Shift, runnerShiftType: String? = nil) {
+        init(employeeName: String, shift: Shift, runnerShiftType: String? = nil, profileImageURL: String? = nil) {
             self.employeeName = employeeName
             self.shift = shift
             self.runnerShiftType = runnerShiftType
+            self.profileImageURL = profileImageURL
         }
     }
     
@@ -167,22 +169,31 @@ final class ScheduleManager: ObservableObject {
                 // Skip "off" shifts
                 if shift.isOff { return nil }
                 
-                // Get employee name from cache - try UID first, then local ID
+                // Get employee from cache - try UID first, then local ID
+                let employee: Employee?
                 let employeeName: String
                 if let uid = shift.employeeUid,
-                   let name = EmployeeCache.shared.name(for: uid) {
-                    employeeName = name
+                   let cachedEmployee = EmployeeCache.shared.employee(for: uid) {
+                    employee = cachedEmployee
+                    employeeName = cachedEmployee.name
                 } else if let id = shift.employeeId,
-                          let name = EmployeeCache.shared.name(forId: id) {
-                    employeeName = name
+                          let cachedEmployee = EmployeeCache.shared.employee(forId: id) {
+                    employee = cachedEmployee
+                    employeeName = cachedEmployee.name
                 } else {
+                    employee = nil
                     employeeName = "Unknown Employee"
                 }
                 
                 // Check if this employee is a runner
                 let runnerShiftType = runnersByName[employeeName.lowercased()]
                 
-                return TeamShift(employeeName: employeeName, shift: shift, runnerShiftType: runnerShiftType)
+                return TeamShift(
+                    employeeName: employeeName,
+                    shift: shift,
+                    runnerShiftType: runnerShiftType,
+                    profileImageURL: employee?.profileImageURL
+                )
             }
             .sorted { $0.shift.startTime < $1.shift.startTime }
             

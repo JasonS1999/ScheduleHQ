@@ -61,7 +61,8 @@ struct DayTeamScheduleSheet: View {
                             TeamShiftRow(
                                 employeeName: teamShift.employeeName,
                                 shift: teamShift.shift,
-                                runnerShiftType: teamShift.runnerShiftType
+                                runnerShiftType: teamShift.runnerShiftType,
+                                profileImageURL: teamShift.profileImageURL
                             )
                         }
                     }
@@ -94,6 +95,7 @@ struct TeamShiftRow: View {
     let employeeName: String
     let shift: Shift
     let runnerShiftType: String?
+    let profileImageURL: String?
     
     @Environment(\.colorScheme) private var colorScheme
     
@@ -114,16 +116,14 @@ struct TeamShiftRow: View {
                 .frame(width: 4, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 2))
             
-            // Employee avatar
-            ZStack {
-                Circle()
-                    .fill((runnerShiftType != nil ? Color(hex: "F97316") : shiftType.color).opacity(0.15))
-                
-                Text(employeeName.prefix(1).uppercased())
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(runnerShiftType != nil ? Color(hex: "F97316") : shiftType.color)
-            }
-            .frame(width: 36, height: 36)
+            // Employee avatar using EmployeeAvatarView
+            EmployeeAvatarView(
+                imageURL: profileImageURL,
+                name: employeeName,
+                size: 36,
+                accentColor: runnerShiftType != nil ? Color(hex: "F97316") : shiftType.color,
+                showGradient: false
+            )
             
             // Name and time
             VStack(alignment: .leading, spacing: 2) {
