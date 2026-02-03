@@ -11,6 +11,7 @@ struct Employee: Codable, Identifiable, Equatable {
     let uid: String?
     let vacationWeeksAllowed: Int
     let vacationWeeksUsed: Int
+    var profileImageURL: String?
     
     /// Remaining vacation weeks available
     var vacationWeeksRemaining: Int {
@@ -37,6 +38,7 @@ struct Employee: Codable, Identifiable, Equatable {
         case uid
         case vacationWeeksAllowed
         case vacationWeeksUsed
+        case profileImageURL
     }
     
     init(from decoder: Decoder) throws {
@@ -49,6 +51,7 @@ struct Employee: Codable, Identifiable, Equatable {
         uid = try container.decodeIfPresent(String.self, forKey: .uid)
         vacationWeeksAllowed = try container.decodeIfPresent(Int.self, forKey: .vacationWeeksAllowed) ?? 0
         vacationWeeksUsed = try container.decodeIfPresent(Int.self, forKey: .vacationWeeksUsed) ?? 0
+        profileImageURL = try container.decodeIfPresent(String.self, forKey: .profileImageURL)
     }
     
     init(
@@ -59,7 +62,8 @@ struct Employee: Codable, Identifiable, Equatable {
         email: String? = nil,
         uid: String? = nil,
         vacationWeeksAllowed: Int = 0,
-        vacationWeeksUsed: Int = 0
+        vacationWeeksUsed: Int = 0,
+        profileImageURL: String? = nil
     ) {
         self.documentId = documentId
         self.id = id
@@ -69,5 +73,6 @@ struct Employee: Codable, Identifiable, Equatable {
         self.uid = uid
         self.vacationWeeksAllowed = vacationWeeksAllowed
         self.vacationWeeksUsed = vacationWeeksUsed
+        self.profileImageURL = profileImageURL
     }
 }
