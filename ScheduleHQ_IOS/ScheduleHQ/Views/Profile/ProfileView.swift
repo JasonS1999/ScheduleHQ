@@ -1,11 +1,18 @@
 import SwiftUI
+import PhotosUI
 
 /// Profile view showing employee information and settings
 struct ProfileView: View {
     @State private var showSignOutConfirmation = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isUploadingPhoto = false
     
     @ObservedObject private var authManager = AuthManager.shared
     @ObservedObject private var timeOffManager = TimeOffManager.shared
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    
+    private let alertManager = AlertManager.shared
+    private let profileImageService = ProfileImageService.shared
     
     var body: some View {
         NavigationStack {
@@ -58,16 +65,52 @@ struct ProfileView: View {
     
     private var profileHeader: some View {
         VStack(spacing: 16) {
-            // Avatar
+            // Avatar with photo picker
             if let employee = authManager.employee {
                 ZStack {
-                    Circle()
-                        .fill(Color.blue.gradient)
-                        .frame(width: 100, height: 100)
+                    EmployeeAvatarView(employee: employee, size: 100)
                     
-                    Text(employee.initial)
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundColor(.white)
+                    // Upload progress overlay
+                    if isUploadingPhoto {
+                        Circle()
+                            .fill(Color.black.opacity(0.5))
+                            .frame(width: 100, height: 100)
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.2)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    // Camera button overlay
+                    PhotosPicker(
+                        selection: $selectedPhotoItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                            .shadow(radius: 2)
+                    }
+                    .disabled(!networkMonitor.isConnected || isUploadingPhoto)
+                    .opacity(networkMonitor.isConnected && !isUploadingPhoto ? 1 : 0.5)
+                }
+                .onChange(of: selectedPhotoItem) { _, newItem in
+                    if let newItem = newItem {
+                        Task {
+                            await handlePhotoSelection(newItem)
+                        }
+                    }
+                }
+                
+                // Offline indicator for photo upload
+                if !networkMonitor.isConnected {
+                    Text("Go online to change photo")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 
                 // Name and job code
@@ -122,6 +165,40 @@ struct ProfileView: View {
         .background(Color(.systemBackground))
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 5, y: 2)
+    }
+    
+    // MARK: - Photo Handling
+    
+    private func handlePhotoSelection(_ item: PhotosPickerItem) async {
+        // Clear selection to allow re-selecting same photo
+        selectedPhotoItem = nil
+        
+        guard let managerUid = authManager.managerUid,
+              let employeeDocId = authManager.employee?.documentId else {
+            alertManager.showError(ProfileImageError.noEmployeeId)
+            return
+        }
+        
+        isUploadingPhoto = true
+        
+        do {
+            // Load image data from PhotosPickerItem
+            guard let data = try await item.loadTransferable(type: Data.self),
+                  let image = UIImage(data: data) else {
+                throw ProfileImageError.compressionFailed
+            }
+            
+            // Upload the image
+            _ = try await profileImageService.uploadProfileImage(image, for: employeeDocId, managerUid: managerUid)
+            
+            // Refresh employee data to get updated URL
+            await authManager.refreshEmployeeData()
+            
+        } catch {
+            alertManager.showError(error)
+        }
+        
+        isUploadingPhoto = false
     }
     
     // MARK: - Sign Out Section
