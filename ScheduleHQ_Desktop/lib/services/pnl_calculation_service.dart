@@ -48,31 +48,37 @@ class PnlCalculationService {
     if (salesAllNet < 108000) return 24.50;
     if (salesAllNet >= 540000) return 40.50;
 
-    // Find the highest threshold that is <= salesAllNet
+    // Find the nearest threshold to salesAllNet
     final thresholds = _pacGoalTable.keys.toList()..sort();
-    double goal = 24.50;
+    int nearestThreshold = thresholds.first;
+    int smallestDistance = (salesAllNet - nearestThreshold).abs().toInt();
 
     for (final threshold in thresholds) {
-      if (salesAllNet >= threshold) {
-        goal = _pacGoalTable[threshold]!;
-      } else {
-        break;
+      final distance = (salesAllNet - threshold).abs().toInt();
+      if (distance < smallestDistance) {
+        smallestDistance = distance;
+        nearestThreshold = threshold;
       }
     }
 
-    return goal;
+    return _pacGoalTable[nearestThreshold]!;
   }
 
-  /// Calculate percentage of a value relative to Sales (ALL NET)
-  /// This is the new base for all percentage calculations
-  static double calculatePercentage(double value, double salesAllNet) {
-    if (salesAllNet == 0) return 0.0;
-    return (value / salesAllNet) * 100;
+  /// Calculate percentage of a value relative to Product Net Sales
+  /// This is the base for all percentage calculations
+  static double calculatePercentage(double value, double productNetSales) {
+    if (productNetSales == 0) return 0.0;
+    return (value / productNetSales) * 100;
   }
 
-  /// Calculate dollar value from percentage relative to Sales (ALL NET)
-  static double calculateValueFromPercentage(double percentage, double salesAllNet) {
-    return (percentage * salesAllNet) / 100;
+  /// Calculate dollar value from percentage relative to Product Net Sales
+  static double calculateValueFromPercentage(double percentage, double productNetSales) {
+    return (percentage * productNetSales) / 100;
+  }
+
+  /// Round a dollar amount to the nearest $100
+  static double roundToNearest100(double value) {
+    return (value / 100).round() * 100.0;
   }
 
   /// Get a line item's value by label from a list of items
@@ -88,25 +94,25 @@ class PnlCalculationService {
   /// Returns a new list with updated calculated values
   /// 
   /// Calculation flow:
-  /// 1. SALES (ALL NET) - user input $ (this is the base, always 100%)
-  /// 2. PRODUCT NET SALES - user input %, $ calculated from SALES (ALL NET)
-  /// 3. NON-PRODUCT SALES - $ = SALES (ALL NET) - PRODUCT NET SALES, % calculated
+  /// 1. SALES (ALL NET) - user input $ (total sales, 100%)
+  /// 2. NON-PRODUCT SALES - user input %, $ calculated from SALES (ALL NET)
+  /// 3. PRODUCT NET SALES - calculated: SALES (ALL NET) - NON-PRODUCT SALES
   static List<PnlLineItem> recalculateAll(List<PnlLineItem> items) {
     final updatedItems = List<PnlLineItem>.from(items);
 
-    // SALES (ALL NET) is user input (primary sales figure) - this is the base
+    // SALES (ALL NET) is user input (total sales figure, the 100% base)
     final salesAllNet = _getValue(items, 'SALES (ALL NET)');
     
-    // PRODUCT NET SALES: % is stored/editable, $ is calculated from SALES (ALL NET)
-    final productNetSalesItem = items.firstWhere(
-      (i) => i.label == 'PRODUCT NET SALES',
+    // NON-PRODUCT SALES: % is user input, $ is calculated from SALES (ALL NET)
+    final nonProductSalesItem = items.firstWhere(
+      (i) => i.label == 'NON-PRODUCT SALES',
       orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
     );
-    final productNetSalesPercent = productNetSalesItem.percentage;
-    final productNetSales = calculateValueFromPercentage(productNetSalesPercent, salesAllNet);
+    final nonProductSalesPercent = nonProductSalesItem.percentage;
+    final nonProductSales = calculateValueFromPercentage(nonProductSalesPercent, salesAllNet);
     
-    // NON-PRODUCT SALES is calculated: Sales (All Net) - Product Net Sales
-    final nonProductSales = salesAllNet - productNetSales;
+    // PRODUCT NET SALES is calculated: Sales All Net - Non-Product Sales
+    final productNetSales = salesAllNet - nonProductSales;
     
     final foodCost = _getValue(items, 'FOOD COST');
     final paperCost = _getValue(items, 'PAPER COST');
@@ -114,7 +120,7 @@ class PnlCalculationService {
     final laborCrew = _getValue(items, 'LABOR - CREW');
 
     // Calculate totals
-    final grossProfit = salesAllNet - foodCost - paperCost;
+    final grossProfit = productNetSales - foodCost - paperCost;
     final laborTotal = laborManagement + laborCrew;
 
     // Sum all controllables (excluding the CONTROLLABLES total row)
@@ -130,37 +136,37 @@ class PnlCalculationService {
     // Calculate P.A.C.
     final pac = grossProfit - laborTotal - controllablesSum;
 
-    // Calculate GOAL based on Sales (ALL NET)
+    // Calculate GOAL based on Sales (ALL NET) for lookup, but use Product Net Sales for $
     final goalPercent = getPacGoal(salesAllNet);
-    final goalValue = calculateValueFromPercentage(goalPercent, salesAllNet);
+    final goalValue = calculateValueFromPercentage(goalPercent, productNetSales);
 
-    // Update calculated items
+    // Update calculated items (round all to nearest $100)
     for (var i = 0; i < updatedItems.length; i++) {
       final item = updatedItems[i];
       if (!item.isCalculated) continue;
 
       double newValue;
       switch (item.label) {
-        case 'PRODUCT NET SALES':
-          newValue = productNetSales;
-          break;
         case 'NON-PRODUCT SALES':
-          newValue = nonProductSales;
+          newValue = roundToNearest100(nonProductSales);
+          break;
+        case 'PRODUCT NET SALES':
+          newValue = roundToNearest100(productNetSales);
           break;
         case 'GROSS PROFIT':
-          newValue = grossProfit;
+          newValue = roundToNearest100(grossProfit);
           break;
         case 'LABOR - TOTAL':
-          newValue = laborTotal;
+          newValue = roundToNearest100(laborTotal);
           break;
         case 'CONTROLLABLES':
-          newValue = controllablesSum;
+          newValue = roundToNearest100(controllablesSum);
           break;
         case 'P.A.C.':
-          newValue = pac;
+          newValue = roundToNearest100(pac);
           break;
         case 'GOAL':
-          newValue = goalValue;
+          newValue = roundToNearest100(goalValue);
           break;
         default:
           continue;
@@ -180,18 +186,18 @@ class PnlCalculationService {
 
   /// Check if P.A.C. meets the GOAL
   static bool isPacMeetingGoal(List<PnlLineItem> items) {
-    final salesAllNet = _getValue(items, 'SALES (ALL NET)');
+    final productNetSales = _getValue(items, 'PRODUCT NET SALES');
     final pac = _getValue(items, 'P.A.C.');
-    final pacPercent = calculatePercentage(pac, salesAllNet);
+    final pacPercent = calculatePercentage(pac, productNetSales);
     final goalPercent = getGoalPercentage(items);
     return pacPercent >= goalPercent;
   }
 
   /// Get variance between P.A.C. and GOAL (positive = above goal)
   static double getPacVariance(List<PnlLineItem> items) {
-    final salesAllNet = _getValue(items, 'SALES (ALL NET)');
+    final productNetSales = _getValue(items, 'PRODUCT NET SALES');
     final pac = _getValue(items, 'P.A.C.');
-    final pacPercent = calculatePercentage(pac, salesAllNet);
+    final pacPercent = calculatePercentage(pac, productNetSales);
     final goalPercent = getGoalPercentage(items);
     return pacPercent - goalPercent;
   }

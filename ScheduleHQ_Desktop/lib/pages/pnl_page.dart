@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +8,45 @@ import '../models/pnl_entry.dart';
 import '../models/store_hours.dart';
 import '../services/pnl_calculation_service.dart';
 import '../services/pnl_pdf_service.dart';
+
+/// Row edit mode
+enum _EditMode { editable, dollarOnly, percentOnly, readOnly }
+
+/// Configuration for row behaviors
+class _RowConfig {
+  final _EditMode mode;
+  final double? fixedDollar;
+  final double? fixedPercent;
+  final double? defaultDollar;  // Default value when creating new period
+  final double? defaultPercent; // Default value when creating new period
+  final bool useGoalPercent; // Special case for GOAL row
+  final bool useSalesPercent; // Special case for SALES (ALL NET) = NON-PRODUCT % + 100%
+
+  const _RowConfig(
+    this.mode, {
+    this.fixedDollar,
+    this.fixedPercent,
+    this.defaultDollar,
+    this.defaultPercent,
+    this.useGoalPercent = false,
+    this.useSalesPercent = false,
+  });
+
+  // Convenience constructors
+  const _RowConfig.editable({double? defaultDollar, double? defaultPercent})
+      : this(_EditMode.editable, defaultDollar: defaultDollar, defaultPercent: defaultPercent);
+  const _RowConfig.dollarOnly({double? fixedPercent, double? defaultDollar})
+      : this(_EditMode.dollarOnly, fixedPercent: fixedPercent, defaultDollar: defaultDollar);
+  const _RowConfig.percentOnly({double? fixedDollar, double? defaultPercent})
+      : this(_EditMode.percentOnly, fixedDollar: fixedDollar, defaultPercent: defaultPercent);
+  const _RowConfig.readOnly({double? fixedDollar, double? fixedPercent, bool useSalesPercent = false})
+      : this(_EditMode.readOnly, fixedDollar: fixedDollar, fixedPercent: fixedPercent, useSalesPercent: useSalesPercent);
+  const _RowConfig.goal() : this(_EditMode.readOnly, useGoalPercent: true);
+  const _RowConfig.salesTotal() : this(_EditMode.dollarOnly, useSalesPercent: true);
+
+  bool get isDollarEditable => mode == _EditMode.editable || mode == _EditMode.dollarOnly;
+  bool get isPercentEditable => mode == _EditMode.editable || mode == _EditMode.percentOnly;
+}
 
 class PnlPage extends StatefulWidget {
   const PnlPage({super.key});
@@ -19,13 +60,80 @@ class _PnlPageState extends State<PnlPage> {
   final _currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
   final _percentFormat = NumberFormat('0.0', 'en_US');
 
+  // Row configuration by label - use _RowConfig constructors:
+  // .editable()     - both $ and % editable
+  // .dollarOnly()   - $ editable, % calculated (can add fixedPercent)
+  // .percentOnly()  - % editable, $ calculated (can add fixedDollar)
+  // .readOnly()     - both read-only (can add fixedDollar/fixedPercent)
+  // .goal()         - uses special GOAL % lookup
+  
+  static const _rowConfigs = <String, _RowConfig>{
+    // === SALES ===
+    'SALES (ALL NET)': _RowConfig.readOnly(useSalesPercent: true),    // Read-only (entered in header), % = NON-PRODUCT % + 100%
+    'NON-PRODUCT SALES': _RowConfig.percentOnly(),                    // % editable, $ calculated from SALES ALL NET
+    'PRODUCT NET SALES': _RowConfig.readOnly(fixedPercent: 100.0),    // Calculated: SALES ALL NET - NON-PRODUCT, % fixed 100%
+    
+    // === COGS ===
+    'FOOD COST': _RowConfig.percentOnly(),                             // $ editable, % calculated
+    'PAPER COST': _RowConfig.percentOnly(),                            // $ editable, % calculated
+    'GROSS PROFIT': _RowConfig.readOnly(),                            // Calculated: SALES ALL NET - FOOD - PAPER
+    
+    // === LABOR ===
+    'LABOR - MANAGEMENT': _RowConfig.dollarOnly(),                    // $ editable, % calculated
+    'LABOR - CREW': _RowConfig.percentOnly(),                          // $ editable, % calculated
+    'LABOR - TOTAL': _RowConfig.readOnly(),                           // Calculated: MGMT + CREW
+    
+    // === CONTROLLABLES ===
+    'PAYROLL TAXES': _RowConfig.percentOnly(),                        
+    'BONUSES': _RowConfig.dollarOnly(),
+    'ADVERTISING - CO-OP': _RowConfig.percentOnly(),
+    'ADVERTISING - OPNAD': _RowConfig.percentOnly(),
+    'PROMOTION': _RowConfig.percentOnly(),
+    'LINEN': _RowConfig.dollarOnly(),
+    'CREW AWARDS': _RowConfig.dollarOnly(),
+    'OUTSIDE SERVICES': _RowConfig.percentOnly(),
+    'OPERATING SUPPLIES': _RowConfig.dollarOnly(),
+    'M & R': _RowConfig.dollarOnly(),
+    'UTILITIES': _RowConfig.percentOnly(),
+    'CASH +/-': _RowConfig.dollarOnly(),
+    'DUES & SUBSCRIPTIONS': _RowConfig.dollarOnly(),
+    'CONTROLLABLES': _RowConfig.readOnly(),                           // Calculated: sum of above
+    
+    // === FINAL ===
+    'P.A.C.': _RowConfig.readOnly(),                                  // Calculated: GROSS PROFIT - LABOR TOTAL - CONTROLLABLES
+    'GOAL': _RowConfig.goal(),                                        // Calculated: uses PAC goal lookup table
+  };
+
+  // Highlight colors by label
+  static const _yellowRows = {'SALES (ALL NET)', 'GROSS PROFIT', 'LABOR - TOTAL', 'CONTROLLABLES'};
+  static const _cyanRows = {'P.A.C.', 'GOAL'};
+  
+  // Section break rows (thick top border)
+  static const _sectionBreaks = {'FOOD COST', 'LABOR - MANAGEMENT', 'PAYROLL TAXES', 'P.A.C.'};
+
+  // Labor hours lookup table based on daily sales
+  static const _laborHoursTable = <int, int>{
+    4000: 90,
+    5000: 100,
+    6000: 115,
+    7000: 125,
+    8000: 140,
+    9000: 150,
+    10000: 160,
+    12000: 185,
+    14000: 205,
+  };
+
   PnlPeriod? _currentPeriod;
   List<PnlLineItem> _lineItems = [];
   List<PnlPeriod> _allPeriods = [];
   bool _isLoading = true;
   bool _hasChanges = false;
+  bool _autoLaborEnabled = false;
+  Timer? _autosaveTimer;
 
-  // Text controllers for avgWage
+  // Text controllers for header fields
+  final _salesController = TextEditingController();
   final _avgWageController = TextEditingController();
 
   // Map of line item id to controllers for $ and % fields
@@ -41,6 +149,8 @@ class _PnlPageState extends State<PnlPage> {
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
+    _salesController.dispose();
     _avgWageController.dispose();
     for (final c in _valueControllers.values) {
       c.dispose();
@@ -76,6 +186,15 @@ class _PnlPageState extends State<PnlPage> {
     _lineItems = await _dao.getLineItemsForPeriod(_currentPeriod!.id!);
     _lineItems = PnlCalculationService.recalculateAll(_lineItems);
 
+    // Load auto labor setting from period
+    _autoLaborEnabled = _currentPeriod!.autoLaborEnabled;
+
+    // Update sales controller
+    final salesAllNet = _getSalesAllNet();
+    _salesController.text = salesAllNet > 0 ? salesAllNet.toStringAsFixed(2) : '';
+    
+    final productNetSales = _getProductNetSales();
+
     // Update avgWage controller
     _avgWageController.text = _currentPeriod!.avgWage > 0 
         ? _currentPeriod!.avgWage.toStringAsFixed(2) 
@@ -86,26 +205,34 @@ class _PnlPageState extends State<PnlPage> {
     _percentControllers.clear();
     _commentControllers.clear();
 
-    final salesAllNet = _getSalesAllNet();
-
     for (final item in _lineItems) {
       if (item.id != null) {
-        _valueControllers[item.id!] = TextEditingController(
-          text: item.value != 0 ? item.value.toStringAsFixed(2) : '',
-        );
+        final config = _getRowConfig(item);
         
-        // Determine percentage text based on item type
+        // Dollar controller - use fixed value or actual value
+        final dollarText = config.fixedDollar != null
+            ? config.fixedDollar!.toStringAsFixed(2)
+            : (item.value != 0 ? item.value.toStringAsFixed(2) : '');
+        _valueControllers[item.id!] = TextEditingController(text: dollarText);
+        
+        // Percent controller - use fixed value, stored %, sales sum, or calculated %
         String percentText;
-        if (item.label == 'SALES (ALL NET)') {
-          // SALES (ALL NET) always shows 100%
-          percentText = '100.0';
-        } else if (item.label == 'PRODUCT NET SALES') {
-          // PRODUCT NET SALES uses stored percentage (this is the editable field)
+        if (config.fixedPercent != null) {
+          percentText = config.fixedPercent!.toStringAsFixed(1);
+        } else if (config.useSalesPercent) {
+          // SALES (ALL NET) % = NON-PRODUCT SALES % + 100%
+          final nonProdPercent = _lineItems.firstWhere(
+            (i) => i.label == 'NON-PRODUCT SALES',
+            orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+          ).percentage;
+          percentText = (nonProdPercent + 100.0).toStringAsFixed(1);
+        } else if (item.label == 'NON-PRODUCT SALES') {
+          // NON-PRODUCT SALES uses stored percentage (this is the editable field)
           percentText = item.percentage != 0 ? item.percentage.toStringAsFixed(1) : '';
         } else {
-          // All other items calculate % from SALES (ALL NET)
+          // Calculate % from PRODUCT NET SALES (the base)
           percentText = item.value != 0 
-              ? PnlCalculationService.calculatePercentage(item.value, salesAllNet).toStringAsFixed(1)
+              ? PnlCalculationService.calculatePercentage(item.value, productNetSales).toStringAsFixed(1)
               : '';
         }
         _percentControllers[item.id!] = TextEditingController(text: percentText);
@@ -114,6 +241,23 @@ class _PnlPageState extends State<PnlPage> {
     }
 
     _hasChanges = false;
+  }
+
+  _RowConfig _getRowConfig(PnlLineItem item) {
+    // LABOR - CREW is read-only when auto labor is enabled
+    if (item.label == 'LABOR - CREW' && _autoLaborEnabled) {
+      return const _RowConfig.readOnly();
+    }
+    // Check for specific label config first
+    if (_rowConfigs.containsKey(item.label)) {
+      return _rowConfigs[item.label]!;
+    }
+    // User-added controllables: $ editable, % calculated
+    if (item.isUserAdded && item.category == PnlCategory.controllables) {
+      return const _RowConfig.dollarOnly();
+    }
+    // Default: calculated items are read-only, others are dollarOnly
+    return item.isCalculated ? const _RowConfig.readOnly() : const _RowConfig.dollarOnly();
   }
 
   double _getSalesAllNet() {
@@ -132,6 +276,33 @@ class _PnlPageState extends State<PnlPage> {
     return item.value;
   }
 
+  double _getNonProductSalesPercent() {
+    final item = _lineItems.firstWhere(
+      (i) => i.label == 'NON-PRODUCT SALES',
+      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+    );
+    return item.percentage;
+  }
+
+  double _getLaborCrewValue() {
+    final item = _lineItems.firstWhere(
+      (i) => i.label == 'LABOR - CREW',
+      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.labor),
+    );
+    return item.value;
+  }
+
+  double _getPacPercent() {
+    final productNetSales = _getProductNetSales();
+    if (productNetSales <= 0) return 0.0;
+    
+    final pacItem = _lineItems.firstWhere(
+      (i) => i.label == 'P.A.C.',
+      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.controllables),
+    );
+    return (pacItem.value / productNetSales) * 100;
+  }
+
   void _onValueChanged(PnlLineItem item, String newValue) {
     final value = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
     
@@ -143,12 +314,26 @@ class _PnlPageState extends State<PnlPage> {
       // Recalculate all
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
       
-      // Update percentage field (SALES (ALL NET) always stays 100%)
+      // Apply auto labor calculation if enabled and SALES changed
       if (item.label == 'SALES (ALL NET)') {
-        _percentControllers[item.id!]?.text = '100.0';
+        _applyAutoLaborIfEnabled();
+      }
+      
+      // Update percentage field based on config
+      final config = _getRowConfig(item);
+      if (config.fixedPercent != null) {
+        _percentControllers[item.id!]?.text = config.fixedPercent!.toStringAsFixed(1);
+      } else if (config.useSalesPercent) {
+        // SALES (ALL NET) % = NON-PRODUCT SALES % + 100%
+        final salesPercent = _getNonProductSalesPercent() + 100.0;
+        _percentControllers[item.id!]?.text = salesPercent.toStringAsFixed(1);
+      } else if (config.mode == _EditMode.editable) {
+        // For editable rows, % stays as user entered - don't recalculate
+        // (% is independent of $ for these rows)
       } else {
-        final salesAllNet = _getSalesAllNet();
-        final percent = PnlCalculationService.calculatePercentage(value, salesAllNet);
+        // For dollarOnly rows, calculate % from $
+        final productNetSales = _getProductNetSales();
+        final percent = PnlCalculationService.calculatePercentage(value, productNetSales);
         _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
       }
 
@@ -156,6 +341,7 @@ class _PnlPageState extends State<PnlPage> {
       _updateCalculatedRowControllers();
 
       setState(() => _hasChanges = true);
+      _scheduleAutosave();
     }
   }
 
@@ -166,55 +352,99 @@ class _PnlPageState extends State<PnlPage> {
     }
     
     final percent = double.tryParse(newPercent) ?? 0;
-    final salesAllNet = _getSalesAllNet();
-    final value = PnlCalculationService.calculateValueFromPercentage(percent, salesAllNet);
+    final config = _getRowConfig(item);
 
-    // Update item value and percentage
+    // Update item
     final index = _lineItems.indexWhere((i) => i.id == item.id);
     if (index >= 0) {
-      // For PRODUCT NET SALES, store the percentage since that's the user input
-      if (item.label == 'PRODUCT NET SALES') {
-        _lineItems[index] = _lineItems[index].copyWith(value: value, percentage: percent);
+      if (config.mode == _EditMode.editable) {
+        // For editable rows, just store the percentage - don't calculate $
+        _lineItems[index] = _lineItems[index].copyWith(percentage: percent);
       } else {
-        _lineItems[index] = _lineItems[index].copyWith(value: value);
+        // For percentOnly rows, calculate $ from % (rounded to $100)
+        final productNetSales = _getProductNetSales();
+        final rawValue = PnlCalculationService.calculateValueFromPercentage(percent, productNetSales);
+        final value = PnlCalculationService.roundToNearest100(rawValue);
+        
+        // For NON-PRODUCT SALES, store the percentage since that's the user input
+        if (item.label == 'NON-PRODUCT SALES') {
+          _lineItems[index] = _lineItems[index].copyWith(value: value, percentage: percent);
+        } else {
+          _lineItems[index] = _lineItems[index].copyWith(value: value);
+        }
+
+        // Update value field
+        if (config.fixedDollar == null) {
+          _valueControllers[item.id!]?.text = value.toStringAsFixed(2);
+        }
       }
 
-      // Recalculate all
+      // Recalculate all calculated rows
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
-
-      // Update value field
-      _valueControllers[item.id!]?.text = value.toStringAsFixed(2);
 
       // Update all calculated rows' controllers
       _updateCalculatedRowControllers();
 
       setState(() => _hasChanges = true);
+      _scheduleAutosave();
     }
   }
 
   void _updateCalculatedRowControllers() {
-    final salesAllNet = _getSalesAllNet();
+    final productNetSales = _getProductNetSales();
     
     for (final item in _lineItems) {
       if (item.id != null) {
-        // Update value controllers for all calculated items
-        if (item.isCalculated) {
-          _valueControllers[item.id!]?.text = item.value.toStringAsFixed(2);
+        final config = _getRowConfig(item);
+        
+        // For percentOnly rows, recalculate $ from stored % and new sales (rounded to $100)
+        if (config.mode == _EditMode.percentOnly && config.fixedDollar == null) {
+          // Get the current % from the controller (user's input)
+          final percentText = _percentControllers[item.id!]?.text ?? '0';
+          final percent = double.tryParse(percentText) ?? 0;
+          final rawValue = PnlCalculationService.calculateValueFromPercentage(percent, productNetSales);
+          final newValue = PnlCalculationService.roundToNearest100(rawValue);
+          
+          // Update the line item value
+          final index = _lineItems.indexWhere((i) => i.id == item.id);
+          if (index >= 0) {
+            _lineItems[index] = _lineItems[index].copyWith(value: newValue);
+          }
+          
+          // Update the controller
+          _valueControllers[item.id!]?.text = newValue.toStringAsFixed(2);
+        }
+        // Update dollar controller for read-only items
+        else if (!config.isDollarEditable) {
+          final dollarText = config.fixedDollar != null
+              ? config.fixedDollar!.toStringAsFixed(2)
+              : item.value.toStringAsFixed(2);
+          _valueControllers[item.id!]?.text = dollarText;
         }
         
-        // Update percentage controllers for calculated items only
-        // Do NOT update PRODUCT NET SALES % - it's user input, let them type freely
-        if (item.label == 'SALES (ALL NET)') {
-          // Always 100%
-          _percentControllers[item.id!]?.text = '100.0';
-        } else if (item.label == 'PRODUCT NET SALES') {
-          // Don't overwrite - this is user input
-          // The percentage is already stored in the model
-        } else if (item.isCalculated) {
-          // Calculate % for other calculated items
-          final percent = PnlCalculationService.calculatePercentage(item.value, salesAllNet);
-          _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
+        // Update percent controller for non-editable items
+        if (!config.isPercentEditable) {
+          if (config.fixedPercent != null) {
+            _percentControllers[item.id!]?.text = config.fixedPercent!.toStringAsFixed(1);
+          } else if (config.useSalesPercent) {
+            // SALES (ALL NET) % = NON-PRODUCT SALES % + 100%
+            final salesPercent = _getNonProductSalesPercent() + 100.0;
+            _percentControllers[item.id!]?.text = salesPercent.toStringAsFixed(1);
+          } else {
+            final percent = PnlCalculationService.calculatePercentage(item.value, productNetSales);
+            _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
+          }
         }
+      }
+    }
+    
+    // Recalculate totals after updating percentOnly rows
+    _lineItems = PnlCalculationService.recalculateAll(_lineItems);
+    
+    // Update calculated row controllers again with new totals
+    for (final item in _lineItems) {
+      if (item.id != null && item.isCalculated) {
+        _valueControllers[item.id!]?.text = item.value.toStringAsFixed(2);
       }
     }
   }
@@ -224,13 +454,129 @@ class _PnlPageState extends State<PnlPage> {
     if (index >= 0) {
       _lineItems[index] = _lineItems[index].copyWith(comment: newComment);
       setState(() => _hasChanges = true);
+      _scheduleAutosave();
+    }
+  }
+
+  void _onSalesChanged(String value) {
+    final sales = double.tryParse(value.replaceAll(',', '')) ?? 0;
+    
+    // Update SALES (ALL NET) line item
+    final index = _lineItems.indexWhere((i) => i.label == 'SALES (ALL NET)');
+    if (index >= 0) {
+      _lineItems[index] = _lineItems[index].copyWith(value: sales);
+      
+      // Recalculate all
+      _lineItems = PnlCalculationService.recalculateAll(_lineItems);
+      
+      // Apply auto labor if enabled
+      _applyAutoLaborIfEnabled();
+      
+      // Update all calculated rows' controllers
+      _updateCalculatedRowControllers();
+      
+      setState(() => _hasChanges = true);
+      _scheduleAutosave();
     }
   }
 
   void _onAvgWageChanged(String value) {
     final wage = double.tryParse(value) ?? 0;
     _currentPeriod = _currentPeriod?.copyWith(avgWage: wage);
+    _applyAutoLaborIfEnabled();
     setState(() => _hasChanges = true);
+    _scheduleAutosave();
+  }
+
+  void _onAutoLaborChanged(bool? enabled) {
+    _autoLaborEnabled = enabled ?? false;
+    _currentPeriod = _currentPeriod?.copyWith(autoLaborEnabled: _autoLaborEnabled);
+    if (_autoLaborEnabled) {
+      _applyAutoLaborIfEnabled();
+    }
+    setState(() => _hasChanges = true);
+    _scheduleAutosave();
+  }
+
+  void _applyAutoLaborIfEnabled() {
+    if (!_autoLaborEnabled || _currentPeriod == null) return;
+
+    final salesAllNet = _getSalesAllNet();
+    final avgWage = _currentPeriod!.avgWage;
+    final daysInMonth = DateUtils.getDaysInMonth(_currentPeriod!.year, _currentPeriod!.month);
+
+    if (salesAllNet <= 0 || avgWage <= 0) return;
+
+    // Calculate average daily sales
+    final dailySales = salesAllNet / daysInMonth;
+
+    // Look up hours from table (interpolate between brackets)
+    final hours = _lookupLaborHours(dailySales);
+
+    // Calculate labor crew cost = hours * avg wage * days in month (rounded to $100)
+    final rawLaborCrewCost = hours * avgWage * daysInMonth;
+    final laborCrewCost = PnlCalculationService.roundToNearest100(rawLaborCrewCost);
+
+    // Find and update LABOR - CREW item
+    final crewIndex = _lineItems.indexWhere((item) => item.label == 'LABOR - CREW');
+    if (crewIndex >= 0) {
+      final crewItem = _lineItems[crewIndex];
+      final productNetSales = _getProductNetSales();
+      final percentage = productNetSales > 0 ? (laborCrewCost / productNetSales) * 100 : 0.0;
+      
+      _lineItems[crewIndex] = crewItem.copyWith(
+        value: laborCrewCost,
+        percentage: percentage,
+      );
+
+      // Update the controllers for LABOR - CREW if they exist
+      if (crewItem.id != null) {
+        _valueControllers[crewItem.id!]?.text = laborCrewCost.toStringAsFixed(2);
+        _percentControllers[crewItem.id!]?.text = percentage.toStringAsFixed(1);
+      }
+      
+      // Recalculate all dependent values
+      _lineItems = PnlCalculationService.recalculateAll(_lineItems);
+    }
+  }
+
+  double _lookupLaborHours(double dailySales) {
+    // Get sorted thresholds
+    final thresholds = _laborHoursTable.keys.toList()..sort();
+
+    // Below minimum - use minimum hours
+    if (dailySales <= thresholds.first) {
+      return _laborHoursTable[thresholds.first]!.toDouble();
+    }
+
+    // Above maximum - use maximum hours
+    if (dailySales >= thresholds.last) {
+      return _laborHoursTable[thresholds.last]!.toDouble();
+    }
+
+    // Find the bracket and interpolate
+    for (int i = 0; i < thresholds.length - 1; i++) {
+      final lowerThreshold = thresholds[i];
+      final upperThreshold = thresholds[i + 1];
+      
+      if (dailySales >= lowerThreshold && dailySales < upperThreshold) {
+        final lowerHours = _laborHoursTable[lowerThreshold]!;
+        final upperHours = _laborHoursTable[upperThreshold]!;
+        
+        // Linear interpolation
+        final ratio = (dailySales - lowerThreshold) / (upperThreshold - lowerThreshold);
+        return lowerHours + (upperHours - lowerHours) * ratio;
+      }
+    }
+
+    return _laborHoursTable[thresholds.last]!.toDouble();
+  }
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 500), () {
+      _save();
+    });
   }
 
   Future<void> _save() async {
@@ -245,12 +591,8 @@ class _PnlPageState extends State<PnlPage> {
     // Refresh periods list
     _allPeriods = await _dao.getAllPeriods();
 
-    setState(() => _hasChanges = false);
-
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('P&L saved successfully')),
-      );
+      setState(() => _hasChanges = false);
     }
   }
 
@@ -416,27 +758,12 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   Color _getRowColor(PnlLineItem item, bool isDark) {
-    // Color coding matching Excel - only highlight totals/headers
-    
-    // P.A.C. row - cyan (special highlight)
-    if (item.label == 'P.A.C.') {
+    if (_cyanRows.contains(item.label)) {
       return isDark ? Colors.cyan.shade900 : Colors.cyan.shade100;
     }
-    
-    // Yellow highlight for group headers/totals only
-    final yellowRows = [
-      'SALES (ALL NET)',      // Sales group header
-      'GROSS PROFIT',         // COGS total
-      'LABOR - TOTAL',        // Labor total
-      'CONTROLLABLES',        // Controllables total
-      'GOAL',                 // Final total
-    ];
-    
-    if (yellowRows.contains(item.label)) {
+    if (_yellowRows.contains(item.label)) {
       return isDark ? Colors.yellow.shade900.withValues(alpha: 0.3) : Colors.yellow.shade100;
     }
-    
-    // All other rows - no special color
     return Colors.transparent;
   }
 
@@ -466,16 +793,23 @@ class _PnlPageState extends State<PnlPage> {
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
               ),
             ],
+            const Spacer(),
+            // Period selector - centered and larger
+            FilledButton.icon(
+              onPressed: _selectPeriod,
+              icon: const Icon(Icons.calendar_month, size: 24),
+              label: Text(
+                _currentPeriod?.periodDisplay ?? 'Select Period',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+            ),
+            const Spacer(),
           ],
         ),
         actions: [
-          // Period selector
-          TextButton.icon(
-            onPressed: _selectPeriod,
-            icon: const Icon(Icons.calendar_month),
-            label: Text(_currentPeriod?.periodDisplay ?? 'Select Period'),
-          ),
-          const SizedBox(width: 8),
           // Copy from previous
           IconButton(
             onPressed: _copyFromPrevious,
@@ -488,13 +822,6 @@ class _PnlPageState extends State<PnlPage> {
             icon: const Icon(Icons.picture_as_pdf),
             tooltip: 'Export PDF',
           ),
-          const SizedBox(width: 8),
-          // Save button
-          FilledButton.icon(
-            onPressed: _hasChanges ? _save : null,
-            icon: const Icon(Icons.save),
-            label: const Text('Save'),
-          ),
           const SizedBox(width: 16),
         ],
       ),
@@ -506,6 +833,25 @@ class _PnlPageState extends State<PnlPage> {
             // Header info row
             Row(
               children: [
+                // Sales field
+                SizedBox(
+                  width: 150,
+                  child: TextField(
+                    controller: _salesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Sales',
+                      prefixText: '\$ ',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                    ],
+                    onChanged: _onSalesChanged,
+                  ),
+                ),
+                const SizedBox(width: 16),
                 // Avg Wage field
                 SizedBox(
                   width: 150,
@@ -524,8 +870,59 @@ class _PnlPageState extends State<PnlPage> {
                     onChanged: _onAvgWageChanged,
                   ),
                 ),
-                const SizedBox(width: 24),
-                // Goal display
+                const SizedBox(width: 16),
+                // Hours badge (calculated from LABOR - CREW / Avg Wage)
+                Builder(
+                  builder: (context) {
+                    final avgWage = _currentPeriod?.avgWage ?? 0;
+                    final laborCrew = _getLaborCrewValue();
+                    final daysInMonth = _currentPeriod != null 
+                        ? DateUtils.getDaysInMonth(_currentPeriod!.year, _currentPeriod!.month)
+                        : 30;
+                    final weeksInMonth = daysInMonth / 7.0;
+                    
+                    final monthlyHours = avgWage > 0 ? laborCrew / avgWage : 0.0;
+                    final weeklyHours = weeksInMonth > 0 ? monthlyHours / weeksInMonth : 0.0;
+                    
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.purple.shade900 : Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purple),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${weeklyHours.toStringAsFixed(1)} hrs/wk',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          Text(
+                            '${monthlyHours.toStringAsFixed(0)} hrs/mo',
+                            style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const Spacer(),
+                // P.A.C. display
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.cyan.shade900 : Colors.cyan.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.cyan),
+                  ),
+                  child: Text(
+                    'P.A.C.: ${_percentFormat.format(_getPacPercent())}%',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Goal display with checkmark/X indicator
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
@@ -533,9 +930,45 @@ class _PnlPageState extends State<PnlPage> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.blue),
                   ),
-                  child: Text(
-                    'GOAL: ${_percentFormat.format(goalPercent)}%',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'GOAL: ${_percentFormat.format(goalPercent)}%',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const SizedBox(width: 8),
+                      if (_getPacPercent() >= goalPercent)
+                        const Icon(Icons.check_circle, color: Colors.green, size: 20)
+                      else
+                        const Icon(Icons.cancel, color: Colors.red, size: 20),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Auto Labor checkbox
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.green.shade900.withOpacity(0.5) : Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _autoLaborEnabled ? Colors.green : Colors.grey,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value: _autoLaborEnabled,
+                        onChanged: _onAutoLaborChanged,
+                        activeColor: Colors.green,
+                      ),
+                      const Text(
+                        'Auto Labor',
+                        style: TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -551,7 +984,7 @@ class _PnlPageState extends State<PnlPage> {
   }
 
   Widget _buildTable(bool isDark) {
-    final salesAllNet = _getSalesAllNet();
+    final productNetSales = _getProductNetSales();
 
     return Table(
       border: TableBorder.all(
@@ -598,184 +1031,201 @@ class _PnlPageState extends State<PnlPage> {
         ),
 
         // Data rows
-        ..._lineItems.map((item) => _buildTableRow(item, salesAllNet, isDark)),
+        ..._lineItems.map((item) => _buildTableRow(item, productNetSales, isDark)),
       ],
     );
   }
 
-  TableRow _buildTableRow(PnlLineItem item, double salesAllNet, bool isDark) {
+  TableRow _buildTableRow(PnlLineItem item, double productNetSales, bool isDark) {
+    final config = _getRowConfig(item);
     final rowColor = _getRowColor(item, isDark);
-    final isGoalRow = item.label == 'GOAL';
-    final goalPercent = isGoalRow ? PnlCalculationService.getGoalPercentage(_lineItems) : null;
-    
-    // Special handling for sales section items
-    final isSalesAllNet = item.label == 'SALES (ALL NET)';
-    final isProductNetSales = item.label == 'PRODUCT NET SALES';
-    final isNonProductSales = item.label == 'NON-PRODUCT SALES';
-    
-    // Determine if $ is editable:
-    // - SALES (ALL NET): $ is editable (user input)
-    // - PRODUCT NET SALES: $ is read-only (calculated from %)
-    // - NON-PRODUCT SALES: $ is read-only (calculated)
-    // - Other calculated rows: $ is read-only
-    // - Other input rows: $ is editable
-    final isDollarReadOnly = item.isCalculated || isProductNetSales;
-    
-    // Determine if % is editable:
-    // - SALES (ALL NET): % is always 100% (read-only)
-    // - PRODUCT NET SALES: % is editable (user input)
-    // - NON-PRODUCT SALES: % is read-only (calculated)
-    // - Other calculated rows: % is read-only
-    // - Other input rows: % is editable
-    final isPercentReadOnly = isSalesAllNet || isNonProductSales || (item.isCalculated && !isProductNetSales);
-
-    // Check if this is a section break (before certain rows)
-    final needsTopBorder = [
-      'FOOD COST',
-      'LABOR - MANAGEMENT',
-      'PAYROLL TAXES',
-      'P.A.C.',
-    ].contains(item.label);
+    final needsTopBorder = _sectionBreaks.contains(item.label);
 
     return TableRow(
       decoration: BoxDecoration(
         color: rowColor,
         border: needsTopBorder
-            ? Border(top: BorderSide(color: isDark ? Colors.grey.shade500 : Colors.grey.shade500, width: 2))
+            ? Border(top: BorderSide(color: Colors.grey.shade500, width: 2))
             : null,
       ),
       children: [
         // Label
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Text(
-            item.label,
-            style: TextStyle(
-              fontWeight: item.isCalculated ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ),
-
-        // Projected $ - editable only for SALES (ALL NET) and non-calculated, non-PRODUCT NET SALES items
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: isDollarReadOnly
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    _currencyFormat.format(item.value),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(fontWeight: item.isCalculated ? FontWeight.bold : FontWeight.normal),
-                  ),
-                )
-              : TextField(
-                  controller: _valueControllers[item.id],
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(
-                    prefixText: '\$ ',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
-                  ],
-                  onChanged: (v) => _onValueChanged(item, v),
-                ),
-        ),
-
-        // Projected % - special handling for different item types
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: isPercentReadOnly
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    isSalesAllNet
-                        ? '100.0%'
-                        : (isGoalRow 
-                            ? '${_percentFormat.format(goalPercent)}%'
-                            : '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, salesAllNet))}%'),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(fontWeight: item.isCalculated ? FontWeight.bold : FontWeight.normal),
-                  ),
-                )
-              : TextField(
-                  controller: _percentControllers[item.id],
-                  textAlign: TextAlign.right,
-                  decoration: const InputDecoration(
-                    suffixText: '%',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  ),
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-                  ],
-                  onChanged: (v) => _onPercentChanged(item, v),
-                ),
-        ),
-
+        _buildLabelCell(item),
+        // Dollar value
+        _buildDollarCell(item, config),
+        // Percentage
+        _buildPercentCell(item, config, productNetSales),
         // Comments
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: item.label == 'LABOR - CREW'
-              ? Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _commentControllers[item.id],
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        ),
-                        onChanged: (v) => _onCommentChanged(item, v),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Avg Wage: ${_currencyFormat.format(_currentPeriod?.avgWage ?? 0)}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
-                )
-              : TextField(
-                  controller: _commentControllers[item.id],
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  ),
-                  onChanged: (v) => _onCommentChanged(item, v),
-                ),
-        ),
-
+        _buildCommentCell(item, isDark),
         // Actions
-        item.isUserAdded
-            ? IconButton(
-                onPressed: () => _removeControllableRow(item),
-                icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
-                tooltip: 'Remove',
-              )
-            : item.label == 'CONTROLLABLES'
-                ? IconButton(
-                    onPressed: _addControllableRow,
-                    icon: const Icon(Icons.add_circle_outline, color: Colors.green, size: 20),
-                    tooltip: 'Add Line Item',
-                  )
-                : const SizedBox(),
+        _buildActionCell(item),
       ],
     );
+  }
+
+  Widget _buildLabelCell(PnlLineItem item) {
+    // Bold only the highlighted rows (totals)
+    final isBoldRow = _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Text(
+        item.label,
+        style: TextStyle(fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal),
+      ),
+    );
+  }
+
+  Widget _buildDollarCell(PnlLineItem item, _RowConfig config) {
+    final displayValue = config.fixedDollar ?? item.value;
+    final isBoldRow = _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: config.isDollarEditable
+          ? TextField(
+              controller: _valueControllers[item.id],
+              textAlign: TextAlign.right,
+              decoration: const InputDecoration(
+                prefixText: '\$ ',
+                border: OutlineInputBorder(),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))],
+              onChanged: (v) => _onValueChanged(item, v),
+            )
+          : Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                _currencyFormat.format(displayValue),
+                textAlign: TextAlign.right,
+                style: TextStyle(fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildPercentCell(PnlLineItem item, _RowConfig config, double productNetSales) {
+    if (config.isPercentEditable) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: TextField(
+          controller: _percentControllers[item.id],
+          textAlign: TextAlign.right,
+          decoration: const InputDecoration(
+            suffixText: '%',
+            border: OutlineInputBorder(),
+            isDense: true,
+            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+          onChanged: (v) => _onPercentChanged(item, v),
+        ),
+      );
+    }
+    
+    // Read-only percentage display
+    String percentText;
+    if (config.fixedPercent != null) {
+      percentText = '${config.fixedPercent!.toStringAsFixed(1)}%';
+    } else if (config.useGoalPercent) {
+      final goalPercent = PnlCalculationService.getGoalPercentage(_lineItems);
+      percentText = '${_percentFormat.format(goalPercent)}%';
+    } else if (config.useSalesPercent) {
+      // SALES (ALL NET) % = NON-PRODUCT SALES % + 100% (PRODUCT NET SALES)
+      final salesPercent = _getNonProductSalesPercent() + 100.0;
+      percentText = '${_percentFormat.format(salesPercent)}%';
+    } else {
+      percentText = '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, productNetSales))}%';
+    }
+    
+    final isBoldRow = _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          percentText,
+          textAlign: TextAlign.right,
+          style: TextStyle(fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentCell(PnlLineItem item, bool isDark) {
+    final commentField = TextField(
+      controller: _commentControllers[item.id],
+      decoration: const InputDecoration(
+        border: OutlineInputBorder(),
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      ),
+      onChanged: (v) => _onCommentChanged(item, v),
+    );
+
+    // LABOR - CREW shows avg wage badge (and Auto badge when enabled)
+    if (item.label == 'LABOR - CREW') {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            Expanded(child: commentField),
+            const SizedBox(width: 8),
+            if (_autoLaborEnabled) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade600,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'AUTO',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'Avg Wage: ${_currencyFormat.format(_currentPeriod?.avgWage ?? 0)}',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: commentField,
+    );
+  }
+
+  Widget _buildActionCell(PnlLineItem item) {
+    if (item.isUserAdded) {
+      return IconButton(
+        onPressed: () => _removeControllableRow(item),
+        icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+        tooltip: 'Remove',
+      );
+    }
+    if (item.label == 'CONTROLLABLES') {
+      return IconButton(
+        onPressed: _addControllableRow,
+        icon: const Icon(Icons.add_circle_outline, color: Colors.green, size: 20),
+        tooltip: 'Add Line Item',
+      );
+    }
+    return const SizedBox();
   }
 }
 

@@ -18,7 +18,7 @@ class StoreUpdateService {
       'JasonSjogren.ScheduleHQ_<hash>'; // TODO: Replace with actual PFN
 
   // Current app version (should match pubspec.yaml)
-  static const String currentVersion = '2.6.3';
+  static const String currentVersion = '2.7.0';
 
   /// Cached update info
   static bool _updateAvailable = false;

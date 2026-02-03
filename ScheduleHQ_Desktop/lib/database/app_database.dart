@@ -267,6 +267,7 @@ Future<void> _onCreate(Database db, int version) async {
       month INTEGER NOT NULL,
       year INTEGER NOT NULL,
       avgWage REAL NOT NULL DEFAULT 0.0,
+      autoLaborEnabled INTEGER NOT NULL DEFAULT 0,
       UNIQUE(month, year)
     )
   ''');
@@ -386,7 +387,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 28,
+      version: 29,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -832,6 +833,15 @@ class AppDatabase {
           } catch (e) {
             // Column may already exist if table was created fresh with v28 schema
             log('percentage column already exists or table not found: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 29) {
+          // Add autoLaborEnabled column to pnl_periods
+          try {
+            await db.execute('ALTER TABLE pnl_periods ADD COLUMN autoLaborEnabled INTEGER NOT NULL DEFAULT 0');
+            log('Added autoLaborEnabled column to pnl_periods', name: 'AppDatabase');
+          } catch (e) {
+            log('autoLaborEnabled column already exists or table not found: $e', name: 'AppDatabase');
           }
         }
       },

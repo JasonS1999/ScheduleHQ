@@ -8,8 +8,16 @@ import 'pnl_calculation_service.dart';
 
 /// Service for generating P&L PDF reports
 class PnlPdfService {
-  static final _currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  static final _accountingFormat = NumberFormat('#,##0.00', 'en_US');
   static final _percentFormat = NumberFormat('0.0', 'en_US');
+
+  /// Format number in accounting style (no $ symbol, parentheses for negatives)
+  static String _formatAccounting(double value) {
+    if (value < 0) {
+      return '(${_accountingFormat.format(-value)})';
+    }
+    return _accountingFormat.format(value);
+  }
 
   /// Generate and show save dialog for P&L PDF
   static Future<void> generateAndSavePdf({
@@ -65,25 +73,32 @@ class PnlPdfService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        storeName.isNotEmpty ? storeName : 'P&L Projections',
+                        storeName.isNotEmpty ? storeName : '',
                         style: pw.TextStyle(
                           fontSize: 24,
                           fontWeight: pw.FontWeight.bold,
                           fontStyle: pw.FontStyle.italic,
                         ),
                       ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
                       if (storeNsn.isNotEmpty)
-                        pw.Text(
-                          storeNsn,
-                          style: pw.TextStyle(
-                            fontSize: 18,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
+                        pw.Row(
+                          children: [
+                            pw.Text(
+                              storeNsn,
+                              style: pw.TextStyle(
+                                fontSize: 16,
+                                fontWeight: pw.FontWeight.bold,
+                              ),
+                            ),
+                            pw.SizedBox(width: 16),
+                            pw.Text(
+                              'P&L Projections',
+                              style: pw.TextStyle(
+                                fontSize: 14,
+                                fontWeight: pw.FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                     ],
                   ),
@@ -115,7 +130,7 @@ class PnlPdfService {
                       child: pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
                         child: pw.Text(
-                          'PROJECTED \$',
+                          'PROJ. \$',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                           textAlign: pw.TextAlign.right,
                         ),
@@ -126,7 +141,7 @@ class PnlPdfService {
                       child: pw.Padding(
                         padding: const pw.EdgeInsets.all(8),
                         child: pw.Text(
-                          'PROJECTED %',
+                          'PROJ. %',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                           textAlign: pw.TextAlign.right,
                         ),
@@ -139,6 +154,7 @@ class PnlPdfService {
                         child: pw.Text(
                           'COMMENTS',
                           style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                          textAlign: pw.TextAlign.center,
                         ),
                       ),
                     ),
@@ -148,15 +164,6 @@ class PnlPdfService {
 
               // Data rows
               ...lineItems.map((item) => _buildPdfRow(item, productNetSales, goalPercent, period.avgWage)),
-
-              // Avg Wage note at bottom
-              if (period.avgWage > 0) ...[
-                pw.SizedBox(height: 16),
-                pw.Text(
-                  'Avg Wage: ${_currencyFormat.format(period.avgWage)}',
-                  style: const pw.TextStyle(fontSize: 10),
-                ),
-              ],
             ],
           );
         },
@@ -177,14 +184,18 @@ class PnlPdfService {
         ? goalPercent
         : PnlCalculationService.calculatePercentage(item.value, productNetSales);
 
+    // Rows that should be highlighted yellow and bold (totals)
+    const yellowRows = {'SALES (ALL NET)', 'GROSS PROFIT', 'LABOR - TOTAL', 'CONTROLLABLES'};
+    const cyanRows = {'P.A.C.', 'GOAL'};
+    
+    final isBoldRow = yellowRows.contains(item.label) || cyanRows.contains(item.label);
+
     // Determine row color
     PdfColor? rowColor;
-    if (item.label == 'P.A.C.') {
+    if (cyanRows.contains(item.label)) {
       rowColor = PdfColors.cyan100;
-    } else if (item.isCalculated) {
+    } else if (yellowRows.contains(item.label)) {
       rowColor = PdfColors.yellow100;
-    } else if (item.category == PnlCategory.sales) {
-      rowColor = PdfColors.green50;
     }
 
     // Check for section breaks
@@ -198,7 +209,7 @@ class PnlPdfService {
     // Build comment text (include Avg Wage for LABOR - CREW)
     String commentText = item.comment;
     if (item.label == 'LABOR - CREW' && avgWage > 0) {
-      commentText = '${item.comment}${item.comment.isNotEmpty ? ' | ' : ''}Avg Wage: ${_currencyFormat.format(avgWage)}';
+      commentText = '${item.comment}${item.comment.isNotEmpty ? ' | ' : ''}Avg Wage: ${_formatAccounting(avgWage)}';
     }
 
     return pw.Container(
@@ -217,7 +228,7 @@ class PnlPdfService {
               child: pw.Text(
                 item.label,
                 style: pw.TextStyle(
-                  fontWeight: item.isCalculated ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight: isBoldRow ? pw.FontWeight.bold : pw.FontWeight.normal,
                   fontSize: 10,
                 ),
               ),
@@ -228,9 +239,9 @@ class PnlPdfService {
             child: pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: pw.Text(
-                _currencyFormat.format(item.value),
+                _formatAccounting(item.value),
                 style: pw.TextStyle(
-                  fontWeight: item.isCalculated ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight: isBoldRow ? pw.FontWeight.bold : pw.FontWeight.normal,
                   fontSize: 10,
                 ),
                 textAlign: pw.TextAlign.right,
@@ -244,7 +255,7 @@ class PnlPdfService {
               child: pw.Text(
                 '${_percentFormat.format(percent)}%',
                 style: pw.TextStyle(
-                  fontWeight: item.isCalculated ? pw.FontWeight.bold : pw.FontWeight.normal,
+                  fontWeight: isBoldRow ? pw.FontWeight.bold : pw.FontWeight.normal,
                   fontSize: 10,
                 ),
                 textAlign: pw.TextAlign.right,
@@ -258,6 +269,7 @@ class PnlPdfService {
               child: pw.Text(
                 commentText,
                 style: const pw.TextStyle(fontSize: 9),
+                textAlign: pw.TextAlign.center,
               ),
             ),
           ),

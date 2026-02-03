@@ -4,12 +4,14 @@ class PnlPeriod {
   final int month; // 1-12
   final int year;
   final double avgWage;
+  final bool autoLaborEnabled;
 
   PnlPeriod({
     this.id,
     required this.month,
     required this.year,
     this.avgWage = 0.0,
+    this.autoLaborEnabled = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -18,6 +20,7 @@ class PnlPeriod {
       'month': month,
       'year': year,
       'avgWage': avgWage,
+      'autoLaborEnabled': autoLaborEnabled ? 1 : 0,
     };
   }
 
@@ -27,6 +30,7 @@ class PnlPeriod {
       month: map['month'] as int,
       year: map['year'] as int,
       avgWage: (map['avgWage'] as num?)?.toDouble() ?? 0.0,
+      autoLaborEnabled: (map['autoLaborEnabled'] as int?) == 1,
     );
   }
 
@@ -35,12 +39,14 @@ class PnlPeriod {
     int? month,
     int? year,
     double? avgWage,
+    bool? autoLaborEnabled,
   }) {
     return PnlPeriod(
       id: id ?? this.id,
       month: month ?? this.month,
       year: year ?? this.year,
       avgWage: avgWage ?? this.avgWage,
+      autoLaborEnabled: autoLaborEnabled ?? this.autoLaborEnabled,
     );
   }
 
@@ -182,10 +188,10 @@ class PnlLineItem {
 /// Default line item labels with their configuration
 class PnlDefaults {
   static const List<Map<String, dynamic>> defaultLineItems = [
-    // Sales - SALES (ALL NET) is the primary $ input, others are derived
-    {'label': 'SALES (ALL NET)', 'category': 'sales', 'isCalculated': false, 'sortOrder': 1},
-    {'label': 'PRODUCT NET SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 2}, // $ calculated from %, % is editable
-    {'label': 'NON-PRODUCT SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 3}, // Both $ and % calculated
+    // Sales - SALES (ALL NET) is user input (100%), others derived
+    {'label': 'SALES (ALL NET)', 'category': 'sales', 'isCalculated': false, 'sortOrder': 1},     // User input: total sales (100%)
+    {'label': 'NON-PRODUCT SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 2},    // % editable, $ calculated
+    {'label': 'PRODUCT NET SALES', 'category': 'sales', 'isCalculated': true, 'sortOrder': 3},    // Calculated: SALES - NON-PRODUCT
     
     // COGS
     {'label': 'FOOD COST', 'category': 'cogs', 'isCalculated': false, 'sortOrder': 4},
