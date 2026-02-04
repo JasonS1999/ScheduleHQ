@@ -1316,15 +1316,15 @@ export const processShiftManagerCSV = onObjectFinalized(
 
       logger.log(`Looking up manager for store location: ${location}`);
 
-      // Find manager with matching storeNsn in managerSettings
+      // Find manager with matching storeNsn in managerSettings (nested in storeHours)
       const settingsSnapshot = await db
         .collection("managerSettings")
-        .where("storeNsn", "==", location)
+        .where("storeHours.storeNsn", "==", location)
         .limit(1)
         .get();
 
       if (settingsSnapshot.empty) {
-        logger.error(`No manager found with storeNsn: ${location}`);
+        logger.error(`No manager found with storeHours.storeNsn: ${location}`);
         return;
       }
 
