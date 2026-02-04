@@ -1,0 +1,4 @@
+# Shift Manager CSV Uploader Dependencies
+# Install with: pip install -r requirements.txt
+
+firebase-admin>=6.0.0
