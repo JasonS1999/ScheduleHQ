@@ -1,7 +1,9 @@
 import * as admin from "firebase-admin";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onObjectFinalized } from "firebase-functions/v2/storage";
 import { logger } from "firebase-functions/v2";
+import { parse } from "csv-parse/sync";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -1160,3 +1162,249 @@ export const syncAllEmployeeAccounts = onCall(async (request) => {
     throw new HttpsError("internal", `Error syncing accounts: ${error}`);
   }
 });
+
+// =============================================================================
+// Shift Manager CSV Processing
+// =============================================================================
+
+/**
+ * Shift Manager Report entry structure
+ */
+interface ShiftManagerEntry {
+  employeeId: number;
+  managerName: string;
+  timeSlice: string;
+  allNetSales: number;
+  numberOfShifts: number;
+  gc: number;
+  dtPulledForwardPct: number;
+  kvsHealthyUsage: number;
+  oepe: number;
+  punchLaborPct: number;
+  dtGc: number;
+  tpph: number;
+  averageCheck: number;
+  actVsNeed: number;
+  r2p: number;
+}
+
+/**
+ * Parse a numeric value from CSV, handling various formats
+ */
+function parseNumber(value: string | undefined): number {
+  if (!value) return 0;
+  // Remove $ signs, commas, and % signs
+  const cleaned = value.toString().replace(/[$,%]/g, "").trim();
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Parse manager name from "LastName, FirstName" format
+ */
+function parseManagerName(name: string): { firstName: string; lastName: string } | null {
+  if (!name || typeof name !== "string") return null;
+  
+  const parts = name.split(",").map(p => p.trim());
+  if (parts.length !== 2) {
+    // Try space-separated format "FirstName LastName"
+    const spaceParts = name.trim().split(/\s+/);
+    if (spaceParts.length >= 2) {
+      return {
+        firstName: spaceParts[0],
+        lastName: spaceParts.slice(1).join(" ")
+      };
+    }
+    return null;
+  }
+  
+  return {
+    lastName: parts[0],
+    firstName: parts[1]
+  };
+}
+
+/**
+ * Extract date from filename like "ShiftManager_17495_2026-02-03.csv"
+ */
+function extractDateFromFilename(filename: string): string {
+  // Try to find date pattern YYYY-MM-DD
+  const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+  if (dateMatch) {
+    return dateMatch[1];
+  }
+  // Default to today's date
+  const today = new Date();
+  return today.toISOString().split("T")[0];
+}
+
+/**
+ * Triggered when a CSV file is uploaded to shift_manager_imports/
+ * Parses the CSV, matches manager names to employees, and saves to Firestore.
+ */
+export const processShiftManagerCSV = onObjectFinalized(
+  {
+    bucket: "schedulehq-cf87f.firebasestorage.app",
+  },
+  async (event) => {
+    const filePath = event.data.name;
+    const contentType = event.data.contentType;
+
+    // Only process CSV files in the shift_manager_imports folder
+    if (!filePath.startsWith("shift_manager_imports/")) {
+      logger.log(`Ignoring file outside shift_manager_imports: ${filePath}`);
+      return;
+    }
+
+    if (!contentType || !contentType.includes("csv")) {
+      logger.log(`Ignoring non-CSV file: ${filePath} (${contentType})`);
+      return;
+    }
+
+    const filename = filePath.split("/").pop() || "";
+    logger.log(`Processing Shift Manager CSV: ${filename}`);
+
+    try {
+      // Download file from Storage
+      const bucket = admin.storage().bucket(event.data.bucket);
+      const file = bucket.file(filePath);
+      
+      const [fileContents] = await file.download();
+      const csvContent = fileContents.toString("utf-8");
+
+      // Parse CSV
+      const records = parse(csvContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      });
+
+      logger.log(`Parsed ${records.length} rows from CSV`);
+
+      // Get all managers to find the correct one to store data under
+      // For now, we'll get the first manager (you may want to adjust this logic)
+      const managersSnapshot = await db.collection("managers").limit(1).get();
+      
+      if (managersSnapshot.empty) {
+        logger.error("No managers found in database");
+        return;
+      }
+
+      const managerUid = managersSnapshot.docs[0].id;
+      logger.log(`Using manager UID: ${managerUid}`);
+
+      // Get all employees for this manager
+      const employeesSnapshot = await db
+        .collection("managers")
+        .doc(managerUid)
+        .collection("employees")
+        .get();
+
+      // Build employee lookup map by normalized name
+      const employeeMap = new Map<string, { id: number; name: string }>();
+      
+      employeesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        const firstName = (data.firstName || "").toLowerCase().trim();
+        const lastName = (data.lastName || "").toLowerCase().trim();
+        const localId = data.localId || parseInt(doc.id) || 0;
+        
+        if (firstName && lastName) {
+          // Key format: "lastname_firstname"
+          const key = `${lastName}_${firstName}`;
+          employeeMap.set(key, { id: localId, name: `${data.firstName} ${data.lastName}` });
+        }
+      });
+
+      logger.log(`Loaded ${employeeMap.size} employees for matching`);
+
+      // Extract date from filename
+      const reportDate = extractDateFromFilename(filename);
+
+      // Process each row
+      const matchedEntries: ShiftManagerEntry[] = [];
+      let unmatchedCount = 0;
+      let location = "";
+
+      for (const row of records) {
+        // Get location from first row
+        if (!location && row["Loc"]) {
+          location = row["Loc"].toString();
+        }
+
+        const managerName = row["Manager Name"] || "";
+        const parsed = parseManagerName(managerName);
+
+        if (!parsed) {
+          logger.warn(`Could not parse manager name: "${managerName}"`);
+          unmatchedCount++;
+          continue;
+        }
+
+        // Look up employee
+        const lookupKey = `${parsed.lastName.toLowerCase()}_${parsed.firstName.toLowerCase()}`;
+        const employee = employeeMap.get(lookupKey);
+
+        if (!employee) {
+          logger.warn(`No employee match for: "${managerName}" (key: ${lookupKey})`);
+          unmatchedCount++;
+          continue;
+        }
+
+        // Create entry
+        const entry: ShiftManagerEntry = {
+          employeeId: employee.id,
+          managerName: managerName,
+          timeSlice: row["Time Slice"] || "",
+          allNetSales: parseNumber(row["All Net Sales"]),
+          numberOfShifts: parseNumber(row["# of Shifts"]),
+          gc: parseNumber(row["GC"]),
+          dtPulledForwardPct: parseNumber(row["DT Pulled Forward %"]),
+          kvsHealthyUsage: parseNumber(row["KVS Healthy Usage"]),
+          oepe: parseNumber(row["OEPE"]),
+          punchLaborPct: parseNumber(row["Punch Labor %"]),
+          dtGc: parseNumber(row["DT GC"]),
+          tpph: parseNumber(row["TPPH"]),
+          averageCheck: parseNumber(row["Average Check"]),
+          actVsNeed: parseNumber(row["Act vs Need"]),
+          r2p: parseNumber(row["R2P"]),
+        };
+
+        matchedEntries.push(entry);
+      }
+
+      logger.log(`Matched ${matchedEntries.length} entries, ${unmatchedCount} unmatched`);
+
+      // Save to Firestore
+      if (matchedEntries.length > 0) {
+        const reportRef = db
+          .collection("managers")
+          .doc(managerUid)
+          .collection("shiftManagerReports")
+          .doc(reportDate);
+
+        await reportRef.set({
+          importedAt: admin.firestore.FieldValue.serverTimestamp(),
+          fileName: filename,
+          location: location,
+          reportDate: reportDate,
+          totalEntries: matchedEntries.length,
+          unmatchedEntries: unmatchedCount,
+          entries: matchedEntries,
+        });
+
+        logger.log(`Saved report to Firestore: managers/${managerUid}/shiftManagerReports/${reportDate}`);
+      } else {
+        logger.warn("No matched entries to save");
+      }
+
+      // Delete processed file from Storage
+      await file.delete();
+      logger.log(`Deleted processed file: ${filePath}`);
+
+    } catch (error) {
+      logger.error(`Error processing CSV ${filename}:`, error);
+      throw error;
+    }
+  }
+);
