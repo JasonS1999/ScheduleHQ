@@ -1307,19 +1307,17 @@ export const processShiftManagerCSV = onObjectFinalized(
         .collection("employees")
         .get();
 
-      // Build employee lookup map by normalized name
+      // Build employee lookup map by name field (case-insensitive)
       const employeeMap = new Map<string, { id: number; name: string }>();
       
       employeesSnapshot.forEach((doc) => {
         const data = doc.data();
-        const firstName = (data.firstName || "").toLowerCase().trim();
-        const lastName = (data.lastName || "").toLowerCase().trim();
+        const name = (data.name || "").toLowerCase().trim();
         const localId = data.localId || parseInt(doc.id) || 0;
         
-        if (firstName && lastName) {
-          // Key format: "lastname_firstname"
-          const key = `${lastName}_${firstName}`;
-          employeeMap.set(key, { id: localId, name: `${data.firstName} ${data.lastName}` });
+        if (name) {
+          // Key format: "firstname lastname" (lowercase)
+          employeeMap.set(name, { id: localId, name: data.name });
         }
       });
 
