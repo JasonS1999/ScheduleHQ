@@ -1329,29 +1329,31 @@ export const processShiftManagerCSV = onObjectFinalized(
       // Process each row
       const matchedEntries: ShiftManagerEntry[] = [];
       let unmatchedCount = 0;
-      let location = "";
+      let csvLocation = "";
 
       for (const row of records) {
-        // Get location from first row
-        if (!location && row["Loc"]) {
-          location = row["Loc"].toString();
+        // Get location from first row (for report metadata)
+        if (!csvLocation && row["Loc"]) {
+          csvLocation = row["Loc"].toString();
         }
 
         const managerName = row["Manager Name"] || "";
-        const parsed = parseManagerName(managerName);
+        
+        // Normalize "LastName, FirstName" → "FirstName LastName"
+        const normalizedName = normalizeManagerName(managerName);
 
-        if (!parsed) {
+        if (!normalizedName) {
           logger.warn(`Could not parse manager name: "${managerName}"`);
           unmatchedCount++;
           continue;
         }
 
-        // Look up employee
-        const lookupKey = `${parsed.lastName.toLowerCase()}_${parsed.firstName.toLowerCase()}`;
+        // Look up employee by normalized name (case-insensitive)
+        const lookupKey = normalizedName.toLowerCase();
         const employee = employeeMap.get(lookupKey);
 
         if (!employee) {
-          logger.warn(`No employee match for: "${managerName}" (key: ${lookupKey})`);
+          logger.warn(`No employee match for: "${managerName}" → "${normalizedName}" (key: ${lookupKey})`);
           unmatchedCount++;
           continue;
         }
@@ -1359,7 +1361,7 @@ export const processShiftManagerCSV = onObjectFinalized(
         // Create entry
         const entry: ShiftManagerEntry = {
           employeeId: employee.id,
-          managerName: managerName,
+          managerName: employee.name, // Use the employee's actual name from Firestore
           timeSlice: row["Time Slice"] || "",
           allNetSales: parseNumber(row["All Net Sales"]),
           numberOfShifts: parseNumber(row["# of Shifts"]),
@@ -1391,7 +1393,7 @@ export const processShiftManagerCSV = onObjectFinalized(
         await reportRef.set({
           importedAt: admin.firestore.FieldValue.serverTimestamp(),
           fileName: filename,
-          location: location,
+          location: location, // Store location from CSV lookup
           reportDate: reportDate,
           totalEntries: matchedEntries.length,
           unmatchedEntries: unmatchedCount,
