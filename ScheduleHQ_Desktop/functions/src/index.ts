@@ -1275,17 +1275,30 @@ export const processShiftManagerCSV = onObjectFinalized(
 
       logger.log(`Parsed ${records.length} rows from CSV`);
 
-      // Get all managers to find the correct one to store data under
-      // For now, we'll get the first manager (you may want to adjust this logic)
-      const managersSnapshot = await db.collection("managers").limit(1).get();
+      // Get location from first CSV row to find the correct manager
+      const location = records[0]?.["Loc"]?.toString().trim() || "";
       
-      if (managersSnapshot.empty) {
-        logger.error("No managers found in database");
+      if (!location) {
+        logger.error("No location (Loc) found in CSV");
         return;
       }
 
-      const managerUid = managersSnapshot.docs[0].id;
-      logger.log(`Using manager UID: ${managerUid}`);
+      logger.log(`Looking up manager for store location: ${location}`);
+
+      // Find manager with matching storeNsn in managerSettings
+      const settingsSnapshot = await db
+        .collection("managerSettings")
+        .where("storeNsn", "==", location)
+        .limit(1)
+        .get();
+
+      if (settingsSnapshot.empty) {
+        logger.error(`No manager found with storeNsn: ${location}`);
+        return;
+      }
+
+      const managerUid = settingsSnapshot.docs[0].id;
+      logger.log(`Found manager ${managerUid} for store ${location}`);
 
       // Get all employees for this manager
       const employeesSnapshot = await db
