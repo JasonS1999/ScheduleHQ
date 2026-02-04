@@ -1200,6 +1200,30 @@ function parseNumber(value: string | undefined): number {
 }
 
 /**
+ * Get column value from CSV row with flexible matching
+ * Handles BOM, whitespace, and case differences in column names
+ */
+function getColumn(row: Record<string, string>, columnName: string): string {
+  // Try exact match first
+  if (row[columnName] !== undefined) {
+    return row[columnName]?.toString().trim() || "";
+  }
+  
+  // Try case-insensitive, whitespace-trimmed match
+  // Also strips BOM and other invisible characters
+  const normalizedTarget = columnName.toLowerCase().trim().replace(/[\ufeff\u200b]/g, "");
+  
+  for (const key of Object.keys(row)) {
+    const normalizedKey = key.toLowerCase().trim().replace(/[\ufeff\u200b]/g, "");
+    if (normalizedKey === normalizedTarget) {
+      return row[key]?.toString().trim() || "";
+    }
+  }
+  
+  return "";
+}
+
+/**
  * Normalize manager name from "LastName, FirstName" to "FirstName LastName" format
  * to match employee name field in Firestore
  */
@@ -1271,15 +1295,22 @@ export const processShiftManagerCSV = onObjectFinalized(
         columns: true,
         skip_empty_lines: true,
         trim: true,
+        bom: true, // Handle BOM (byte order mark)
       });
 
       logger.log(`Parsed ${records.length} rows from CSV`);
 
+      // Debug: Log actual column names from first row
+      if (records.length > 0) {
+        const columnNames = Object.keys(records[0]);
+        logger.log(`CSV columns found: ${JSON.stringify(columnNames)}`);
+      }
+
       // Get location from first CSV row to find the correct manager
-      const location = records[0]?.["Loc"]?.toString().trim() || "";
+      const location = getColumn(records[0] || {}, "Loc");
       
       if (!location) {
-        logger.error("No location (Loc) found in CSV");
+        logger.error("No location (Loc) found in CSV. Check column names above.");
         return;
       }
 
@@ -1329,15 +1360,9 @@ export const processShiftManagerCSV = onObjectFinalized(
       // Process each row
       const matchedEntries: ShiftManagerEntry[] = [];
       let unmatchedCount = 0;
-      let csvLocation = "";
 
       for (const row of records) {
-        // Get location from first row (for report metadata)
-        if (!csvLocation && row["Loc"]) {
-          csvLocation = row["Loc"].toString();
-        }
-
-        const managerName = row["Manager Name"] || "";
+        const managerName = getColumn(row, "Manager Name");
         
         // Normalize "LastName, FirstName" → "FirstName LastName"
         const normalizedName = normalizeManagerName(managerName);
@@ -1358,23 +1383,23 @@ export const processShiftManagerCSV = onObjectFinalized(
           continue;
         }
 
-        // Create entry
+        // Create entry using flexible column matching
         const entry: ShiftManagerEntry = {
           employeeId: employee.id,
           managerName: employee.name, // Use the employee's actual name from Firestore
-          timeSlice: row["Time Slice"] || "",
-          allNetSales: parseNumber(row["All Net Sales"]),
-          numberOfShifts: parseNumber(row["# of Shifts"]),
-          gc: parseNumber(row["GC"]),
-          dtPulledForwardPct: parseNumber(row["DT Pulled Forward %"]),
-          kvsHealthyUsage: parseNumber(row["KVS Healthy Usage"]),
-          oepe: parseNumber(row["OEPE"]),
-          punchLaborPct: parseNumber(row["Punch Labor %"]),
-          dtGc: parseNumber(row["DT GC"]),
-          tpph: parseNumber(row["TPPH"]),
-          averageCheck: parseNumber(row["Average Check"]),
-          actVsNeed: parseNumber(row["Act vs Need"]),
-          r2p: parseNumber(row["R2P"]),
+          timeSlice: getColumn(row, "Time Slice"),
+          allNetSales: parseNumber(getColumn(row, "All Net Sales")),
+          numberOfShifts: parseNumber(getColumn(row, "# of Shifts")),
+          gc: parseNumber(getColumn(row, "GC")),
+          dtPulledForwardPct: parseNumber(getColumn(row, "DT Pulled Forward %")),
+          kvsHealthyUsage: parseNumber(getColumn(row, "KVS Healthy Usage")),
+          oepe: parseNumber(getColumn(row, "OEPE")),
+          punchLaborPct: parseNumber(getColumn(row, "Punch Labor %")),
+          dtGc: parseNumber(getColumn(row, "DT GC")),
+          tpph: parseNumber(getColumn(row, "TPPH")),
+          averageCheck: parseNumber(getColumn(row, "Average Check")),
+          actVsNeed: parseNumber(getColumn(row, "Act vs Need")),
+          r2p: parseNumber(getColumn(row, "R2P")),
         };
 
         matchedEntries.push(entry);
