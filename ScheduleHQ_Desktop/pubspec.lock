@@ -694,7 +694,7 @@ packages:
       path: "../packages/schedule_shared"
       relative: true
     source: path
-    version: "2.5.1"
+    version: "2.7.0"
   shared_preferences:
     dependency: "direct main"
     description:
