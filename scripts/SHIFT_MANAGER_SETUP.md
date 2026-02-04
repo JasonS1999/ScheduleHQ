@@ -25,6 +25,7 @@ Power Automate          Local Folder              Python Script           Fireba
 - Firebase project: `schedulehq-cf87f`
 - Power Automate flow that saves CSV files to:
   `C:\Users\jenno\OneDrive\Desktop\Shift Manager Summary\`
+- Manager's `storeNsn` must be set in the ScheduleHQ Desktop app (Settings → Store Number)
 
 ---
 
@@ -123,9 +124,16 @@ npm run deploy
 The Cloud Function `processShiftManagerCSV` will automatically:
 1. Trigger when a CSV is uploaded to `shift_manager_imports/`
 2. Parse the CSV data
-3. Match manager names to employees
-4. Save matched data to Firestore
-5. Delete the CSV from Storage
+3. Look up the manager by matching the CSV's `Loc` column to `storeNsn` in `managerSettings`
+4. Match manager names to employees (case-insensitive)
+5. Save matched data to Firestore under the correct manager
+6. Delete the CSV from Storage
+
+### Multi-Store Support
+
+The system automatically routes CSV data to the correct manager based on the store number:
+- The `Loc` column in the CSV is matched against `storeNsn` in each manager's settings
+- No code changes needed when adding new stores - just ensure the manager has the correct `storeNsn` set
 
 ---
 
@@ -217,13 +225,23 @@ managers/{managerUid}/shiftManagerReports/{YYYY-MM-DD}
 ### Manager names not matching
 
 The Cloud Function matches names by:
-1. Parsing "LastName, FirstName" format
-2. Looking up employee by `firstName` + `lastName` fields (case-insensitive)
+1. Converting CSV "LastName, FirstName" → "FirstName LastName" format
+2. Looking up employee by `name` field (case-insensitive)
+
+**Example:** CSV has "Sjogren, Jason" → Normalized to "Jason Sjogren" → Matches employee with `name: "Jason Sjogren"`
 
 If names aren't matching:
-1. Ensure employees have `firstName` and `lastName` set in the app
+1. Ensure employees have their `name` set correctly in the Desktop app Roster
 2. Check that CSV names match exactly (spelling)
-3. View Cloud Function logs in Firebase Console
+3. View Cloud Function logs in Firebase Console to see the exact matching attempts
+
+### Store not found (No manager mapping)
+
+If you see "No manager found with storeNsn: XXXXX" in the logs:
+1. Open ScheduleHQ Desktop app
+2. Go to **Settings**
+3. Ensure **Store Number** is set to the exact value in the CSV's `Loc` column (e.g., "17495")
+4. The setting syncs to Firestore at `managerSettings/{managerUid}/storeNsn`
 
 ### View Cloud Function Logs
 
