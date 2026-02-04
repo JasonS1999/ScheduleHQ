@@ -1200,28 +1200,22 @@ function parseNumber(value: string | undefined): number {
 }
 
 /**
- * Parse manager name from "LastName, FirstName" format
+ * Normalize manager name from "LastName, FirstName" to "FirstName LastName" format
+ * to match employee name field in Firestore
  */
-function parseManagerName(name: string): { firstName: string; lastName: string } | null {
+function normalizeManagerName(name: string): string | null {
   if (!name || typeof name !== "string") return null;
   
-  const parts = name.split(",").map(p => p.trim());
-  if (parts.length !== 2) {
-    // Try space-separated format "FirstName LastName"
-    const spaceParts = name.trim().split(/\s+/);
-    if (spaceParts.length >= 2) {
-      return {
-        firstName: spaceParts[0],
-        lastName: spaceParts.slice(1).join(" ")
-      };
-    }
-    return null;
+  const trimmedName = name.trim();
+  const parts = trimmedName.split(",").map(p => p.trim());
+  
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    // "LastName, FirstName" → "FirstName LastName"
+    return `${parts[1]} ${parts[0]}`;
   }
   
-  return {
-    lastName: parts[0],
-    firstName: parts[1]
-  };
+  // Already in "FirstName LastName" format or single name
+  return trimmedName || null;
 }
 
 /**
