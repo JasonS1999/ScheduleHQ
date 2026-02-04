@@ -14,8 +14,8 @@ void main() {
   setUp(() async {
     await AppDatabase.instance.init(dbPath: ':memory:');
     final ed = EmployeeDao();
-    await ed.insertEmployee(Employee(name: 'Alice', jobCode: 'assistant'));
-    await ed.insertEmployee(Employee(name: 'Bob', jobCode: 'gm'));
+    await ed.insertEmployee(Employee(firstName: 'Alice', jobCode: 'assistant'));
+    await ed.insertEmployee(Employee(firstName: 'Bob', jobCode: 'gm'));
   });
 
   tearDown(() async {

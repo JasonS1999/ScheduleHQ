@@ -11,7 +11,9 @@ Future<void> _onCreate(Database db, int version) async {
   await db.execute('''
     CREATE TABLE employees (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
+      firstName TEXT,
+      lastName TEXT,
+      nickname TEXT,
       jobCode TEXT,
       email TEXT,
       uid TEXT,
@@ -387,7 +389,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 29,
+      version: 30,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -842,6 +844,17 @@ class AppDatabase {
             log('Added autoLaborEnabled column to pnl_periods', name: 'AppDatabase');
           } catch (e) {
             log('autoLaborEnabled column already exists or table not found: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 30) {
+          // Add firstName, lastName, nickname columns to employees
+          try {
+            await db.execute('ALTER TABLE employees ADD COLUMN firstName TEXT');
+            await db.execute('ALTER TABLE employees ADD COLUMN lastName TEXT');
+            await db.execute('ALTER TABLE employees ADD COLUMN nickname TEXT');
+            log('Added firstName, lastName, nickname columns to employees', name: 'AppDatabase');
+          } catch (e) {
+            log('Employee name columns already exist or table not found: $e', name: 'AppDatabase');
           }
         }
       },

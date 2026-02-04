@@ -499,7 +499,7 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
       } else {
         _filteredEmployees = widget.availableEmployees
             .where(
-              (emp) => emp.name.toLowerCase().contains(query.toLowerCase()),
+              (emp) => emp.displayName.toLowerCase().contains(query.toLowerCase()),
             )
             .toList();
       }
@@ -614,8 +614,8 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
                             radius: 14,
                             backgroundColor: widget.shiftColor.withOpacity(0.2),
                             child: Text(
-                              emp.name.isNotEmpty
-                                  ? emp.name[0].toUpperCase()
+                              emp.displayName.isNotEmpty
+                                  ? emp.displayName[0].toUpperCase()
                                   : '?',
                               style: TextStyle(
                                 fontSize: 12,
@@ -625,7 +625,7 @@ class _ShiftRunnerSearchDialogState extends State<_ShiftRunnerSearchDialog> {
                             ),
                           ),
                           title: Text(
-                            emp.name,
+                            emp.displayName,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: isCurrentRunner

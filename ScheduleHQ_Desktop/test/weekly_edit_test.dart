@@ -6,7 +6,7 @@ import 'package:schedulehq_desktop/models/employee.dart';
 void main() {
   testWidgets('Weekly double-tap edit changes shift time', (WidgetTester tester) async {
     final date = DateTime(2026, 1, 12); // Monday
-    final employees = [Employee(id: 1, name: 'Alice', jobCode: 'gm')];
+    final employees = [Employee(id: 1, firstName: 'Alice', jobCode: 'gm')];
     final shift = ShiftPlaceholder(employeeId: 1, start: DateTime(date.year, date.month, 12, 9), end: DateTime(date.year, date.month, 12, 17), text: 'Shift');
 
     // Pump the WeeklyScheduleView directly (avoid ScheduleView which hits the DB in initState)

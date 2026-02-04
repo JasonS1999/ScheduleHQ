@@ -1086,7 +1086,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               items: _employees
                   .map(
                     (emp) =>
-                        DropdownMenuItem(value: emp.id, child: Text(emp.name)),
+                        DropdownMenuItem(value: emp.id, child: Text(emp.displayName)),
                   )
                   .toList(),
               onChanged: (value) {
@@ -1853,7 +1853,7 @@ class _ScheduleViewState extends State<ScheduleView> {
     );
     final employee = _employees.firstWhere(
       (e) => e.id == employeeId,
-      orElse: () => Employee(id: employeeId, name: 'Unknown', jobCode: ''),
+      orElse: () => Employee(id: employeeId, firstName: 'Unknown', jobCode: ''),
     );
 
     final result = await showDialog<bool>(
@@ -1872,7 +1872,7 @@ class _ScheduleViewState extends State<ScheduleView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${employee.name} already has a shift that overlaps with this time:',
+                '${employee.displayName} already has a shift that overlaps with this time:',
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 12),
@@ -2622,7 +2622,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                             CrossAxisAlignment.center,
                                         children: [
                                           Text(
-                                            e.name,
+                                            e.displayName,
                                             overflow: TextOverflow.ellipsis,
                                             textAlign: TextAlign.center,
                                             style: const TextStyle(
@@ -5544,7 +5544,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       ),
                       child: Center(
                         child: Text(
-                          employee.name,
+                          employee.displayName,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -5896,7 +5896,7 @@ class _MonthlyRunnerSearchDialogState
       } else {
         _filteredEmployees = widget.availableEmployees
             .where(
-              (emp) => emp.name.toLowerCase().contains(query.toLowerCase()),
+              (emp) => emp.displayName.toLowerCase().contains(query.toLowerCase()),
             )
             .toList();
       }
@@ -6023,8 +6023,8 @@ class _MonthlyRunnerSearchDialogState
                             radius: 14,
                             backgroundColor: widget.shiftColor.withOpacity(0.2),
                             child: Text(
-                              emp.name.isNotEmpty
-                                  ? emp.name[0].toUpperCase()
+                              emp.displayName.isNotEmpty
+                                  ? emp.displayName[0].toUpperCase()
                                   : '?',
                               style: TextStyle(
                                 fontSize: 12,
@@ -6034,7 +6034,7 @@ class _MonthlyRunnerSearchDialogState
                             ),
                           ),
                           title: Text(
-                            emp.name,
+                            emp.displayName,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: isCurrentRunner
@@ -6270,7 +6270,7 @@ class _AutoFillFromWeeklyTemplatesDialogState
                                     }
                                   });
                                 },
-                                title: Text(employee.name),
+                                title: Text(employee.displayName),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -6653,7 +6653,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
                   itemBuilder: (ctx, i) {
                     final emp = widget.employees[i];
                     return CheckboxListTile(
-                      title: Text(emp.name),
+                      title: Text(emp.displayName),
                       subtitle: Text(emp.jobCode),
                       value: _selectedEmployeeIds.contains(emp.id),
                       dense: true,

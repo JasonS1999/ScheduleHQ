@@ -248,7 +248,7 @@ class _ScheduleSettingsTabState extends State<ScheduleSettingsTab> {
               runSpacing: 8,
               children: _getTrackedEmployeesSorted().map((emp) {
                 return Chip(
-                  label: Text('${emp.name} (${emp.jobCode})'),
+                  label: Text('${emp.displayName} (${emp.jobCode})'),
                   deleteIcon: const Icon(Icons.close, size: 18),
                   onDeleted: () {
                     setState(() {
@@ -292,7 +292,7 @@ class _ScheduleSettingsTabState extends State<ScheduleSettingsTab> {
                     emp.id != null && _trackedEmployeeIds.contains(emp.id);
 
                 return CheckboxListTile(
-                  title: Text(emp.name),
+                  title: Text(emp.displayName),
                   subtitle: Text(emp.jobCode),
                   value: isTracked,
                   onChanged: (checked) {

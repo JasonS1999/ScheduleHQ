@@ -26,7 +26,7 @@ void main() {
   });
 
   test('insert multi-day vacation and delete group', () async {
-    final emp = Employee(name: 'Alice', jobCode: 'assistant');
+    final emp = Employee(firstName: 'Alice', jobCode: 'assistant');
     final id = await employeeDao.insertEmployee(emp);
 
     final start = DateTime(2026, 1, 10);
@@ -48,7 +48,7 @@ void main() {
   });
 
   test('hasTimeOffInRange detects overlap', () async {
-    final emp = Employee(name: 'Bob', jobCode: 'assistant');
+    final emp = Employee(firstName: 'Bob', jobCode: 'assistant');
     final id = await employeeDao.insertEmployee(emp);
 
     final start = DateTime(2026, 2, 1);
@@ -66,7 +66,7 @@ void main() {
   });
 
   test('getTimeOffInRange returns entries for conflicts', () async {
-    final emp = Employee(name: 'Charlie', jobCode: 'assistant');
+    final emp = Employee(firstName: 'Charlie', jobCode: 'assistant');
     final id = await employeeDao.insertEmployee(emp);
 
     final start = DateTime(2026, 4, 10);

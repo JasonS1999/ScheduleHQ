@@ -18,7 +18,8 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   final JobCodeSettingsDao _jobCodeDao = JobCodeSettingsDao();
 
   List<JobCodeSettings> _jobCodes = [];
-  List<String> _parsedNames = [];
+  List<String> _rawNames = [];        // Store raw names for parsing
+  List<String> _displayNames = [];    // Store formatted names for display
   int _currentIndex = 0;
   bool _isDragging = false;
   bool _importing = false;
@@ -43,28 +44,36 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   }
 
   /// Convert full name to "FirstName L." format in proper case
+  /// Also returns parsed firstName and lastName
   String _formatName(String fullName) {
-    // Trim and normalize whitespace
+    final parsed = _parseName(fullName);
+    final first = parsed['firstName'] ?? '';
+    final last = parsed['lastName'] ?? '';
+    
+    if (first.isEmpty && last.isEmpty) return '';
+    if (last.isEmpty) return first;
+    
+    // Display as "FirstName L."
+    return '$first ${last[0].toUpperCase()}.';
+  }
+
+  /// Parse full name into firstName and lastName with proper casing
+  Map<String, String> _parseName(String fullName) {
     final trimmed = fullName.trim();
-    if (trimmed.isEmpty) return '';
+    if (trimmed.isEmpty) return {'firstName': '', 'lastName': ''};
 
-    // Split into parts
     final parts = trimmed.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '';
+    if (parts.isEmpty) return {'firstName': '', 'lastName': ''};
 
-    // Get first name and format to proper case
-    String firstName = _toProperCase(parts[0]);
-
-    // Get last initial if available
-    String lastInitial = '';
-    if (parts.length > 1) {
-      final lastName = parts.last;
-      if (lastName.isNotEmpty) {
-        lastInitial = ' ${lastName[0].toUpperCase()}.';
-      }
+    if (parts.length == 1) {
+      return {'firstName': _toProperCase(parts[0]), 'lastName': ''};
     }
 
-    return '$firstName$lastInitial';
+    // First part is first name, rest is last name
+    final firstName = _toProperCase(parts[0]);
+    final lastName = parts.sublist(1).map(_toProperCase).join(' ');
+    
+    return {'firstName': firstName, 'lastName': lastName};
   }
 
   /// Convert string to proper case (first letter uppercase, rest lowercase)
@@ -97,7 +106,8 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
       }
 
       // Parse each data row and extract names
-      final names = <String>[];
+      final rawNames = <String>[];
+      final displayNames = <String>[];
       for (int i = 1; i < lines.length; i++) {
         final line = lines[i].trim();
         if (line.isEmpty) continue;
@@ -108,19 +118,21 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
           if (rawName.isNotEmpty) {
             final formatted = _formatName(rawName);
             if (formatted.isNotEmpty) {
-              names.add(formatted);
+              rawNames.add(rawName);
+              displayNames.add(formatted);
             }
           }
         }
       }
 
-      if (names.isEmpty) {
+      if (rawNames.isEmpty) {
         _showError('No employee names found in CSV');
         return;
       }
 
       setState(() {
-        _parsedNames = names;
+        _rawNames = rawNames;
+        _displayNames = displayNames;
         _currentIndex = 0;
         _importing = true;
       });
@@ -169,11 +181,13 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   Future<void> _importCurrentEmployee() async {
     if (_selectedJobCode == null) return;
 
-    final name = _parsedNames[_currentIndex];
+    final rawName = _rawNames[_currentIndex];
+    final parsed = _parseName(rawName);
 
     await _employeeDao.insertEmployee(
       Employee(
-        name: name,
+        firstName: parsed['firstName'],
+        lastName: parsed['lastName'],
         jobCode: _selectedJobCode!,
         vacationWeeksAllowed: 0,
         vacationWeeksUsed: 0,
@@ -191,7 +205,7 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
     });
 
     // Check if done
-    if (_currentIndex >= _parsedNames.length) {
+    if (_currentIndex >= _rawNames.length) {
       _finishImport();
     }
   }
@@ -207,7 +221,7 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
     });
 
     // Check if done
-    if (_currentIndex >= _parsedNames.length) {
+    if (_currentIndex >= _rawNames.length) {
       _finishImport();
     }
   }
@@ -369,12 +383,12 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   }
 
   Widget _buildImportingUI() {
-    if (_currentIndex >= _parsedNames.length) {
+    if (_currentIndex >= _rawNames.length) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final currentName = _parsedNames[_currentIndex];
-    final progress = (_currentIndex + 1) / _parsedNames.length;
+    final currentName = _displayNames[_currentIndex];
+    final progress = (_currentIndex + 1) / _rawNames.length;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -398,7 +412,7 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
         LinearProgressIndicator(value: progress),
         const SizedBox(height: 8),
         Text(
-          'Employee ${_currentIndex + 1} of ${_parsedNames.length}',
+          'Employee ${_currentIndex + 1} of ${_rawNames.length}',
           style: TextStyle(color: Colors.grey[600]),
         ),
         const SizedBox(height: 24),
