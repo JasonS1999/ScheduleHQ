@@ -26,6 +26,7 @@ import '../../services/app_colors.dart';
 import '../../services/schedule_pdf_service.dart';
 import '../../services/schedule_undo_manager.dart';
 import '../../services/firestore_sync_service.dart';
+import '../../services/notification_sender_service.dart';
 import 'shift_runner_table.dart';
 
 // Custom intents for keyboard shortcuts
@@ -1085,7 +1086,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               items: _employees
                   .map(
                     (emp) =>
-                        DropdownMenuItem(value: emp.id, child: Text(emp.name)),
+                        DropdownMenuItem(value: emp.id, child: Text(emp.displayName)),
                   )
                   .toList(),
               onChanged: (value) {
@@ -1852,7 +1853,7 @@ class _ScheduleViewState extends State<ScheduleView> {
     );
     final employee = _employees.firstWhere(
       (e) => e.id == employeeId,
-      orElse: () => Employee(id: employeeId, name: 'Unknown', jobCode: ''),
+      orElse: () => Employee(id: employeeId, firstName: 'Unknown', jobCode: ''),
     );
 
     final result = await showDialog<bool>(
@@ -1871,7 +1872,7 @@ class _ScheduleViewState extends State<ScheduleView> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${employee.name} already has a shift that overlaps with this time:',
+                '${employee.displayName} already has a shift that overlaps with this time:',
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 12),
@@ -2621,7 +2622,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                             CrossAxisAlignment.center,
                                         children: [
                                           Text(
-                                            e.name,
+                                            e.displayName,
                                             overflow: TextOverflow.ellipsis,
                                             textAlign: TextAlign.center,
                                             style: const TextStyle(
@@ -5543,7 +5544,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       ),
                       child: Center(
                         child: Text(
-                          employee.name,
+                          employee.displayName,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
@@ -5895,7 +5896,7 @@ class _MonthlyRunnerSearchDialogState
       } else {
         _filteredEmployees = widget.availableEmployees
             .where(
-              (emp) => emp.name.toLowerCase().contains(query.toLowerCase()),
+              (emp) => emp.displayName.toLowerCase().contains(query.toLowerCase()),
             )
             .toList();
       }
@@ -6022,8 +6023,8 @@ class _MonthlyRunnerSearchDialogState
                             radius: 14,
                             backgroundColor: widget.shiftColor.withOpacity(0.2),
                             child: Text(
-                              emp.name.isNotEmpty
-                                  ? emp.name[0].toUpperCase()
+                              emp.displayName.isNotEmpty
+                                  ? emp.displayName[0].toUpperCase()
                                   : '?',
                               style: TextStyle(
                                 fontSize: 12,
@@ -6033,7 +6034,7 @@ class _MonthlyRunnerSearchDialogState
                             ),
                           ),
                           title: Text(
-                            emp.name,
+                            emp.displayName,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: isCurrentRunner
@@ -6269,7 +6270,7 @@ class _AutoFillFromWeeklyTemplatesDialogState
                                     }
                                   });
                                 },
-                                title: Text(employee.name),
+                                title: Text(employee.displayName),
                                 subtitle: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -6384,6 +6385,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
   bool _publishAll = true;
   final Set<int> _selectedEmployeeIds = {};
   bool _publishing = false;
+  bool _unpublishing = false;
   String? _lastPublishInfo;
 
   @override
@@ -6428,6 +6430,22 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
 
       if (mounted) {
         if (result.success) {
+          // Send push notifications to employees
+          if (result.publishedEmployeeUids.isNotEmpty) {
+            final weekOf = '${_startDate.month}/${_startDate.day}';
+            NotificationSenderService.instance.notifySchedulePublished(
+              employeeUids: result.publishedEmployeeUids,
+              weekOf: weekOf,
+            ).then((notifyResult) {
+              if (notifyResult.success) {
+                debugPrint('Sent ${notifyResult.sent} schedule notifications');
+              } else {
+                debugPrint('Failed to send notifications: ${notifyResult.reason ?? notifyResult.error}');
+              }
+            }).catchError((e) {
+              debugPrint('Error sending notifications: $e');
+            });
+          }
           Navigator.pop(context, true);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -6448,6 +6466,76 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
           ),
         );
         setState(() => _publishing = false);
+      }
+    }
+  }
+
+  Future<void> _unpublish() async {
+    // Confirm before unpublishing
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Unpublish'),
+        content: const Text(
+          'This will hide the schedule from employees in the app. '
+          'The shifts will remain in the system and can be republished later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Unpublish'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _unpublishing = true);
+
+    try {
+      final result = await FirestoreSyncService.instance.unpublishSchedule(
+        startDate: _startDate,
+        endDate: _endDate,
+        employeeIds: _publishAll ? null : _selectedEmployeeIds.toList(),
+      );
+
+      if (mounted) {
+        if (result.success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() => _unpublishing = false);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error unpublishing: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _unpublishing = false);
       }
     }
   }
@@ -6565,7 +6653,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
                   itemBuilder: (ctx, i) {
                     final emp = widget.employees[i];
                     return CheckboxListTile(
-                      title: Text(emp.name),
+                      title: Text(emp.displayName),
                       subtitle: Text(emp.jobCode),
                       value: _selectedEmployeeIds.contains(emp.id),
                       dense: true,
@@ -6596,12 +6684,29 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _publishing ? null : () => Navigator.pop(context, false),
+          onPressed: _publishing || _unpublishing ? null : () => Navigator.pop(context, false),
           child: const Text('Cancel'),
+        ),
+        OutlinedButton.icon(
+          onPressed:
+              _publishing || _unpublishing || (!_publishAll && _selectedEmployeeIds.isEmpty)
+              ? null
+              : _unpublish,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.orange,
+          ),
+          icon: _unpublishing
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.cloud_off),
+          label: Text(_unpublishing ? 'Unpublishing...' : 'Unpublish'),
         ),
         ElevatedButton.icon(
           onPressed:
-              _publishing || (!_publishAll && _selectedEmployeeIds.isEmpty)
+              _publishing || _unpublishing || (!_publishAll && _selectedEmployeeIds.isEmpty)
               ? null
               : _publish,
           icon: _publishing

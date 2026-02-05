@@ -25,7 +25,7 @@ void main() {
     final timeOffDao = TimeOffDao();
     final ptoService = PtoTrimesterService(timeOffDao: timeOffDao);
 
-    final id = await employeeDao.insertEmployee(Employee(name: 'PTO Tester', jobCode: 'assistant'));
+    final id = await employeeDao.insertEmployee(Employee(firstName: 'PTO', lastName: 'Tester', jobCode: 'assistant'));
 
     const ptoHours = 9; // Hardcoded default hours per PTO request
 
@@ -44,7 +44,7 @@ void main() {
     final timeOffDao = TimeOffDao();
     final ptoService = PtoTrimesterService(timeOffDao: timeOffDao);
 
-    final id = await employeeDao.insertEmployee(Employee(name: 'PTO Insufficient', jobCode: 'assistant'));
+    final id = await employeeDao.insertEmployee(Employee(firstName: 'PTO', lastName: 'Insufficient', jobCode: 'assistant'));
 
     const hoursPerDay = 9; // Hardcoded default hours per PTO request
 
@@ -64,7 +64,7 @@ void main() {
     final timeOffDao = TimeOffDao();
     final ptoService = PtoTrimesterService(timeOffDao: timeOffDao);
 
-    final id = await employeeDao.insertEmployee(Employee(name: 'PTO Allowed', jobCode: 'assistant'));
+    final id = await employeeDao.insertEmployee(Employee(firstName: 'PTO', lastName: 'Allowed', jobCode: 'assistant'));
 
     const hoursPerDay = 9; // Hardcoded default hours per PTO request
 

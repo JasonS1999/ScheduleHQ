@@ -1,7 +1,9 @@
 import * as admin from "firebase-admin";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onObjectFinalized } from "firebase-functions/v2/storage";
 import { logger } from "firebase-functions/v2";
+import { parse } from "csv-parse/sync";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -605,14 +607,17 @@ export const sendNotificationToEmployee = onCall(async (request) => {
   }
 
   const { employeeUid, title, body, data } = request.data;
+  const managerUid = request.auth.uid;
 
   if (!employeeUid || !title) {
     throw new HttpsError("invalid-argument", "employeeUid and title are required");
   }
 
   try {
-    // Get employee's FCM token
-    const employeeQuery = await db.collection("employees")
+    // Get employee's FCM token from manager's subcollection
+    const employeeQuery = await db.collection("managers")
+      .doc(managerUid)
+      .collection("employees")
       .where("uid", "==", employeeUid)
       .limit(1)
       .get();
@@ -680,17 +685,20 @@ export const sendNotificationToMultiple = onCall(async (request) => {
   }
 
   const { employeeUids, title, body, data } = request.data;
+  const managerUid = request.auth.uid;
 
   if (!employeeUids || !Array.isArray(employeeUids) || !title) {
     throw new HttpsError("invalid-argument", "employeeUids array and title are required");
   }
 
   try {
-    // Get FCM tokens for all employees
+    // Get FCM tokens for all employees from manager's subcollection
     const tokens: string[] = [];
     
     for (const uid of employeeUids) {
-      const employeeQuery = await db.collection("employees")
+      const employeeQuery = await db.collection("managers")
+        .doc(managerUid)
+        .collection("employees")
         .where("uid", "==", uid)
         .limit(1)
         .get();
@@ -833,6 +841,204 @@ export const onSchedulePublished = onDocumentCreated(
 */
 
 /**
+ * Check if a UID looks like a valid Firebase Auth UID.
+ * Firebase UIDs are typically 28 characters of alphanumeric characters.
+ */
+function isValidFirebaseUid(uid: string | undefined | null): boolean {
+  if (!uid || uid.length < 20) return false;
+  if (uid.toLowerCase() === "admin") return false;
+  return /^[a-zA-Z0-9]+$/.test(uid);
+}
+
+/**
+ * Fix employees with invalid UIDs (like "Admin").
+ * This will clear the invalid UID and create a proper Firebase Auth account.
+ * Also updates the users collection appropriately (but won't change existing manager roles).
+ */
+export const fixInvalidEmployeeUids = onCall(async (request) => {
+  // Verify caller is a manager
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be logged in");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data()?.role !== "manager") {
+    throw new HttpsError("permission-denied", "Only managers can fix employee UIDs");
+  }
+
+  const managerUid = request.data?.managerUid || request.auth.uid;
+  const specificEmployeeId = request.data?.employeeId; // Optional: fix specific employee only
+
+  const results = {
+    total: 0,
+    fixed: 0,
+    alreadyValid: 0,
+    noUid: 0,
+    errors: [] as string[],
+  };
+
+  try {
+    let query: admin.firestore.Query = db
+      .collection("managers")
+      .doc(managerUid)
+      .collection("employees");
+    
+    if (specificEmployeeId) {
+      // Get specific employee only
+      const doc = await db
+        .collection("managers")
+        .doc(managerUid)
+        .collection("employees")
+        .doc(specificEmployeeId.toString())
+        .get();
+      
+      if (!doc.exists) {
+        throw new HttpsError("not-found", `Employee ${specificEmployeeId} not found`);
+      }
+      
+      const employeeData = doc.data()!;
+      const existingUid = employeeData.uid;
+      const email = employeeData.email;
+      
+      if (!existingUid) {
+        results.noUid++;
+      } else if (isValidFirebaseUid(existingUid)) {
+        results.alreadyValid++;
+      } else {
+        // Invalid UID - fix it
+        logger.log(`Fixing invalid UID "${existingUid}" for employee ${doc.id}`);
+        
+        const accountEmail = email || `employee_${managerUid}_${doc.id}@schedulehq.internal`;
+        const hasRealEmail = !!email;
+        
+        let userRecord;
+        try {
+          userRecord = await auth.getUserByEmail(accountEmail);
+          logger.log(`Found existing user for ${accountEmail}: ${userRecord.uid}`);
+        } catch (error: unknown) {
+          if ((error as { code?: string }).code === "auth/user-not-found") {
+            userRecord = await auth.createUser({
+              email: accountEmail,
+              emailVerified: false,
+              disabled: !hasRealEmail,
+            });
+            logger.log(`Created new user for ${accountEmail}: ${userRecord.uid}`);
+          } else {
+            throw error;
+          }
+        }
+        
+        // Update employee with correct UID
+        await doc.ref.update({
+          uid: userRecord.uid,
+          previousInvalidUid: existingUid,
+          uidFixedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        
+        // Only create/update users doc if this UID doesn't already have a role
+        const existingUserDoc = await db.collection("users").doc(userRecord.uid).get();
+        if (!existingUserDoc.exists) {
+          await db.collection("users").doc(userRecord.uid).set({
+            email: accountEmail,
+            realEmail: hasRealEmail ? email : null,
+            employeeId: parseInt(doc.id) || doc.id,
+            managerUid: managerUid,
+            role: "employee",
+            hasAppAccess: hasRealEmail,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        
+        results.fixed++;
+      }
+      
+      results.total = 1;
+      return results;
+    }
+
+    // Process all employees
+    const employeesSnapshot = await query.get();
+    results.total = employeesSnapshot.size;
+
+    for (const doc of employeesSnapshot.docs) {
+      const employeeData = doc.data();
+      const existingUid = employeeData.uid;
+      const email = employeeData.email;
+
+      if (!existingUid) {
+        results.noUid++;
+        continue;
+      }
+
+      if (isValidFirebaseUid(existingUid)) {
+        results.alreadyValid++;
+        continue;
+      }
+
+      // Invalid UID - fix it
+      logger.log(`Fixing invalid UID "${existingUid}" for employee ${doc.id} (${employeeData.name})`);
+
+      const accountEmail = email || `employee_${managerUid}_${doc.id}@schedulehq.internal`;
+      const hasRealEmail = !!email;
+
+      try {
+        let userRecord;
+        try {
+          userRecord = await auth.getUserByEmail(accountEmail);
+          logger.log(`Found existing user for ${accountEmail}: ${userRecord.uid}`);
+        } catch (error: unknown) {
+          if ((error as { code?: string }).code === "auth/user-not-found") {
+            userRecord = await auth.createUser({
+              email: accountEmail,
+              emailVerified: false,
+              disabled: !hasRealEmail,
+            });
+            logger.log(`Created new user for ${accountEmail}: ${userRecord.uid}`);
+          } else {
+            throw error;
+          }
+        }
+
+        // Update employee with correct UID
+        await doc.ref.update({
+          uid: userRecord.uid,
+          previousInvalidUid: existingUid,
+          uidFixedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // Only create/update users doc if this UID doesn't already have a role
+        // This prevents overwriting manager roles
+        const existingUserDoc = await db.collection("users").doc(userRecord.uid).get();
+        if (!existingUserDoc.exists) {
+          await db.collection("users").doc(userRecord.uid).set({
+            email: accountEmail,
+            realEmail: hasRealEmail ? email : null,
+            employeeId: parseInt(doc.id) || doc.id,
+            managerUid: managerUid,
+            role: "employee",
+            hasAppAccess: hasRealEmail,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+
+        results.fixed++;
+
+      } catch (error) {
+        logger.error(`Error fixing employee ${doc.id}:`, error);
+        results.errors.push(`${doc.id}: ${error}`);
+      }
+    }
+
+    logger.log(`Fix complete:`, results);
+    return results;
+
+  } catch (error) {
+    logger.error("Error fixing employee UIDs:", error);
+    throw new HttpsError("internal", `Error fixing UIDs: ${error}`);
+  }
+});
+
+/**
  * Manually sync all existing employees to create Firebase Auth accounts.
  * Call this once to set up accounts for employees created before Cloud Functions were deployed.
  * 
@@ -956,3 +1162,281 @@ export const syncAllEmployeeAccounts = onCall(async (request) => {
     throw new HttpsError("internal", `Error syncing accounts: ${error}`);
   }
 });
+
+// =============================================================================
+// Shift Manager CSV Processing
+// =============================================================================
+
+/**
+ * Shift Manager Report entry structure
+ */
+interface ShiftManagerEntry {
+  employeeId: number;
+  managerName: string;
+  timeSlice: string;
+  allNetSales: number;
+  numberOfShifts: number;
+  gc: number;
+  dtPulledForwardPct: number;
+  kvsHealthyUsage: number;
+  oepe: number;
+  punchLaborPct: number;
+  dtGc: number;
+  tpph: number;
+  averageCheck: number;
+  actVsNeed: number;
+  r2p: number;
+}
+
+/**
+ * Parse a numeric value from CSV, handling various formats
+ */
+function parseNumber(value: string | undefined): number {
+  if (!value) return 0;
+  // Remove $ signs, commas, and % signs
+  const cleaned = value.toString().replace(/[$,%]/g, "").trim();
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Get column value from CSV row with flexible matching
+ * Handles BOM, whitespace, and case differences in column names
+ */
+function getColumn(row: Record<string, string>, columnName: string): string {
+  // Try exact match first
+  if (row[columnName] !== undefined) {
+    return row[columnName]?.toString().trim() || "";
+  }
+  
+  // Try case-insensitive, whitespace-trimmed match
+  // Also strips BOM and other invisible characters
+  const normalizedTarget = columnName.toLowerCase().trim().replace(/[\ufeff\u200b]/g, "");
+  
+  for (const key of Object.keys(row)) {
+    const normalizedKey = key.toLowerCase().trim().replace(/[\ufeff\u200b]/g, "");
+    if (normalizedKey === normalizedTarget) {
+      return row[key]?.toString().trim() || "";
+    }
+  }
+  
+  return "";
+}
+
+/**
+ * Normalize manager name from "LastName, FirstName" to "FirstName LastName" format
+ * to match employee name field in Firestore
+ */
+function normalizeManagerName(name: string): string | null {
+  if (!name || typeof name !== "string") return null;
+  
+  const trimmedName = name.trim();
+  const parts = trimmedName.split(",").map(p => p.trim());
+  
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    // "LastName, FirstName" → "FirstName LastName"
+    return `${parts[1]} ${parts[0]}`;
+  }
+  
+  // Already in "FirstName LastName" format or single name
+  return trimmedName || null;
+}
+
+/**
+ * Extract date from filename like "ShiftManager_17495_2026-02-03.csv"
+ */
+function extractDateFromFilename(filename: string): string {
+  // Try to find date pattern YYYY-MM-DD
+  const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
+  if (dateMatch) {
+    return dateMatch[1];
+  }
+  // Default to today's date
+  const today = new Date();
+  return today.toISOString().split("T")[0];
+}
+
+/**
+ * Triggered when a CSV file is uploaded to shift_manager_imports/
+ * Parses the CSV, matches manager names to employees, and saves to Firestore.
+ */
+export const processShiftManagerCSV = onObjectFinalized(
+  {
+    bucket: "schedulehq-cf87f.firebasestorage.app",
+  },
+  async (event) => {
+    const filePath = event.data.name;
+    const contentType = event.data.contentType;
+
+    // Only process CSV files in the shift_manager_imports folder
+    if (!filePath.startsWith("shift_manager_imports/")) {
+      logger.log(`Ignoring file outside shift_manager_imports: ${filePath}`);
+      return;
+    }
+
+    if (!contentType || !contentType.includes("csv")) {
+      logger.log(`Ignoring non-CSV file: ${filePath} (${contentType})`);
+      return;
+    }
+
+    const filename = filePath.split("/").pop() || "";
+    logger.log(`Processing Shift Manager CSV: ${filename}`);
+
+    try {
+      // Download file from Storage
+      const bucket = admin.storage().bucket(event.data.bucket);
+      const file = bucket.file(filePath);
+      
+      const [fileContents] = await file.download();
+      const csvContent = fileContents.toString("utf-8");
+
+      // Parse CSV
+      const records = parse(csvContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+        bom: true, // Handle BOM (byte order mark)
+      });
+
+      logger.log(`Parsed ${records.length} rows from CSV`);
+
+      // Debug: Log actual column names from first row
+      if (records.length > 0) {
+        const columnNames = Object.keys(records[0]);
+        logger.log(`CSV columns found: ${JSON.stringify(columnNames)}`);
+      }
+
+      // Get location from first CSV row to find the correct manager
+      const location = getColumn(records[0] || {}, "Loc");
+      
+      if (!location) {
+        logger.error("No location (Loc) found in CSV. Check column names above.");
+        return;
+      }
+
+      logger.log(`Looking up manager for store location: ${location}`);
+
+      // Find manager with matching storeNsn in managerSettings (nested in storeHours)
+      const settingsSnapshot = await db
+        .collection("managerSettings")
+        .where("storeHours.storeNsn", "==", location)
+        .limit(1)
+        .get();
+
+      if (settingsSnapshot.empty) {
+        logger.error(`No manager found with storeHours.storeNsn: ${location}`);
+        return;
+      }
+
+      const managerUid = settingsSnapshot.docs[0].id;
+      logger.log(`Found manager ${managerUid} for store ${location}`);
+
+      // Get all employees for this manager
+      const employeesSnapshot = await db
+        .collection("managers")
+        .doc(managerUid)
+        .collection("employees")
+        .get();
+
+      // Build employee lookup map by name field (case-insensitive)
+      const employeeMap = new Map<string, { id: number; name: string }>();
+      
+      employeesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        const name = (data.name || "").toLowerCase().trim();
+        const localId = data.localId || parseInt(doc.id) || 0;
+        
+        if (name) {
+          // Key format: "firstname lastname" (lowercase)
+          employeeMap.set(name, { id: localId, name: data.name });
+        }
+      });
+
+      logger.log(`Loaded ${employeeMap.size} employees for matching`);
+
+      // Extract date from filename
+      const reportDate = extractDateFromFilename(filename);
+
+      // Process each row
+      const matchedEntries: ShiftManagerEntry[] = [];
+      let unmatchedCount = 0;
+
+      for (const row of records) {
+        const managerName = getColumn(row, "Manager Name");
+        
+        // Normalize "LastName, FirstName" → "FirstName LastName"
+        const normalizedName = normalizeManagerName(managerName);
+
+        if (!normalizedName) {
+          logger.warn(`Could not parse manager name: "${managerName}"`);
+          unmatchedCount++;
+          continue;
+        }
+
+        // Look up employee by normalized name (case-insensitive)
+        const lookupKey = normalizedName.toLowerCase();
+        const employee = employeeMap.get(lookupKey);
+
+        if (!employee) {
+          logger.warn(`No employee match for: "${managerName}" → "${normalizedName}" (key: ${lookupKey})`);
+          unmatchedCount++;
+          continue;
+        }
+
+        // Create entry using flexible column matching
+        const entry: ShiftManagerEntry = {
+          employeeId: employee.id,
+          managerName: employee.name, // Use the employee's actual name from Firestore
+          timeSlice: getColumn(row, "Time Slice"),
+          allNetSales: parseNumber(getColumn(row, "All Net Sales")),
+          numberOfShifts: parseNumber(getColumn(row, "# of Shifts")),
+          gc: parseNumber(getColumn(row, "GC")),
+          dtPulledForwardPct: parseNumber(getColumn(row, "DT Pulled Forward %")),
+          kvsHealthyUsage: parseNumber(getColumn(row, "KVS Healthy Usage")),
+          oepe: parseNumber(getColumn(row, "OEPE")),
+          punchLaborPct: parseNumber(getColumn(row, "Punch Labor %")),
+          dtGc: parseNumber(getColumn(row, "DT GC")),
+          tpph: parseNumber(getColumn(row, "TPPH")),
+          averageCheck: parseNumber(getColumn(row, "Average Check")),
+          actVsNeed: parseNumber(getColumn(row, "Act vs Need")),
+          r2p: parseNumber(getColumn(row, "R2P")),
+        };
+
+        matchedEntries.push(entry);
+      }
+
+      logger.log(`Matched ${matchedEntries.length} entries, ${unmatchedCount} unmatched`);
+
+      // Save to Firestore
+      if (matchedEntries.length > 0) {
+        const reportRef = db
+          .collection("managers")
+          .doc(managerUid)
+          .collection("shiftManagerReports")
+          .doc(reportDate);
+
+        await reportRef.set({
+          importedAt: admin.firestore.FieldValue.serverTimestamp(),
+          fileName: filename,
+          location: location, // Store location from CSV lookup
+          reportDate: reportDate,
+          totalEntries: matchedEntries.length,
+          unmatchedEntries: unmatchedCount,
+          entries: matchedEntries,
+        });
+
+        logger.log(`Saved report to Firestore: managers/${managerUid}/shiftManagerReports/${reportDate}`);
+      } else {
+        logger.warn("No matched entries to save");
+      }
+
+      // Delete processed file from Storage
+      await file.delete();
+      logger.log(`Deleted processed file: ${filePath}`);
+
+    } catch (error) {
+      logger.error(`Error processing CSV ${filename}:`, error);
+      throw error;
+    }
+  }
+);

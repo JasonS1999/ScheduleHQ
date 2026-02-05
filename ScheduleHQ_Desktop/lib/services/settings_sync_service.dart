@@ -5,10 +5,14 @@ import '../database/settings_dao.dart';
 import '../database/store_hours_dao.dart';
 import '../database/shift_type_dao.dart';
 import '../database/job_code_settings_dao.dart';
+import '../database/job_code_group_dao.dart';
+import '../database/shift_template_dao.dart';
 import '../models/settings.dart';
 import '../models/store_hours.dart';
 import '../models/shift_type.dart';
 import '../models/job_code_settings.dart';
+import '../models/job_code_group.dart';
+import '../models/shift_template.dart';
 import 'auth_service.dart';
 
 /// Service for syncing local settings to Firestore so managers can access
@@ -26,6 +30,8 @@ class SettingsSyncService {
   final StoreHoursDao _storeHoursDao = StoreHoursDao();
   final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
   final JobCodeSettingsDao _jobCodeSettingsDao = JobCodeSettingsDao();
+  final JobCodeGroupDao _jobCodeGroupDao = JobCodeGroupDao();
+  final ShiftTemplateDao _shiftTemplateDao = ShiftTemplateDao();
 
   /// Get the current manager's settings document reference
   DocumentReference<Map<String, dynamic>>? get _managerSettingsRef {
@@ -49,12 +55,16 @@ class SettingsSyncService {
       final storeHours = await _storeHoursDao.getStoreHours();
       final shiftTypes = await _shiftTypeDao.getAll();
       final jobCodes = await _jobCodeSettingsDao.getAll();
+      final jobCodeGroups = await _jobCodeGroupDao.getAll();
+      final shiftTemplates = await _shiftTemplateDao.getAll();
 
       await ref.set({
         'settings': _settingsToMap(settings),
         'storeHours': _storeHoursToMap(storeHours),
         'shiftTypes': shiftTypes.map((st) => st.toMap()).toList(),
         'jobCodeSettings': jobCodes.map((jc) => jc.toMap()).toList(),
+        'jobCodeGroups': jobCodeGroups.map((g) => g.toMap()).toList(),
+        'shiftTemplates': shiftTemplates.map((t) => t.toMap()).toList(),
         'lastUpdated': FieldValue.serverTimestamp(),
         'email': AuthService.instance.currentUserEmail,
       }, SetOptions(merge: true));
@@ -232,6 +242,47 @@ class SettingsSyncService {
         // Delete job codes that exist locally but not in cloud
         for (final code in existingCodes.difference(cloudCodes)) {
           await _jobCodeSettingsDao.deleteJobCode(code);
+        }
+        itemsUpdated++;
+      }
+
+      // Download job code groups
+      if (data['jobCodeGroups'] != null) {
+        final groupsList = data['jobCodeGroups'] as List<dynamic>;
+        // Get existing groups to determine what to delete
+        final existingGroups = (await _jobCodeGroupDao.getAll()).map((g) => g.name).toSet();
+        final cloudGroups = <String>{};
+        
+        for (final gMap in groupsList) {
+          final group = JobCodeGroup.fromMap(Map<String, dynamic>.from(gMap));
+          await _jobCodeGroupDao.insert(group);
+          cloudGroups.add(group.name);
+        }
+        
+        // Delete groups that exist locally but not in cloud
+        for (final name in existingGroups.difference(cloudGroups)) {
+          await _jobCodeGroupDao.delete(name);
+        }
+        itemsUpdated++;
+      }
+
+      // Download shift templates
+      if (data['shiftTemplates'] != null) {
+        final templatesList = data['shiftTemplates'] as List<dynamic>;
+        // Get existing templates to determine what to delete
+        final existingTemplates = await _shiftTemplateDao.getAll();
+        final existingIds = existingTemplates.map((t) => t.id).whereType<int>().toSet();
+        final cloudIds = <int>{};
+        
+        for (final tMap in templatesList) {
+          final template = ShiftTemplate.fromMap(Map<String, dynamic>.from(tMap));
+          await _shiftTemplateDao.upsert(template);
+          if (template.id != null) cloudIds.add(template.id!);
+        }
+        
+        // Delete templates that exist locally but not in cloud
+        for (final id in existingIds.difference(cloudIds)) {
+          await _shiftTemplateDao.delete(id);
         }
         itemsUpdated++;
       }

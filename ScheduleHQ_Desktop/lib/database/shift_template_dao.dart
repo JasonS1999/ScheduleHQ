@@ -12,6 +12,9 @@ class ShiftTemplateDao {
     return maps.map((map) => ShiftTemplate.fromMap(map)).toList();
   }
 
+  // Alias for getAllTemplates
+  Future<List<ShiftTemplate>> getAll() async => getAllTemplates();
+
   // Insert a new template
   Future<int> insertTemplate(ShiftTemplate template) async {
     final db = await _db;
@@ -29,6 +32,16 @@ class ShiftTemplateDao {
     );
   }
 
+  // Upsert template (insert or replace)
+  Future<void> upsert(ShiftTemplate template) async {
+    final db = await _db;
+    await db.insert(
+      'shift_templates',
+      template.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   // Delete template
   Future<int> deleteTemplate(int id) async {
     final db = await _db;
@@ -38,6 +51,9 @@ class ShiftTemplateDao {
       whereArgs: [id],
     );
   }
+
+  // Alias for deleteTemplate
+  Future<int> delete(int id) async => deleteTemplate(id);
 
   // Insert default templates if none exist
   Future<void> insertDefaultTemplatesIfMissing() async {

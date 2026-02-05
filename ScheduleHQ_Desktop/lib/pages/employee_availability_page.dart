@@ -55,7 +55,7 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.employee.name} - Availability'),
+        title: Text('${widget.employee.displayName} - Availability'),
       ),
       body: Column(
         children: [

@@ -27,8 +27,8 @@ Future<void> main() async {
     databaseFactory = databaseFactoryFfi;
   }
 
-  // Initialize the database BEFORE the UI loads
-  await AppDatabase.instance.init();
+  // Note: Database is now initialized per-manager in AuthWrapper after login
+  // This ensures each manager gets their own database file
 
   runApp(const MyApp());
 }
@@ -73,11 +73,25 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool _dbInitialized = false;
+  String? _currentUid;
+
   @override
   void initState() {
     super.initState();
     // Initialize auto-sync service (it will check if enabled in settings)
     AutoSyncService.instance.initialize();
+  }
+
+  Future<void> _initDatabaseForUser(String uid) async {
+    if (_currentUid != uid) {
+      _dbInitialized = false;
+      _currentUid = uid;
+    }
+    if (!_dbInitialized) {
+      await AppDatabase.instance.initForManager(uid);
+      _dbInitialized = true;
+    }
   }
 
   @override
@@ -94,9 +108,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
           );
         }
 
-        // If user is signed in, show main app
+        // If user is signed in, initialize their database and show main app
         if (snapshot.hasData) {
-          return const NavigationShell();
+          final user = snapshot.data!;
+          return FutureBuilder(
+            future: _initDatabaseForUser(user.uid),
+            builder: (context, dbSnapshot) {
+              if (dbSnapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text('Loading your data...'),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              return const NavigationShell();
+            },
+          );
         }
 
         // Otherwise show login

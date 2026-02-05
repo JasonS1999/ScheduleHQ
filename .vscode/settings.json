@@ -6,6 +6,7 @@
         "Set-Location": true,
         "git restore": true,
         "xcrun": true,
-        "xcodebuild": true
+        "xcodebuild": true,
+        "firebase": true
     }
 }

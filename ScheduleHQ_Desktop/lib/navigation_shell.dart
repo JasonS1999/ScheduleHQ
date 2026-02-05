@@ -6,6 +6,7 @@ import 'package:schedulehq_desktop/pages/settings_page.dart';
 import 'pages/pto_vac_tracker_page.dart';
 import 'pages/analytics_page.dart';
 import 'pages/approval_queue_page.dart';
+import 'pages/pnl_page.dart';
 import 'services/app_colors.dart';
 import 'services/auth_service.dart';
 import 'services/store_update_service.dart';
@@ -29,6 +30,7 @@ class _NavigationShellState extends State<NavigationShell> {
     () => const PtoVacTrackerPage(),
     () => const ApprovalQueuePage(),
     () => const AnalyticsPage(),
+    () => const PnlPage(),
     () => const SettingsPage(),
   ];
 
@@ -143,6 +145,10 @@ class _NavigationShellState extends State<NavigationShell> {
                         label: Text("Analytics"),
                       ),
                       NavigationRailDestination(
+                        icon: Icon(Icons.account_balance),
+                        label: Text("P&L"),
+                      ),
+                      NavigationRailDestination(
                         icon: Icon(Icons.settings),
                         label: Text("Settings"),
                       ),
@@ -191,6 +197,10 @@ class _NavigationShellState extends State<NavigationShell> {
                     NavigationDestination(
                       icon: Icon(Icons.analytics),
                       label: "Analytics",
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.account_balance),
+                      label: "P&L",
                     ),
                     NavigationDestination(
                       icon: Icon(Icons.settings),

@@ -67,7 +67,7 @@ class _TestHostState extends State<TestHost> {
 void main() {
   testWidgets('Copy a shift and paste into another employee same time', (WidgetTester tester) async {
     final date = DateTime(2026, 1, 12); // Monday
-    final employees = [Employee(id: 1, name: 'Alice', jobCode: 'gm'), Employee(id: 2, name: 'Bob', jobCode: 'assistant')];
+    final employees = [Employee(id: 1, firstName: 'Alice', jobCode: 'gm'), Employee(id: 2, firstName: 'Bob', jobCode: 'assistant')];
     final shift = ShiftPlaceholder(employeeId: 1, start: DateTime(date.year, date.month, 12, 9), end: DateTime(date.year, date.month, 12, 17), text: 'Shift');
 
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: TestHost(date: date, employees: employees, seed: shift))));

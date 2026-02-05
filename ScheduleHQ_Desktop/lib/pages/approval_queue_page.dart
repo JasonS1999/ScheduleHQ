@@ -639,7 +639,7 @@ class _ApprovalQueuePageState extends State<ApprovalQueuePage>
             }
 
             return AlertDialog(
-              title: Text('Edit Time Off - ${employee.name}'),
+              title: Text('Edit Time Off - ${employee.displayName}'),
               content: SizedBox(
                 width: 400,
                 child: Column(

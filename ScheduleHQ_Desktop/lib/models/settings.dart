@@ -48,6 +48,7 @@ class Settings {
     return {
       'id': id,
       'ptoHoursPerTrimester': ptoHoursPerTrimester,
+      'ptoHoursPerRequest': 8, // Legacy column, no longer used but required by DB schema
       'maxCarryoverHours': maxCarryoverHours,
       'assistantVacationDays': assistantVacationDays,
       'swingVacationDays': swingVacationDays,

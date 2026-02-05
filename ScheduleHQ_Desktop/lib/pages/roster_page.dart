@@ -76,7 +76,9 @@ class _RosterPageState extends State<RosterPage> {
   }
 
   Future<void> _addEmployee() async {
-    String name = "";
+    String firstName = "";
+    String lastName = "";
+    String nickname = "";
     String jobCode = _jobCodes.isNotEmpty ? _jobCodes.first.code : "Assistant";
     String? email;
     int vacationAllowed = 0;
@@ -91,8 +93,30 @@ class _RosterPageState extends State<RosterPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  decoration: const InputDecoration(labelText: "Name"),
-                  onChanged: (v) => name = v,
+                  decoration: const InputDecoration(
+                    labelText: "First Name *",
+                    hintText: "Required",
+                  ),
+                  onChanged: (v) => firstName = v,
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: "Last Name *",
+                    hintText: "Required",
+                  ),
+                  onChanged: (v) => lastName = v,
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: "Nickname",
+                    hintText: "Optional - shown instead of first name",
+                  ),
+                  onChanged: (v) => nickname = v,
+                  textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -141,10 +165,17 @@ class _RosterPageState extends State<RosterPage> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (name.trim().isEmpty) return;
+                if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('First and Last name are required')),
+                  );
+                  return;
+                }
 
                 final newEmployee = Employee(
-                  name: name.trim(),
+                  firstName: firstName.trim(),
+                  lastName: lastName.trim(),
+                  nickname: nickname.trim().isEmpty ? null : nickname.trim(),
                   jobCode: jobCode,
                   email: email,
                   vacationWeeksAllowed: vacationAllowed,
@@ -175,7 +206,9 @@ class _RosterPageState extends State<RosterPage> {
   }
 
   Future<void> _editEmployee(Employee e) async {
-    String name = e.name;
+    String firstName = e.firstName ?? '';
+    String lastName = e.lastName ?? '';
+    String nickname = e.nickname ?? '';
     String jobCode = e.jobCode;
     String? email = e.email;
     int vacationAllowed = e.vacationWeeksAllowed;
@@ -190,9 +223,33 @@ class _RosterPageState extends State<RosterPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(
-                  decoration: const InputDecoration(labelText: "Name"),
-                  controller: TextEditingController(text: name),
-                  onChanged: (v) => name = v,
+                  decoration: const InputDecoration(
+                    labelText: "First Name *",
+                    hintText: "Required",
+                  ),
+                  controller: TextEditingController(text: firstName),
+                  onChanged: (v) => firstName = v,
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: "Last Name *",
+                    hintText: "Required",
+                  ),
+                  controller: TextEditingController(text: lastName),
+                  onChanged: (v) => lastName = v,
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  decoration: const InputDecoration(
+                    labelText: "Nickname",
+                    hintText: "Optional - shown instead of first name",
+                  ),
+                  controller: TextEditingController(text: nickname),
+                  onChanged: (v) => nickname = v,
+                  textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 12),
                 TextField(
@@ -251,8 +308,17 @@ class _RosterPageState extends State<RosterPage> {
             ),
             ElevatedButton(
               onPressed: () async {
+                if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('First and Last name are required')),
+                  );
+                  return;
+                }
+                
                 final updatedEmployee = e.copyWith(
-                  name: name.trim(),
+                  firstName: firstName.trim(),
+                  lastName: lastName.trim(),
+                  nickname: nickname.trim().isEmpty ? null : nickname.trim(),
                   jobCode: jobCode,
                   email: email,
                   vacationWeeksAllowed: vacationAllowed,
@@ -284,7 +350,7 @@ class _RosterPageState extends State<RosterPage> {
       builder: (context) {
         return AlertDialog(
           title: const Text("Delete Employee"),
-          content: Text("Remove ${e.name}?"),
+          content: Text("Remove ${e.displayName}?"),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -420,7 +486,7 @@ class _RosterPageState extends State<RosterPage> {
               itemBuilder: (context, index) {
                 final e = _employees[index];
                 return ListTile(
-                  title: Text(e.name),
+                  title: Text(e.displayName),
                   subtitle: Text(
                     "${e.jobCode} • Vacation Weeks: ${e.vacationWeeksAllowed}",
                   ),

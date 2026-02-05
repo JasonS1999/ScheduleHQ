@@ -58,9 +58,19 @@ service cloud.firestore {
         allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
       
-      // Published schedules metadata - manager only
-      match /publishedSchedules/{docId} {
+      // Schedules collection - contains monthly subcollections with shifts
+      // Path: managers/{managerUid}/schedules/{YYYY-MM}/shifts/{docId}
+      match /schedules/{monthKey} {
+        // Allow manager to read/write the month document itself
         allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
+        
+        // Shifts within each month - manager writes, employees read own published shifts
+        match /shifts/{docId} {
+          allow read: if request.auth != null && 
+                        (request.auth.uid == managerUid || 
+                         resource.data.employeeUid == request.auth.uid);
+          allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
+        }
       }
       
       // Month-based schedules subcollection: managers/{managerUid}/schedules/{month}/shifts
@@ -93,19 +103,10 @@ service cloud.firestore {
                           resource.data.status == 'pending'));
       }
       
-      // NOTE: timeOffRequests collection is DEPRECATED - all requests now go to timeOff
-      // Keeping rules for backwards compatibility during migration
-      match /timeOffRequests/{docId} {
-        allow read: if request.auth != null && 
-                      (request.auth.uid == managerUid || 
-                       resource.data.employeeUid == request.auth.uid);
-        allow create: if request.auth != null;
-        allow update: if request.auth != null && request.auth.uid == managerUid && isManager();
-      }
-      
-      // Shift runners - manager only
+      // Shift runners - manager writes, employees can read
       match /shiftRunners/{docId} {
-        allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
       
       // Employee availability - manager only
@@ -123,63 +124,10 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
       
-      // Schedule notes - manager only
+      // Schedule notes - manager writes, employees can read
       match /scheduleNotes/{docId} {
-        allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
-      }
-    }
-
-    // ============== LEGACY ROOT COLLECTIONS (keeping for backwards compatibility) ==============
-    
-    // Employees - managers write, employees read own
-    match /employees/{docId} {
-      allow read: if request.auth != null && (isManager() || isOwnEmployee(resource.data.email));
-      allow write: if isManager();
-    }
-    
-    // Shifts - managers write, employees read own shifts
-    match /shifts/{docId} {
-      allow read: if request.auth != null && 
-                    (isManager() || resource.data.employeeUid == request.auth.uid);
-      allow write: if isManager();
-    }
-    
-    // Published schedules metadata - managers only
-    match /publishedSchedules/{docId} {
-      allow read, write: if isManager();
-    }
-    
-    // Time off entries - managers write, employees read own
-    match /timeOff/{docId} {
-      allow read: if request.auth != null && (isManager() || 
-                     resource.data.employeeUid == request.auth.uid);
-      allow write: if isManager();
-    }
-    
-    // Time off requests - any authenticated user can create, managers update
-    match /timeOffRequests/{docId} {
-      allow read: if request.auth != null && (isManager() || 
-                     resource.data.employeeEmail == request.auth.token.email ||
-                     resource.data.employeeUid == request.auth.uid);
-      allow create: if request.auth != null;
-      allow update: if isManager();
-    }
-    
-    // PTO Summary - employees read own, managers read/write all
-    match /ptoSummary/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || isManager());
-      allow write: if isManager();
-    }
-    
-    // ============== SCHEDULES COLLECTION ==============
-    // Month-based schedule storage: managers/{managerUid}/schedules/{YYYY-MM}/shifts/{shiftId}
-    // This is a nested subcollection under managers
-    match /schedules/{monthId} {
-      allow read, write: if request.auth != null;
-      
-      match /shifts/{shiftId} {
         allow read: if request.auth != null;
-        allow write: if isManager();
+        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
     }
   }

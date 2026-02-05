@@ -658,7 +658,7 @@ class SchedulePdfService {
           children: [
             _padCell(
               pw.Text(
-                emp.name,
+                emp.displayName,
                 style: pw.TextStyle(
                   fontSize: 8,
                   fontWeight: pw.FontWeight.bold,
@@ -1259,12 +1259,12 @@ class SchedulePdfService {
           bottom: const pw.BorderSide(color: PdfColors.black, width: 0.5),
         );
 
-        // Get just the first name
-        final firstName = emp.name.split(' ').first;
+        // Use displayName (nickname or firstName) for the schedule header
+        final displayName = emp.displayName;
         employeeHeaderCells.add(
           _padCellManager(
             pw.Text(
-              firstName,
+              displayName,
               style: pw.TextStyle(
                 fontWeight: pw.FontWeight.bold,
                 fontSize: 7,
@@ -1660,7 +1660,7 @@ class SchedulePdfService {
           children: [
             _padCell(
               pw.Text(
-                emp.name,
+                emp.displayName,
                 style: pw.TextStyle(
                   fontSize: 7,
                   fontWeight: pw.FontWeight.bold,
@@ -1802,7 +1802,7 @@ class SchedulePdfService {
           ...employees.map((emp) {
             return _padCell(
               pw.Text(
-                emp.name,
+                emp.displayName,
                 style: pw.TextStyle(
                   fontSize: 9,
                   fontWeight: pw.FontWeight.bold,

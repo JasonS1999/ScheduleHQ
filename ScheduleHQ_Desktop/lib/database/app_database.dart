@@ -11,7 +11,9 @@ Future<void> _onCreate(Database db, int version) async {
   await db.execute('''
     CREATE TABLE employees (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
+      firstName TEXT,
+      lastName TEXT,
+      nickname TEXT,
       jobCode TEXT,
       email TEXT,
       uid TEXT,
@@ -46,6 +48,7 @@ Future<void> _onCreate(Database db, int version) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       employeeId INTEGER NOT NULL,
       date TEXT NOT NULL,
+      endDate TEXT,
       timeOffType TEXT NOT NULL,
       hours INTEGER NOT NULL,
       vacationGroupId TEXT,
@@ -259,6 +262,39 @@ Future<void> _onCreate(Database db, int version) async {
     )
   ''');
 
+  // P&L Tables
+  await db.execute('''
+    CREATE TABLE pnl_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      month INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      avgWage REAL NOT NULL DEFAULT 0.0,
+      autoLaborEnabled INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(month, year)
+    )
+  ''');
+
+  await db.execute('''
+    CREATE TABLE pnl_line_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      periodId INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      value REAL NOT NULL DEFAULT 0.0,
+      percentage REAL NOT NULL DEFAULT 0.0,
+      comment TEXT NOT NULL DEFAULT '',
+      isCalculated INTEGER NOT NULL DEFAULT 0,
+      isUserAdded INTEGER NOT NULL DEFAULT 0,
+      sortOrder INTEGER NOT NULL,
+      category TEXT NOT NULL,
+      FOREIGN KEY(periodId) REFERENCES pnl_periods(id) ON DELETE CASCADE
+    )
+  ''');
+
+  await db.execute('''
+    CREATE INDEX IF NOT EXISTS idx_pnl_line_items_period 
+    ON pnl_line_items(periodId)
+  ''');
+
   log("✅ Schema created", name: 'AppDatabase');
 } 
 
@@ -272,19 +308,43 @@ class AppDatabase {
   static final AppDatabase instance = AppDatabase._privateConstructor();
 
   Database? _db;
+  String? _currentManagerUid;
 
   /// Returns an open database instance, initializing it if necessary.
+  /// Note: You should call initForManager() first after user logs in.
   Future<Database> get db async {
     if (_db != null) return _db!;
     await init();
     return _db!;
   }
 
-  /// Initializes and opens the database. Safe to call multiple times.
-  /// Initializes and opens the database. Safe to call multiple times.
+  /// Check if database is initialized for a specific manager
+  bool isInitializedFor(String? managerUid) {
+    return _db != null && _currentManagerUid == managerUid;
+  }
+
+  /// Initialize database for a specific manager.
+  /// Call this after user logs in to ensure correct database is used.
+  Future<void> initForManager(String managerUid) async {
+    // If already initialized for this manager, do nothing
+    if (_db != null && _currentManagerUid == managerUid) return;
+    
+    // Close existing database if open for different manager
+    if (_db != null) {
+      log('Switching database from $_currentManagerUid to $managerUid', name: 'AppDatabase');
+      await _db!.close();
+      _db = null;
+    }
+    
+    _currentManagerUid = managerUid;
+    await init(managerUid: managerUid);
+  }
+
+  /// Close the current database (call on logout)\n  /// Note: Use the close() method at the end of this class\n\n  /// Initializes and opens the database. Safe to call multiple times.
   /// If [dbPath] is provided, it will be used instead of the default file path
   /// which is useful for tests (e.g., ':memory:').
-  Future<void> init({String? dbPath}) async {
+  /// If [managerUid] is provided, uses a per-manager database file.
+  Future<void> init({String? dbPath, String? managerUid}) async {
     if (_db != null) return;
 
     String path;
@@ -297,9 +357,25 @@ class AppDatabase {
       if (!appDir.existsSync()) {
         appDir.createSync(recursive: true);
       }
-      path = join(appDir.path, 'work_schedule.db');
       
-      // Migration: check if old database exists in default location and move it
+      // Use manager-specific database file if UID provided
+      final dbFileName = managerUid != null 
+          ? 'work_schedule_$managerUid.db'
+          : 'work_schedule.db';
+      path = join(appDir.path, dbFileName);
+      
+      // Migration: check if old shared database exists and this is a new per-user db
+      if (managerUid != null) {
+        final oldSharedPath = join(appDir.path, 'work_schedule.db');
+        final oldSharedFile = File(oldSharedPath);
+        final newFile = File(path);
+        if (oldSharedFile.existsSync() && !newFile.existsSync()) {
+          log('Migrating shared database to per-manager database: $path', name: 'AppDatabase');
+          await oldSharedFile.copy(path);
+        }
+      }
+      
+      // Legacy migration: check if old database exists in default getDatabasesPath location
       final oldPath = join(await getDatabasesPath(), 'work_schedule.db');
       final oldFile = File(oldPath);
       final newFile = File(path);
@@ -313,7 +389,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 25,
+      version: 30,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -703,6 +779,84 @@ class AppDatabase {
             )
           ''');
         }
+        if (oldVersion < 26) {
+          // Ensure endDate column exists in time_off table (fix for missed migration)
+          try {
+            final tableInfo = await db.rawQuery("PRAGMA table_info(time_off)");
+            final hasEndDate = tableInfo.any((col) => col['name'] == 'endDate');
+            if (!hasEndDate) {
+              await db.execute('ALTER TABLE time_off ADD COLUMN endDate TEXT');
+              log('Added missing endDate column to time_off', name: 'AppDatabase');
+            }
+          } catch (e) {
+            log('Error checking/adding endDate column: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 27) {
+          // Add P&L tables
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS pnl_periods (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              month INTEGER NOT NULL,
+              year INTEGER NOT NULL,
+              avgWage REAL NOT NULL DEFAULT 0.0,
+              UNIQUE(month, year)
+            )
+          ''');
+
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS pnl_line_items (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              periodId INTEGER NOT NULL,
+              label TEXT NOT NULL,
+              value REAL NOT NULL DEFAULT 0.0,
+              percentage REAL NOT NULL DEFAULT 0.0,
+              comment TEXT NOT NULL DEFAULT '',
+              isCalculated INTEGER NOT NULL DEFAULT 0,
+              isUserAdded INTEGER NOT NULL DEFAULT 0,
+              sortOrder INTEGER NOT NULL,
+              category TEXT NOT NULL,
+              FOREIGN KEY(periodId) REFERENCES pnl_periods(id) ON DELETE CASCADE
+            )
+          ''');
+
+          await db.execute('''
+            CREATE INDEX IF NOT EXISTS idx_pnl_line_items_period 
+            ON pnl_line_items(periodId)
+          ''');
+          log('Added P&L tables', name: 'AppDatabase');
+        }
+        if (oldVersion < 28) {
+          // Add percentage column to pnl_line_items if it doesn't exist
+          // This handles the case where P&L tables were created in v27 without the percentage column
+          try {
+            await db.execute('ALTER TABLE pnl_line_items ADD COLUMN percentage REAL NOT NULL DEFAULT 0.0');
+            log('Added percentage column to pnl_line_items', name: 'AppDatabase');
+          } catch (e) {
+            // Column may already exist if table was created fresh with v28 schema
+            log('percentage column already exists or table not found: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 29) {
+          // Add autoLaborEnabled column to pnl_periods
+          try {
+            await db.execute('ALTER TABLE pnl_periods ADD COLUMN autoLaborEnabled INTEGER NOT NULL DEFAULT 0');
+            log('Added autoLaborEnabled column to pnl_periods', name: 'AppDatabase');
+          } catch (e) {
+            log('autoLaborEnabled column already exists or table not found: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 30) {
+          // Add firstName, lastName, nickname columns to employees
+          try {
+            await db.execute('ALTER TABLE employees ADD COLUMN firstName TEXT');
+            await db.execute('ALTER TABLE employees ADD COLUMN lastName TEXT');
+            await db.execute('ALTER TABLE employees ADD COLUMN nickname TEXT');
+            log('Added firstName, lastName, nickname columns to employees', name: 'AppDatabase');
+          } catch (e) {
+            log('Employee name columns already exist or table not found: $e', name: 'AppDatabase');
+          }
+        }
       },
     );
   }
@@ -713,6 +867,8 @@ class AppDatabase {
     if (database != null) {
       await database.close();
       _db = null;
+      _currentManagerUid = null;
+      log('Database closed', name: 'AppDatabase');
     }
   }
 }

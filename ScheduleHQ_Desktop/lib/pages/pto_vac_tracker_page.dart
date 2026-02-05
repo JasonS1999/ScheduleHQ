@@ -641,7 +641,7 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> {
     final remaining = allowed - used;
 
     return ListTile(
-      title: Text(e.name),
+      title: Text(e.displayName),
       subtitle: Text("Used: $used / $allowed weeks"),
       trailing: Text(
         "Remaining: $remaining",
