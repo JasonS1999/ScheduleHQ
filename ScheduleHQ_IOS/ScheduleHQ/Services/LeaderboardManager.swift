@@ -27,7 +27,7 @@ final class LeaderboardManager: ObservableObject {
     // MARK: - Filters
     
     @Published var selectedDateRangeType: DateRangeType = .month
-    @Published var selectedDate: Date = Date()
+    @Published var selectedDate: Date = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
     @Published var selectedTimeSlice: TimeSlice = .all
     @Published var selectedMetric: LeaderboardMetric = .oepe
     
@@ -122,8 +122,10 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Navigate to next period
+    /// Navigate to next period (only if not going into future)
     func goToNext() {
+        guard canGoNext else { return }
+        
         let calendar = Calendar.current
         switch selectedDateRangeType {
         case .day:
@@ -137,9 +139,20 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Go to today
-    func goToToday() {
-        selectedDate = Date()
+    /// Check if we can navigate forward (don't allow future dates past yesterday)
+    var canGoNext: Bool {
+        let calendar = Calendar.current
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+        let (_, currentEnd) = dateRange()
+        
+        // Don't allow going forward if current range already includes yesterday
+        return currentEnd < calendar.startOfDay(for: yesterday)
+    }
+    
+    /// Go to yesterday (most recent data available)
+    func goToYesterday() {
+        let calendar = Calendar.current
+        selectedDate = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
     }
     
     // MARK: - Data Fetching

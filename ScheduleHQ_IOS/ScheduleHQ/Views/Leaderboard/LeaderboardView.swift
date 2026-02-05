@@ -56,12 +56,12 @@ struct LeaderboardView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        leaderboardManager.goToToday()
+                        leaderboardManager.goToYesterday()
                         Task {
                             await leaderboardManager.fetchData()
                         }
                     } label: {
-                        Text("Today")
+                        Text("Yesterday")
                             .font(AppTheme.Typography.subheadline)
                             .fontWeight(.medium)
                     }
@@ -139,45 +139,47 @@ struct LeaderboardView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(AppTheme.Colors.primaryGradientStart)
                 }
+                .disabled(!leaderboardManager.canGoNext)
+                .opacity(leaderboardManager.canGoNext ? 1.0 : 0.3)
             }
             .padding(.horizontal, AppTheme.Spacing.xl)
             
-            // Time slice and metric filters (only show metric picker in leaderboard mode)
-            HStack(spacing: AppTheme.Spacing.md) {
-                // Time slice picker
-                Menu {
-                    ForEach(TimeSlice.allCases) { slice in
-                        Button {
-                            leaderboardManager.selectedTimeSlice = slice
-                        } label: {
-                            HStack {
-                                Text(slice.displayName)
-                                if leaderboardManager.selectedTimeSlice == slice {
-                                    Image(systemName: "checkmark")
+            // Time slice and metric filters (leaderboard mode only)
+            if selectedTab == 1 {
+                HStack(spacing: AppTheme.Spacing.md) {
+                    // Time slice picker
+                    Menu {
+                        ForEach(TimeSlice.allCases) { slice in
+                            Button {
+                                leaderboardManager.selectedTimeSlice = slice
+                            } label: {
+                                HStack {
+                                    Text(slice.displayName)
+                                    if leaderboardManager.selectedTimeSlice == slice {
+                                        Image(systemName: "checkmark")
+                                    }
                                 }
                             }
                         }
+                    } label: {
+                        HStack(spacing: AppTheme.Spacing.xs) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 12))
+                            Text(leaderboardManager.selectedTimeSlice.displayName)
+                                .font(AppTheme.Typography.caption)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10))
+                        }
+                        .padding(.horizontal, AppTheme.Spacing.md)
+                        .padding(.vertical, AppTheme.Spacing.sm)
+                        .background(
+                            Capsule()
+                                .fill(AppTheme.Colors.backgroundSecondary)
+                        )
+                        .foregroundStyle(AppTheme.Colors.textPrimary)
                     }
-                } label: {
-                    HStack(spacing: AppTheme.Spacing.xs) {
-                        Image(systemName: "clock")
-                            .font(.system(size: 12))
-                        Text(leaderboardManager.selectedTimeSlice.displayName)
-                            .font(AppTheme.Typography.caption)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 10))
-                    }
-                    .padding(.horizontal, AppTheme.Spacing.md)
-                    .padding(.vertical, AppTheme.Spacing.sm)
-                    .background(
-                        Capsule()
-                            .fill(AppTheme.Colors.backgroundSecondary)
-                    )
-                    .foregroundStyle(AppTheme.Colors.textPrimary)
-                }
-                
-                // Metric picker (leaderboard mode only)
-                if selectedTab == 1 {
+                    
+                    // Metric picker
                     Menu {
                         ForEach(LeaderboardMetric.allCases) { metric in
                             Button {
@@ -208,11 +210,11 @@ struct LeaderboardView: View {
                         )
                         .foregroundStyle(AppTheme.Colors.textPrimary)
                     }
+                    
+                    Spacer()
                 }
-                
-                Spacer()
+                .padding(.horizontal, AppTheme.Spacing.lg)
             }
-            .padding(.horizontal, AppTheme.Spacing.lg)
         }
         .padding(.vertical, AppTheme.Spacing.md)
         .background(AppTheme.Colors.backgroundPrimary)
@@ -230,7 +232,7 @@ struct LeaderboardView: View {
                 .foregroundStyle(AppTheme.Colors.textSecondary)
             Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Error View
@@ -283,17 +285,23 @@ struct LeaderboardView: View {
             
             Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(AppTheme.Spacing.xxxl)
     }
     
     // MARK: - Empty State View
     
     private var emptyStateView: some View {
-        EmptyStateView(
-            icon: "chart.bar.xaxis",
-            title: "No Data Available",
-            message: "Contact your administrator if you believe data should be present for this time period."
-        )
+        VStack {
+            Spacer()
+            EmptyStateView(
+                icon: "chart.bar.xaxis",
+                title: "No Data Available",
+                message: "Contact your administrator if you believe data should be present for this time period."
+            )
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
