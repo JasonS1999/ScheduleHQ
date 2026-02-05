@@ -5,6 +5,7 @@ class ShiftRunner {
   final DateTime date;
   final String shiftType; // key from shift_types table
   final String runnerName;
+  final int? employeeId; // ID of the employee running the shift
 
   // Cache for shift types loaded from database
   static List<ShiftType> _shiftTypes = [];
@@ -36,6 +37,7 @@ class ShiftRunner {
     required this.date,
     required this.shiftType,
     required this.runnerName,
+    this.employeeId,
   });
 
   Map<String, dynamic> toMap() {
@@ -44,6 +46,7 @@ class ShiftRunner {
       'date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
       'shiftType': shiftType,
       'runnerName': runnerName,
+      'employeeId': employeeId,
     };
   }
 
@@ -58,6 +61,7 @@ class ShiftRunner {
       ),
       shiftType: map['shiftType'] as String,
       runnerName: map['runnerName'] as String,
+      employeeId: map['employeeId'] as int?,
     );
   }
 
@@ -66,12 +70,14 @@ class ShiftRunner {
     DateTime? date,
     String? shiftType,
     String? runnerName,
+    int? employeeId,
   }) {
     return ShiftRunner(
       id: id ?? this.id,
       date: date ?? this.date,
       shiftType: shiftType ?? this.shiftType,
       runnerName: runnerName ?? this.runnerName,
+      employeeId: employeeId ?? this.employeeId,
     );
   }
 

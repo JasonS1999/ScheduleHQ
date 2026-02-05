@@ -56,7 +56,7 @@ class ShiftRunnerDao {
       // Update
       await db.update(
         tableName,
-        {'runnerName': runner.runnerName},
+        {'runnerName': runner.runnerName, 'employeeId': runner.employeeId},
         where: 'date = ? AND shiftType = ?',
         whereArgs: [dateStr, runner.shiftType],
       );
@@ -81,5 +81,20 @@ class ShiftRunnerDao {
   /// Clear shift runner (set to empty)
   Future<void> clear(DateTime date, String shiftType) async {
     await delete(date, shiftType);
+  }
+
+  /// One-time fix: populate employeeId for existing entries by matching runnerName to employee firstName
+  Future<int> populateMissingEmployeeIds() async {
+    final db = await _db;
+    final result = await db.rawUpdate('''
+      UPDATE shift_runners 
+      SET employeeId = (
+        SELECT id FROM employees 
+        WHERE employees.firstName = shift_runners.runnerName
+        LIMIT 1
+      )
+      WHERE employeeId IS NULL
+    ''');
+    return result;
   }
 }

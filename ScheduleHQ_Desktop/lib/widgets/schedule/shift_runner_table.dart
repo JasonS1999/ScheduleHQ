@@ -169,7 +169,12 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
         }
         
         await _dao.upsert(
-          ShiftRunner(date: day, shiftType: shiftType, runnerName: result),
+          ShiftRunner(
+            date: day,
+            shiftType: shiftType,
+            runnerName: result,
+            employeeId: employee?.id,
+          ),
         );
       }
       await _loadData();

@@ -155,6 +155,7 @@ Future<void> _onCreate(Database db, int version) async {
       date TEXT NOT NULL,
       shiftType TEXT NOT NULL,
       runnerName TEXT NOT NULL,
+      employeeId INTEGER,
       UNIQUE(date, shiftType)
     )
   ''');
@@ -389,7 +390,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 30,
+      version: 31,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -855,6 +856,27 @@ class AppDatabase {
             log('Added firstName, lastName, nickname columns to employees', name: 'AppDatabase');
           } catch (e) {
             log('Employee name columns already exist or table not found: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 31) {
+          // Add employeeId column to shift_runners for linking to employee records
+          try {
+            await db.execute('ALTER TABLE shift_runners ADD COLUMN employeeId INTEGER');
+            log('Added employeeId column to shift_runners', name: 'AppDatabase');
+            
+            // Populate employeeId for existing entries by matching runnerName to employee firstName
+            await db.execute('''
+              UPDATE shift_runners 
+              SET employeeId = (
+                SELECT id FROM employees 
+                WHERE employees.firstName = shift_runners.runnerName
+                LIMIT 1
+              )
+              WHERE employeeId IS NULL
+            ''');
+            log('Populated employeeId for existing shift_runners', name: 'AppDatabase');
+          } catch (e) {
+            log('employeeId column already exists or table not found: $e', name: 'AppDatabase');
           }
         }
       },

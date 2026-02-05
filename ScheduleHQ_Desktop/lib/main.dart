@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:developer';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'database/app_database.dart';
+import 'database/shift_runner_dao.dart';
 import 'firebase_options.dart';
 import 'navigation_shell.dart';
 import 'pages/login_page.dart';
@@ -90,6 +92,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
     if (!_dbInitialized) {
       await AppDatabase.instance.initForManager(uid);
+      
+      // One-time fix: populate employeeId for existing shift runners
+      try {
+        final updated = await ShiftRunnerDao().populateMissingEmployeeIds();
+        if (updated > 0) {
+          log('Populated employeeId for $updated existing shift runners', name: 'Main');
+        }
+      } catch (e) {
+        log('Error populating shift runner employeeIds: $e', name: 'Main');
+      }
+      
       _dbInitialized = true;
     }
   }

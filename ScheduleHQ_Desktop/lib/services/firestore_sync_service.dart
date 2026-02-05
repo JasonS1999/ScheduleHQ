@@ -1517,6 +1517,16 @@ class FirestoreSyncService {
     if (runnerMaps.isNotEmpty) {
       final shiftRunnersRef = _shiftRunnersRef;
       if (shiftRunnersRef != null) {
+        // Build a map of employeeId -> uid for looking up UIDs
+        final employeeMaps = await db.query('employees');
+        final employeeUidMap = <int, String?>{};
+        for (final emp in employeeMaps) {
+          final empId = emp['id'] as int?;
+          if (empId != null) {
+            employeeUidMap[empId] = emp['uid'] as String?;
+          }
+        }
+        
         final batch = _firestore.batch();
         for (final runnerMap in runnerMaps) {
           final id = runnerMap['id'] as int?;
@@ -1524,12 +1534,17 @@ class FirestoreSyncService {
           
           final date = runnerMap['date'] as String;
           final shiftType = runnerMap['shiftType'] as String;
+          final employeeId = runnerMap['employeeId'] as int?;
+          final employeeUid = employeeId != null ? employeeUidMap[employeeId] : null;
+          
           final docRef = shiftRunnersRef.doc('${date}_$shiftType');
           batch.set(docRef, {
             'localId': id,
             'date': date,
             'shiftType': shiftType,
             'runnerName': runnerMap['runnerName'],
+            'employeeId': employeeId,
+            'employeeUid': employeeUid,
             'managerUid': _managerUid,
           });
         }
