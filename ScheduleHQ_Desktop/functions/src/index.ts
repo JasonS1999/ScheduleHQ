@@ -1406,6 +1406,106 @@ function getShiftTypeForHour(endTimeHour: number, shiftTypes: ShiftType[]): Shif
 }
 
 /**
+ * Raw hourly data bucket for aggregation
+ */
+interface HourlyBucket {
+  allNetSales: number;
+  stwGc: number;
+  oepe: number;
+  kvsTimePerItem: number;
+  kvsHealthyUsage: number;
+  dtPullForwardPct: number;
+  punchLaborPct: number;
+  tpph: number;
+  r2p: number;
+}
+
+/**
+ * Aggregate hourly CSV rows into shift type buckets
+ * 
+ * @param records Parsed CSV rows
+ * @param shiftTypes Shift type definitions from manager settings
+ * @returns Map of shiftType key to aggregated HourlySummaryEntry (without employee info)
+ */
+function aggregateHourlyData(
+  records: Record<string, string>[],
+  shiftTypes: ShiftType[]
+): Map<string, { shiftType: ShiftType; sumData: HourlyBucket; avgData: HourlyBucket; count: number }> {
+  const buckets = new Map<string, { shiftType: ShiftType; sumData: HourlyBucket; avgData: HourlyBucket; count: number }>();
+
+  // Initialize buckets for each shift type
+  for (const st of shiftTypes) {
+    buckets.set(st.key, {
+      shiftType: st,
+      sumData: { allNetSales: 0, stwGc: 0, oepe: 0, kvsTimePerItem: 0, kvsHealthyUsage: 0, dtPullForwardPct: 0, punchLaborPct: 0, tpph: 0, r2p: 0 },
+      avgData: { allNetSales: 0, stwGc: 0, oepe: 0, kvsTimePerItem: 0, kvsHealthyUsage: 0, dtPullForwardPct: 0, punchLaborPct: 0, tpph: 0, r2p: 0 },
+      count: 0,
+    });
+  }
+
+  // Process each row
+  for (const row of records) {
+    // Skip total rows and all-zero rows
+    if (isTotalRow(row) || isAllZeroRow(row)) {
+      continue;
+    }
+
+    const endTimeHour = parseEndTimeHour(getColumn(row, "End Time"));
+    if (endTimeHour < 0) {
+      continue; // Invalid time
+    }
+
+    const matchedShift = getShiftTypeForHour(endTimeHour, shiftTypes);
+    if (!matchedShift) {
+      continue; // Hour doesn't match any shift type
+    }
+
+    const bucket = buckets.get(matchedShift.key);
+    if (!bucket) continue;
+
+    // Extract values from row
+    const allNetSales = parseNumber(getColumn(row, "All Net Sales"));
+    const stwGc = parseNumber(getColumn(row, "STW GC"));
+    const oepe = parseNumber(getColumn(row, "OEPE"));
+    const kvsTimePerItem = parseNumber(getColumn(row, "KVS Time Per Item"));
+    const kvsHealthyUsage = parseNumber(getColumn(row, "KVS Healthy Usage"));
+    const dtPullForwardPct = parseNumber(getColumn(row, "DT Pull Forward %"));
+    const punchLaborPct = parseNumber(getColumn(row, "Punch Labor"));
+    const tpph = parseNumber(getColumn(row, "TPPH"));
+    const r2p = parseNumber(getColumn(row, "R2P"));
+
+    // SUM fields: allNetSales, stwGc, r2p
+    bucket.sumData.allNetSales += allNetSales;
+    bucket.sumData.stwGc += stwGc;
+    bucket.sumData.r2p += r2p;
+
+    // AVG fields: accumulate for later averaging
+    bucket.avgData.oepe += oepe;
+    bucket.avgData.kvsTimePerItem += kvsTimePerItem;
+    bucket.avgData.kvsHealthyUsage += kvsHealthyUsage;
+    bucket.avgData.dtPullForwardPct += dtPullForwardPct;
+    bucket.avgData.punchLaborPct += punchLaborPct;
+    bucket.avgData.tpph += tpph;
+
+    bucket.count++;
+  }
+
+  // Calculate averages
+  for (const bucket of buckets.values()) {
+    if (bucket.count > 0) {
+      bucket.avgData.oepe = bucket.avgData.oepe / bucket.count;
+      bucket.avgData.kvsTimePerItem = bucket.avgData.kvsTimePerItem / bucket.count;
+      bucket.avgData.kvsHealthyUsage = bucket.avgData.kvsHealthyUsage / bucket.count;
+      bucket.avgData.dtPullForwardPct = bucket.avgData.dtPullForwardPct / bucket.count;
+      bucket.avgData.punchLaborPct = bucket.avgData.punchLaborPct / bucket.count;
+      bucket.avgData.tpph = bucket.avgData.tpph / bucket.count;
+    }
+  }
+
+  return buckets;
+}
+
+/**
  * Triggered when a CSV file is uploaded to shift_manager_imports/
  * Parses the CSV, matches manager names to employees, and saves to Firestore.
  */
