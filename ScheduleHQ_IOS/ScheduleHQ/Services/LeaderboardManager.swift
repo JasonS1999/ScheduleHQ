@@ -182,15 +182,17 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Fetch shift types from manager document
+    /// Fetch shift types from managerSettings document
     @MainActor
     private func fetchShiftTypes(managerUid: String) async {
         do {
-            let docRef = db.collection("managers").document(managerUid)
+            // Shift types are stored in managerSettings collection, not managers
+            let docRef = db.collection("managerSettings").document(managerUid)
             let snapshot = try await docRef.getDocument(source: .server)
             
             guard let data = snapshot.data(),
                   let shiftTypesData = data["shiftTypes"] as? [[String: Any]] else {
+                print("LeaderboardManager: No shiftTypes found in managerSettings/\(managerUid)")
                 return
             }
             
