@@ -67,13 +67,21 @@ enum LeaderboardMetric: String, CaseIterable, Identifiable {
 
 enum TimeSlice: String, CaseIterable, Identifiable {
     case all = "All"
-    case breakfast = "Breakfast"
-    case lunch = "Lunch"
-    case dinner = "Dinner"
-    case overnight = "Overnight"
+    case breakfast = "Breakfast(7am-9am)"
+    case lunch = "Lunch(11am-2pm)"
+    case dinner = "Dinner(5pm-7pm)"
     
     var id: String { rawValue }
-    var displayName: String { rawValue }
+    
+    /// Display name for the UI (shorter, more readable)
+    var displayName: String {
+        switch self {
+        case .all: return "All"
+        case .breakfast: return "Breakfast"
+        case .lunch: return "Lunch"
+        case .dinner: return "Dinner"
+        }
+    }
 }
 
 // MARK: - Shift Manager Entry
