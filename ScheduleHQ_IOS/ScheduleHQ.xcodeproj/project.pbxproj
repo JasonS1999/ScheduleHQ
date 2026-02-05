@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A1B2C3D4E5F6A7B8C9D0E1F /* ShiftManagerReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F7A8B9C0D1E2F /* ShiftManagerReport.swift */; };
+		0A2B3C4D5E6F7A8B9C0D1E2F /* LeaderboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A3B4C5D6E7F8A9B0C1D2E3F /* LeaderboardManager.swift */; };
+		0A3B4C5D6E7F8A9B0C1D2E3F /* LeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F9A0B1C2D3E4F /* LeaderboardView.swift */; };
+		0A4B5C6D7E8F9A0B1C2D3E4F /* MyMetricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A5B6C7D8E9F0A1B2C3D4E5F /* MyMetricsView.swift */; };
+		0A5B6C7D8E9F0A1B2C3D4E5F /* MetricLeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6B7C8D9E0F1A2B3C4D5E6F /* MetricLeaderboardView.swift */; };
 		0AAB46BAAB0DD5A0AFF0E7AA /* TimeOffRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */; };
 		0B922D936631E8C1FF4D9BD2 /* ProfileImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E989165773E01AAD329A138E /* ProfileImageService.swift */; };
 		0C59C51AE9424942624B5F18 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */; };
@@ -46,6 +51,11 @@
 
 /* Begin PBXFileReference section */
 		0A86F846211FE53EF8CBE563 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		1A2B3C4D5E6F7A8B9C0D1E2F /* ShiftManagerReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftManagerReport.swift; sourceTree = "<group>"; };
+		2A3B4C5D6E7F8A9B0C1D2E3F /* LeaderboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardManager.swift; sourceTree = "<group>"; };
+		3A4B5C6D7E8F9A0B1C2D3E4F /* LeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardView.swift; sourceTree = "<group>"; };
+		4A5B6C7D8E9F0A1B2C3D4E5F /* MyMetricsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyMetricsView.swift; sourceTree = "<group>"; };
+		5A6B7C8D9E0F1A2B3C4D5E6F /* MetricLeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricLeaderboardView.swift; sourceTree = "<group>"; };
 		0B736BEEA31FE9221618C3EC /* TrimesterSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrimesterSummary.swift; sourceTree = "<group>"; };
 		0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffRequestSheet.swift; sourceTree = "<group>"; };
@@ -110,6 +120,7 @@
 				D0307FE788D9CE086C375A92 /* AppUser.swift */,
 				7E7790E005D0999BEA1B1390 /* Employee.swift */,
 				92714159901910B938653AB1 /* Shift.swift */,
+				1A2B3C4D5E6F7A8B9C0D1E2F /* ShiftManagerReport.swift */,
 				204C6421844ED0D5E031961A /* ShiftRunner.swift */,
 				3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */,
 				9E9EA878796EB4258354D037 /* TimeOffRequest.swift */,
@@ -133,6 +144,7 @@
 				4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */,
 				3F1A23909951E3C4CE3B0317 /* AuthManager.swift */,
 				3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */,
+				2A3B4C5D6E7F8A9B0C1D2E3F /* LeaderboardManager.swift */,
 				99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */,
 				E989165773E01AAD329A138E /* ProfileImageService.swift */,
 				8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */,
@@ -178,12 +190,23 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
+		6A7B8C9D0E1F2A3B4C5D6E7F /* Leaderboard */ = {
+			isa = PBXGroup;
+			children = (
+				3A4B5C6D7E8F9A0B1C2D3E4F /* LeaderboardView.swift */,
+				5A6B7C8D9E0F1A2B3C4D5E6F /* MetricLeaderboardView.swift */,
+				4A5B6C7D8E9F0A1B2C3D4E5F /* MyMetricsView.swift */,
+			);
+			path = Leaderboard;
+			sourceTree = "<group>";
+		};
 		B842AE0529253FB2A325B95D /* Views */ = {
 			isa = PBXGroup;
 			children = (
 				0A86F846211FE53EF8CBE563 /* MainTabView.swift */,
 				BA47F23C3C27D5573F8F11CD /* Auth */,
 				7DC602B35A11650DE0F6C262 /* Components */,
+				6A7B8C9D0E1F2A3B4C5D6E7F /* Leaderboard */,
 				53723A139B905BFE782F6E1E /* Profile */,
 				10DFF4C8E820AF45ACB1265D /* Schedule */,
 				E17E862C3E7F05A196666F73 /* TimeOff */,
@@ -337,6 +360,11 @@
 				0AAB46BAAB0DD5A0AFF0E7AA /* TimeOffRequestSheet.swift in Sources */,
 				3C68A267424E317F9E436093 /* TimeOffView.swift in Sources */,
 				D536BC4F271F7BF0F89DB1F8 /* TrimesterSummary.swift in Sources */,
+				0A1B2C3D4E5F6A7B8C9D0E1F /* ShiftManagerReport.swift in Sources */,
+				0A2B3C4D5E6F7A8B9C0D1E2F /* LeaderboardManager.swift in Sources */,
+				0A3B4C5D6E7F8A9B0C1D2E3F /* LeaderboardView.swift in Sources */,
+				0A4B5C6D7E8F9A0B1C2D3E4F /* MyMetricsView.swift in Sources */,
+				0A5B6C7D8E9F0A1B2C3D4E5F /* MetricLeaderboardView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -10,7 +10,7 @@ import SwiftUI
 /// Main container view for the Leaderboard tab
 /// Provides toggle between "My Metrics" and "Leaderboard" views
 struct LeaderboardView: View {
-    @State private var leaderboardManager = LeaderboardManager.shared
+    @ObservedObject private var leaderboardManager = LeaderboardManager.shared
     @State private var selectedTab: Int = 0 // 0 = My Metrics, 1 = Leaderboard
     
     private let authManager = AuthManager.shared
@@ -43,11 +43,9 @@ struct LeaderboardView: View {
                         emptyStateView
                     } else {
                         if selectedTab == 0 {
-                            MyMetricsView()
-                                .environment(leaderboardManager)
+                            MyMetricsView(leaderboardManager: leaderboardManager)
                         } else {
-                            MetricLeaderboardView()
-                                .environment(leaderboardManager)
+                            MetricLeaderboardView(leaderboardManager: leaderboardManager)
                         }
                     }
                 }
@@ -72,12 +70,12 @@ struct LeaderboardView: View {
             .task {
                 await leaderboardManager.fetchData()
             }
-            .onChange(of: leaderboardManager.selectedDateRangeType) { _, _ in
+            .onChange(of: leaderboardManager.selectedDateRangeType) { _ in
                 Task {
                     await leaderboardManager.fetchData()
                 }
             }
-            .onChange(of: leaderboardManager.selectedDate) { _, _ in
+            .onChange(of: leaderboardManager.selectedDate) { _ in
                 Task {
                     await leaderboardManager.fetchData()
                 }

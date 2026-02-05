@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Displays the current user's personal metrics grouped by time slice
 struct MyMetricsView: View {
-    @Environment(LeaderboardManager.self) private var leaderboardManager
+    @ObservedObject var leaderboardManager: LeaderboardManager
     
     private let authManager = AuthManager.shared
     
@@ -211,6 +211,5 @@ struct MetricCell: View {
 }
 
 #Preview {
-    MyMetricsView()
-        .environment(LeaderboardManager.shared)
+    MyMetricsView(leaderboardManager: LeaderboardManager.shared)
 }

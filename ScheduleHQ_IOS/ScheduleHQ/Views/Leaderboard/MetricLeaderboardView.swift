@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Displays a ranked leaderboard of employees for the selected metric
 struct MetricLeaderboardView: View {
-    @Environment(LeaderboardManager.self) private var leaderboardManager
+    @ObservedObject var leaderboardManager: LeaderboardManager
     
     private let employeeCache = EmployeeCache.shared
     private let authManager = AuthManager.shared
@@ -239,6 +239,5 @@ struct LeaderboardRow: View {
 }
 
 #Preview {
-    MetricLeaderboardView()
-        .environment(LeaderboardManager.shared)
+    MetricLeaderboardView(leaderboardManager: LeaderboardManager.shared)
 }

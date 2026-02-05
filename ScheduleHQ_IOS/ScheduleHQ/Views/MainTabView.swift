@@ -61,11 +61,17 @@ struct MainTabView: View {
                     .badge(offlineQueueManager.queuedCount > 0 ? offlineQueueManager.queuedCount : 0)
                     .tag(1)
                 
-                ProfileView()
+                LeaderboardView()
                     .tabItem {
-                        Label("Profile", systemImage: selectedTab == 2 ? "person.crop.circle.fill" : "person.crop.circle")
+                        Label("Leaderboard", systemImage: selectedTab == 2 ? "chart.bar.fill" : "chart.bar")
                     }
                     .tag(2)
+                
+                ProfileView()
+                    .tabItem {
+                        Label("Profile", systemImage: selectedTab == 3 ? "person.crop.circle.fill" : "person.crop.circle")
+                    }
+                    .tag(3)
             }
             .tint(Color(hex: "6366F1"))
             

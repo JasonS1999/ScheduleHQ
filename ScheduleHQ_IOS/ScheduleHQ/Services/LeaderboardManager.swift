@@ -7,11 +7,11 @@
 
 import Foundation
 import FirebaseFirestore
+import Combine
 
 /// Manages leaderboard data fetching and aggregation from shiftManagerReports
 /// Online-only - no caching
-@Observable
-final class LeaderboardManager {
+final class LeaderboardManager: ObservableObject {
     static let shared = LeaderboardManager()
     
     private let db = Firestore.firestore()
@@ -19,17 +19,17 @@ final class LeaderboardManager {
     
     // MARK: - Published State
     
-    private(set) var isLoading: Bool = false
-    private(set) var errorMessage: String?
-    private(set) var entries: [ShiftManagerEntry] = []
-    private(set) var aggregatedMetrics: [AggregatedMetric] = []
+    @Published private(set) var isLoading: Bool = false
+    @Published private(set) var errorMessage: String?
+    @Published private(set) var entries: [ShiftManagerEntry] = []
+    @Published private(set) var aggregatedMetrics: [AggregatedMetric] = []
     
     // MARK: - Filters
     
-    var selectedDateRangeType: DateRangeType = .week
-    var selectedDate: Date = Date()
-    var selectedTimeSlice: TimeSlice = .all
-    var selectedMetric: LeaderboardMetric = .oepe
+    @Published var selectedDateRangeType: DateRangeType = .week
+    @Published var selectedDate: Date = Date()
+    @Published var selectedTimeSlice: TimeSlice = .all
+    @Published var selectedMetric: LeaderboardMetric = .oepe
     
     private init() {}
     
