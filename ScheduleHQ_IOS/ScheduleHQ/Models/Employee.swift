@@ -32,6 +32,7 @@ struct Employee: Codable, Identifiable, Equatable {
     enum CodingKeys: String, CodingKey {
         case documentId
         case id
+        case localId  // Desktop app uses localId, iOS uses id - support both
         case name
         case jobCode
         case email
@@ -44,7 +45,12 @@ struct Employee: Codable, Identifiable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         documentId = try container.decodeIfPresent(String.self, forKey: .documentId)
-        id = try container.decodeIfPresent(Int.self, forKey: .id)
+        // Try 'id' first, then fall back to 'localId' (Desktop app uses localId)
+        if let idValue = try container.decodeIfPresent(Int.self, forKey: .id) {
+            id = idValue
+        } else {
+            id = try container.decodeIfPresent(Int.self, forKey: .localId)
+        }
         name = (try? container.decode(String.self, forKey: .name)) ?? "Unknown"
         jobCode = try container.decodeIfPresent(String.self, forKey: .jobCode) ?? ""
         email = try container.decodeIfPresent(String.self, forKey: .email)
@@ -52,6 +58,19 @@ struct Employee: Codable, Identifiable, Equatable {
         vacationWeeksAllowed = try container.decodeIfPresent(Int.self, forKey: .vacationWeeksAllowed) ?? 0
         vacationWeeksUsed = try container.decodeIfPresent(Int.self, forKey: .vacationWeeksUsed) ?? 0
         profileImageURL = try container.decodeIfPresent(String.self, forKey: .profileImageURL)
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(documentId, forKey: .documentId)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(jobCode, forKey: .jobCode)
+        try container.encodeIfPresent(email, forKey: .email)
+        try container.encodeIfPresent(uid, forKey: .uid)
+        try container.encode(vacationWeeksAllowed, forKey: .vacationWeeksAllowed)
+        try container.encode(vacationWeeksUsed, forKey: .vacationWeeksUsed)
+        try container.encodeIfPresent(profileImageURL, forKey: .profileImageURL)
     }
     
     init(

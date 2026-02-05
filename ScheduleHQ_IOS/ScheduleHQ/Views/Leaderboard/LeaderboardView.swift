@@ -81,6 +81,10 @@ struct LeaderboardView: View {
                     await leaderboardManager.fetchData()
                 }
             }
+            .onChange(of: leaderboardManager.selectedTimeSlice) { _ in
+                // Re-aggregate with new time slice filter
+                leaderboardManager.recomputeAggregation()
+            }
         }
     }
     
