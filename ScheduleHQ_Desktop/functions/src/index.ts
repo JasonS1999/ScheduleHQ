@@ -1257,6 +1257,31 @@ function extractDateFromFilename(filename: string): string {
 }
 
 /**
+ * CSV Format Types
+ */
+type CsvFormat = "manager" | "hourly";
+
+/**
+ * Detect CSV format based on column headers
+ * - "manager" format: has "Time Slice" and "Manager Name" columns (original format)
+ * - "hourly" format: has "End Time" column (new hourly summary format)
+ */
+function detectCsvFormat(row: Record<string, string>): CsvFormat {
+  const hasEndTime = getColumn(row, "End Time") !== "";
+  const hasTimeSlice = getColumn(row, "Time Slice") !== "";
+  const hasManagerName = getColumn(row, "Manager Name") !== "";
+
+  if (hasEndTime && !hasTimeSlice) {
+    return "hourly";
+  }
+  if (hasTimeSlice && hasManagerName) {
+    return "manager";
+  }
+  // Default to hourly if End Time exists
+  return hasEndTime ? "hourly" : "manager";
+}
+
+/**
  * Triggered when a CSV file is uploaded to shift_manager_imports/
  * Parses the CSV, matches manager names to employees, and saves to Firestore.
  */
