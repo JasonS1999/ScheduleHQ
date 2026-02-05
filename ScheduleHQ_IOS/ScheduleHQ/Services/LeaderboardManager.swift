@@ -306,16 +306,25 @@ final class LeaderboardManager: ObservableObject {
     func leaderboardEntries() -> [LeaderboardEntry] {
         let currentEmployeeId = authManager.employeeLocalId
         
-        // Filter by time slice and group by employee+store
+        // Group by employee+store, aggregating across time slices only when "All" is selected
         var metricsByEmployeeStore: [String: (employeeId: Int, storeNsn: String, managerUid: String, value: Double, count: Int)] = [:]
         
         for metric in aggregatedMetrics {
             guard let value = metric.average(for: selectedMetric) else { continue }
             
-            let key = "\(metric.employeeId)-\(metric.storeNsn)"
+            // When a specific time slice is selected, aggregatedMetrics is already filtered
+            // so we just need to group by employee+store without re-averaging across time slices
+            let key: String
+            if selectedTimeSlice == .all {
+                // Combine all time slices for each employee
+                key = "\(metric.employeeId)-\(metric.storeNsn)"
+            } else {
+                // Keep entries separate by time slice (though there should only be one per employee now)
+                key = "\(metric.employeeId)-\(metric.storeNsn)-\(metric.timeSlice)"
+            }
             
             if let existing = metricsByEmployeeStore[key] {
-                // Weighted average across time slices
+                // Weighted average (only happens when combining time slices in "All" mode)
                 let totalCount = existing.count + metric.count(for: selectedMetric)
                 let weightedValue = (existing.value * Double(existing.count) + value * Double(metric.count(for: selectedMetric))) / Double(totalCount)
                 metricsByEmployeeStore[key] = (metric.employeeId, metric.storeNsn, metric.managerUid, weightedValue, totalCount)

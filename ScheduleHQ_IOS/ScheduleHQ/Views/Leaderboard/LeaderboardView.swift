@@ -68,6 +68,7 @@ struct LeaderboardView: View {
                 }
             }
             .task {
+                await EmployeeCache.shared.loadEmployees()
                 await leaderboardManager.fetchData()
             }
             .onChange(of: leaderboardManager.selectedDateRangeType) { _ in
