@@ -10,7 +10,6 @@ import FirebaseFirestore
 import Combine
 
 /// Manages leaderboard data fetching and aggregation from shiftManagerReports
-/// Online-only - no caching
 final class LeaderboardManager: ObservableObject {
     static let shared = LeaderboardManager()
     
@@ -23,19 +22,19 @@ final class LeaderboardManager: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var entries: [ShiftManagerEntry] = []
     @Published private(set) var aggregatedMetrics: [AggregatedMetric] = []
+    @Published private(set) var shiftTypes: [ShiftType] = [.all]
     
     // MARK: - Filters
     
     @Published var selectedDateRangeType: DateRangeType = .month
     @Published var selectedDate: Date = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
-    @Published var selectedTimeSlice: TimeSlice = .all
+    @Published var selectedShiftType: ShiftType = .all
     @Published var selectedMetric: LeaderboardMetric = .oepe
     
     private init() {}
     
     // MARK: - Date Range Calculations
     
-    /// Get the start and end dates for the current selection (Sun-Sat weeks)
     func dateRange() -> (start: Date, end: Date) {
         let calendar = Calendar.current
         
@@ -45,9 +44,8 @@ final class LeaderboardManager: ObservableObject {
             return (start, start)
             
         case .week:
-            // Sunday-Saturday week
             var components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: selectedDate)
-            components.weekday = 1 // Sunday
+            components.weekday = 1
             let sunday = calendar.date(from: components) ?? selectedDate
             let saturday = calendar.date(byAdding: .day, value: 6, to: sunday) ?? selectedDate
             return (calendar.startOfDay(for: sunday), calendar.startOfDay(for: saturday))
@@ -59,12 +57,9 @@ final class LeaderboardManager: ObservableObject {
             return (calendar.startOfDay(for: firstOfMonth), calendar.startOfDay(for: lastOfMonth))
             
         case .quarter:
-            // Quarters: Q1 (Jan-Mar), Q2 (Apr-Jun), Q3 (Jul-Sep), Q4 (Oct-Dec)
             let components = calendar.dateComponents([.year, .month], from: selectedDate)
             let month = components.month ?? 1
             let year = components.year ?? 2024
-            
-            // Determine quarter start month (1, 4, 7, or 10)
             let quarterStartMonth = ((month - 1) / 3) * 3 + 1
             
             var startComponents = DateComponents()
@@ -78,7 +73,6 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Format the date range for display
     func dateRangeDisplay() -> String {
         let (start, end) = dateRange()
         let formatter = DateFormatter()
@@ -87,17 +81,14 @@ final class LeaderboardManager: ObservableObject {
         case .day:
             formatter.dateFormat = "MMM d, yyyy"
             return formatter.string(from: start)
-            
         case .week:
             formatter.dateFormat = "MMM d"
             let endFormatter = DateFormatter()
             endFormatter.dateFormat = "MMM d, yyyy"
             return "\(formatter.string(from: start)) - \(endFormatter.string(from: end))"
-            
         case .month:
             formatter.dateFormat = "MMMM yyyy"
             return formatter.string(from: start)
-            
         case .quarter:
             let calendar = Calendar.current
             let month = calendar.component(.month, from: start)
@@ -107,7 +98,6 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Navigate to previous period
     func goToPrevious() {
         let calendar = Calendar.current
         switch selectedDateRangeType {
@@ -122,10 +112,8 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Navigate to next period (only if not going into future)
     func goToNext() {
         guard canGoNext else { return }
-        
         let calendar = Calendar.current
         switch selectedDateRangeType {
         case .day:
@@ -139,17 +127,13 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Check if we can navigate forward (don't allow future dates past yesterday)
     var canGoNext: Bool {
         let calendar = Calendar.current
         let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
         let (_, currentEnd) = dateRange()
-        
-        // Don't allow going forward if current range already includes yesterday
         return currentEnd < calendar.startOfDay(for: yesterday)
     }
     
-    /// Go to yesterday (most recent data available)
     func goToYesterday() {
         let calendar = Calendar.current
         selectedDate = calendar.date(byAdding: .day, value: -1, to: Date()) ?? Date()
@@ -157,14 +141,11 @@ final class LeaderboardManager: ObservableObject {
     
     // MARK: - Data Fetching
     
-    /// Recompute aggregation with current filters (called when time slice changes)
     @MainActor
     func recomputeAggregation() {
         aggregatedMetrics = aggregateEntries(entries)
     }
     
-    /// Fetch leaderboard data for the selected date range
-    /// - Parameter managerUids: Array of manager UIDs to fetch data from (for future multi-store support)
     @MainActor
     func fetchData(managerUids: [String]? = nil) async {
         guard let primaryManagerUid = authManager.managerUid else {
@@ -180,9 +161,11 @@ final class LeaderboardManager: ObservableObject {
         aggregatedMetrics = []
         
         do {
+            // Fetch shift types first
+            await fetchShiftTypes(managerUid: primaryManagerUid)
+            
             var allEntries: [ShiftManagerEntry] = []
             
-            // Fetch from each manager's shiftManagerReports
             for managerUid in uids {
                 let managerEntries = try await fetchEntriesForManager(managerUid: managerUid)
                 allEntries.append(contentsOf: managerEntries)
@@ -199,13 +182,38 @@ final class LeaderboardManager: ObservableObject {
         }
     }
     
-    /// Fetch entries for a specific manager within the date range
+    /// Fetch shift types from manager document
+    @MainActor
+    private func fetchShiftTypes(managerUid: String) async {
+        do {
+            let docRef = db.collection("managers").document(managerUid)
+            let snapshot = try await docRef.getDocument(source: .server)
+            
+            guard let data = snapshot.data(),
+                  let shiftTypesData = data["shiftTypes"] as? [[String: Any]] else {
+                return
+            }
+            
+            var types: [ShiftType] = [.all]
+            for typeData in shiftTypesData {
+                if let id = typeData["id"] as? Int,
+                   let key = typeData["key"] as? String,
+                   let label = typeData["label"] as? String {
+                    types.append(ShiftType(id: id, key: key, label: label))
+                }
+            }
+            shiftTypes = types
+            
+        } catch {
+            print("LeaderboardManager: Error fetching shift types: \(error)")
+        }
+    }
+    
     private func fetchEntriesForManager(managerUid: String) async throws -> [ShiftManagerEntry] {
         let (startDate, endDate) = dateRange()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         
-        // Generate all dates in range
         var dates: [String] = []
         var currentDate = startDate
         let calendar = Calendar.current
@@ -217,7 +225,6 @@ final class LeaderboardManager: ObservableObject {
         
         var allEntries: [ShiftManagerEntry] = []
         
-        // Fetch each day's report (online only, no cache)
         for dateStr in dates {
             do {
                 let docRef = db.collection("managers")
@@ -227,14 +234,10 @@ final class LeaderboardManager: ObservableObject {
                 
                 let snapshot = try await docRef.getDocument(source: .server)
                 
-                guard snapshot.exists, let data = snapshot.data() else {
-                    continue
-                }
+                guard snapshot.exists, let data = snapshot.data() else { continue }
                 
-                // Get store NSN from the report
                 let storeNsn = data["location"] as? String ?? ""
                 
-                // Parse entries
                 if let entriesData = data["entries"] as? [[String: Any]] {
                     for entryData in entriesData {
                         if var entry = parseEntry(from: entryData) {
@@ -246,7 +249,6 @@ final class LeaderboardManager: ObservableObject {
                     }
                 }
             } catch {
-                // Continue on individual date fetch errors
                 print("LeaderboardManager: Error fetching \(dateStr): \(error)")
             }
         }
@@ -254,52 +256,48 @@ final class LeaderboardManager: ObservableObject {
         return allEntries
     }
     
-    /// Parse a single entry from Firestore data
     private func parseEntry(from data: [String: Any]) -> ShiftManagerEntry? {
         guard let employeeId = data["employeeId"] as? Int,
-              let timeSlice = data["timeSlice"] as? String else {
+              let shiftLabel = data["shiftLabel"] as? String else {
             return nil
         }
         
         return ShiftManagerEntry(
             employeeId: employeeId,
-            managerName: data["managerName"] as? String ?? "",
-            timeSlice: timeSlice,
+            runnerName: data["runnerName"] as? String ?? "",
+            shiftLabel: shiftLabel,
+            shiftType: data["shiftType"] as? String ?? "",
             allNetSales: data["allNetSales"] as? Double,
-            numberOfShifts: data["numberOfShifts"] as? Int,
             gc: data["gc"] as? Double,
-            dtPulledForwardPct: data["dtPulledForwardPct"] as? Double,
+            stwGc: data["stwGc"] as? Double,
+            dtPullForwardPct: data["dtPullForwardPct"] as? Double,
             kvsHealthyUsage: data["kvsHealthyUsage"] as? Double,
+            kvsTimePerItem: data["kvsTimePerItem"] as? Double,
             oepe: data["oepe"] as? Double,
             punchLaborPct: data["punchLaborPct"] as? Double,
-            dtGc: data["dtGc"] as? Double,
             tpph: data["tpph"] as? Double,
-            averageCheck: data["averageCheck"] as? Double,
-            actVsNeed: data["actVsNeed"] as? Double,
             r2p: data["r2p"] as? Double
         )
     }
     
     // MARK: - Aggregation
     
-    /// Aggregate entries by employeeId + storeNsn + timeSlice, computing averages
     private func aggregateEntries(_ entries: [ShiftManagerEntry]) -> [AggregatedMetric] {
-        // Group by composite key
         var groups: [String: [ShiftManagerEntry]] = [:]
         
         for entry in entries {
-            // Filter by time slice if not "All"
-            if selectedTimeSlice != .all {
-                guard entry.timeSlice.lowercased() == selectedTimeSlice.rawValue.lowercased() else {
+            // Filter by shift type if not "All"
+            if selectedShiftType != .all {
+                guard entry.shiftLabel.lowercased() == selectedShiftType.label.lowercased() ||
+                      entry.shiftType.lowercased() == selectedShiftType.key.lowercased() else {
                     continue
                 }
             }
             
-            let key = "\(entry.employeeId)-\(entry.storeNsn)-\(entry.timeSlice)"
+            let key = "\(entry.employeeId)-\(entry.storeNsn)-\(entry.shiftLabel)"
             groups[key, default: []].append(entry)
         }
         
-        // Compute averages for each group
         var results: [AggregatedMetric] = []
         
         for (_, groupEntries) in groups {
@@ -309,32 +307,56 @@ final class LeaderboardManager: ObservableObject {
                 employeeId: first.employeeId,
                 storeNsn: first.storeNsn,
                 managerUid: first.managerUid,
-                timeSlice: first.timeSlice
+                shiftLabel: first.shiftLabel
             )
             
-            // Calculate averages for each metric
+            // OEPE
             let oepeValues = groupEntries.compactMap { $0.oepe }
             if !oepeValues.isEmpty {
                 aggregated.oepeAverage = oepeValues.reduce(0, +) / Double(oepeValues.count)
                 aggregated.oepeCount = oepeValues.count
             }
             
+            // Side 2 %
             let kvsValues = groupEntries.compactMap { $0.kvsHealthyUsage }
             if !kvsValues.isEmpty {
                 aggregated.kvsHealthyUsageAverage = kvsValues.reduce(0, +) / Double(kvsValues.count)
                 aggregated.kvsHealthyUsageCount = kvsValues.count
             }
             
+            // KVS
+            let kvsTimeValues = groupEntries.compactMap { $0.kvsTimePerItem }
+            if !kvsTimeValues.isEmpty {
+                aggregated.kvsTimePerItemAverage = kvsTimeValues.reduce(0, +) / Double(kvsTimeValues.count)
+                aggregated.kvsTimePerItemCount = kvsTimeValues.count
+            }
+            
+            // TPPH
             let tpphValues = groupEntries.compactMap { $0.tpph }
             if !tpphValues.isEmpty {
                 aggregated.tpphAverage = tpphValues.reduce(0, +) / Double(tpphValues.count)
                 aggregated.tpphCount = tpphValues.count
             }
             
+            // R2P
             let r2pValues = groupEntries.compactMap { $0.r2p }
             if !r2pValues.isEmpty {
                 aggregated.r2pAverage = r2pValues.reduce(0, +) / Double(r2pValues.count)
                 aggregated.r2pCount = r2pValues.count
+            }
+            
+            // Labor %
+            let laborValues = groupEntries.compactMap { $0.punchLaborPct }
+            if !laborValues.isEmpty {
+                aggregated.punchLaborPctAverage = laborValues.reduce(0, +) / Double(laborValues.count)
+                aggregated.punchLaborPctCount = laborValues.count
+            }
+            
+            // Park %
+            let parkValues = groupEntries.compactMap { $0.dtPullForwardPct }
+            if !parkValues.isEmpty {
+                aggregated.dtPullForwardPctAverage = parkValues.reduce(0, +) / Double(parkValues.count)
+                aggregated.dtPullForwardPctCount = parkValues.count
             }
             
             results.append(aggregated)
@@ -345,27 +367,21 @@ final class LeaderboardManager: ObservableObject {
     
     // MARK: - Filtered Data
     
-    /// Get aggregated metrics for a specific employee (for "My Metrics" view)
     func metricsForEmployee(employeeId: Int) -> [AggregatedMetric] {
         aggregatedMetrics.filter { $0.employeeId == employeeId }
     }
     
-    /// Get leaderboard entries for the selected metric and time slice
     func leaderboardEntries() -> [LeaderboardEntry] {
         let currentEmployeeId = authManager.employeeLocalId
         
-        // Group by employee+store, combining metrics across time slices if "All" is selected
-        // When a specific time slice is selected, aggregatedMetrics only contains that time slice
         var metricsByEmployeeStore: [String: (employeeId: Int, storeNsn: String, managerUid: String, value: Double, count: Int)] = [:]
         
         for metric in aggregatedMetrics {
             guard let value = metric.average(for: selectedMetric) else { continue }
             
-            // Always group by employee+store - when filtered, there's only one time slice per employee anyway
             let key = "\(metric.employeeId)-\(metric.storeNsn)"
             
             if let existing = metricsByEmployeeStore[key] {
-                // Weighted average when combining multiple time slices (only in "All" mode)
                 let totalCount = existing.count + metric.count(for: selectedMetric)
                 let weightedValue = (existing.value * Double(existing.count) + value * Double(metric.count(for: selectedMetric))) / Double(totalCount)
                 metricsByEmployeeStore[key] = (metric.employeeId, metric.storeNsn, metric.managerUid, weightedValue, totalCount)
@@ -374,16 +390,14 @@ final class LeaderboardManager: ObservableObject {
             }
         }
         
-        // Sort by metric value
         let sorted = metricsByEmployeeStore.values.sorted { a, b in
             if selectedMetric.sortAscending {
-                return a.value < b.value  // Lower is better
+                return a.value < b.value
             } else {
-                return a.value > b.value  // Higher is better
+                return a.value > b.value
             }
         }
         
-        // Create ranked entries
         return sorted.enumerated().map { index, item in
             LeaderboardEntry(
                 rank: index + 1,
@@ -396,11 +410,5 @@ final class LeaderboardManager: ObservableObject {
                 isCurrentUser: item.employeeId == currentEmployeeId
             )
         }
-    }
-    
-    /// Get unique time slices from current data
-    func availableTimeSlices() -> [String] {
-        let slices = Set(entries.map { $0.timeSlice })
-        return Array(slices).sorted()
     }
 }

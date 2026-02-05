@@ -81,8 +81,8 @@ struct LeaderboardView: View {
                     await leaderboardManager.fetchData()
                 }
             }
-            .onChange(of: leaderboardManager.selectedTimeSlice) { _ in
-                // Re-aggregate with new time slice filter
+            .onChange(of: leaderboardManager.selectedShiftType) { _ in
+                // Re-aggregate with new shift type filter
                 leaderboardManager.recomputeAggregation()
             }
             .onChange(of: selectedTab) { _ in
@@ -144,18 +144,18 @@ struct LeaderboardView: View {
             }
             .padding(.horizontal, AppTheme.Spacing.xl)
             
-            // Time slice filter (leaderboard mode OR My Metrics Day view)
+            // Shift type filter (leaderboard mode OR My Metrics Day view)
             if selectedTab == 1 || (selectedTab == 0 && leaderboardManager.selectedDateRangeType == .day) {
                 HStack(spacing: AppTheme.Spacing.md) {
-                    // Time slice picker
+                    // Shift type picker
                     Menu {
-                        ForEach(TimeSlice.allCases) { slice in
+                        ForEach(leaderboardManager.shiftTypes) { shiftType in
                             Button {
-                                leaderboardManager.selectedTimeSlice = slice
+                                leaderboardManager.selectedShiftType = shiftType
                             } label: {
                                 HStack {
-                                    Text(slice.displayName)
-                                    if leaderboardManager.selectedTimeSlice == slice {
+                                    Text(shiftType.label)
+                                    if leaderboardManager.selectedShiftType == shiftType {
                                         Image(systemName: "checkmark")
                                     }
                                 }
@@ -165,7 +165,7 @@ struct LeaderboardView: View {
                         HStack(spacing: AppTheme.Spacing.xs) {
                             Image(systemName: "clock")
                                 .font(.system(size: 12))
-                            Text(leaderboardManager.selectedTimeSlice.displayName)
+                            Text(leaderboardManager.selectedShiftType.label)
                                 .font(AppTheme.Typography.caption)
                             Image(systemName: "chevron.down")
                                 .font(.system(size: 10))
@@ -182,7 +182,7 @@ struct LeaderboardView: View {
                     // Metric picker (leaderboard only)
                     if selectedTab == 1 {
                         Menu {
-                            ForEach(LeaderboardMetric.allCases) { metric in
+                            ForEach(LeaderboardMetric.leaderboardCases) { metric in
                                 Button {
                                     leaderboardManager.selectedMetric = metric
                                 } label: {

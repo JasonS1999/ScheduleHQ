@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-/// Displays the current user's personal metrics grouped by time slice
+/// Displays the current user's personal metrics grouped by shift label
 struct MyMetricsView: View {
     @ObservedObject var leaderboardManager: LeaderboardManager
     
@@ -17,34 +17,29 @@ struct MyMetricsView: View {
     private var myMetrics: [AggregatedMetric] {
         guard let employeeId = authManager.employeeLocalId else { return [] }
         return leaderboardManager.metricsForEmployee(employeeId: employeeId)
-            .sorted { $0.timeSlice < $1.timeSlice }
+            .sorted { $0.shiftLabel < $1.shiftLabel }
     }
     
-    /// Daily entries for Day view - grouped by date, filtered by time slice
+    /// Daily entries for Day view - grouped by date, filtered by shift type
     private var dailyEntries: [(date: String, entries: [ShiftManagerEntry])] {
         guard let employeeId = authManager.employeeLocalId else { return [] }
         
-        // Filter entries for this employee and selected time slice
         let filtered = leaderboardManager.entries.filter { entry in
             entry.employeeId == employeeId &&
-            (leaderboardManager.selectedTimeSlice == .all || 
-             entry.timeSlice == leaderboardManager.selectedTimeSlice.rawValue)
+            (leaderboardManager.selectedShiftType == .all || 
+             entry.shiftLabel.lowercased() == leaderboardManager.selectedShiftType.label.lowercased() ||
+             entry.shiftType.lowercased() == leaderboardManager.selectedShiftType.key.lowercased())
         }
         
-        // Group by date
         let grouped = Dictionary(grouping: filtered) { $0.reportDate }
-        
-        // Sort by date (oldest first)
         return grouped.map { (date: $0.key, entries: $0.value) }
             .sorted { $0.date < $1.date }
     }
     
     var body: some View {
         if leaderboardManager.selectedDateRangeType == .day {
-            // Day view - show individual day cards
             dayView
         } else {
-            // Week/Month/Quarter view - show aggregated metrics by time slice
             aggregatedView
         }
     }
@@ -112,7 +107,7 @@ struct MyMetricsView: View {
                 ScrollView {
                     LazyVStack(spacing: AppTheme.Spacing.md) {
                         ForEach(myMetrics) { metric in
-                            MetricTimeSliceCard(metric: metric)
+                            MetricShiftLabelCard(metric: metric)
                         }
                     }
                     .padding(.horizontal, AppTheme.Spacing.lg)
@@ -156,14 +151,13 @@ struct MyMetricsView: View {
 
 // MARK: - Daily Metric Card
 
-/// Card displaying all 4 metrics for a single day/shift entry
+/// Card displaying all metrics for a single day/shift entry
 struct DailyMetricCard: View {
     let entry: ShiftManagerEntry
     
     @Environment(\.colorScheme) private var colorScheme
     
     private var formattedDate: String {
-        // Parse the reportDate and format nicely
         let inputFormatter = DateFormatter()
         inputFormatter.dateFormat = "yyyy-MM-dd"
         
@@ -173,14 +167,6 @@ struct DailyMetricCard: View {
             return outputFormatter.string(from: date)
         }
         return entry.reportDate
-    }
-    
-    private var timeSliceDisplayName: String {
-        // Convert raw time slice to display name
-        if let slice = TimeSlice(rawValue: entry.timeSlice) {
-            return slice.displayName
-        }
-        return entry.timeSlice
     }
     
     var body: some View {
@@ -193,11 +179,11 @@ struct DailyMetricCard: View {
                         .foregroundStyle(AppTheme.Colors.textPrimary)
                     
                     HStack(spacing: AppTheme.Spacing.xs) {
-                        Image(systemName: timeSliceIcon)
+                        Image(systemName: shiftLabelIcon)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(timeSliceColor)
+                            .foregroundStyle(shiftLabelColor)
                         
-                        Text(timeSliceDisplayName)
+                        Text(entry.shiftLabel)
                             .font(AppTheme.Typography.subheadline)
                             .foregroundStyle(AppTheme.Colors.textSecondary)
                     }
@@ -205,7 +191,6 @@ struct DailyMetricCard: View {
                 
                 Spacer()
                 
-                // Store badge (for future multi-store support)
                 if !entry.storeNsn.isEmpty {
                     Text("#\(entry.storeNsn)")
                         .font(AppTheme.Typography.caption)
@@ -219,12 +204,20 @@ struct DailyMetricCard: View {
                 }
             }
             
-            // Metrics row
-            HStack(spacing: AppTheme.Spacing.sm) {
-                DailyMetricBadge(metric: .oepe, value: entry.oepe)
-                DailyMetricBadge(metric: .kvsHealthyUsage, value: entry.kvsHealthyUsage)
-                DailyMetricBadge(metric: .tpph, value: entry.tpph)
-                DailyMetricBadge(metric: .r2p, value: entry.r2p)
+            // Metrics rows - 7 metrics in 2 rows
+            VStack(spacing: AppTheme.Spacing.sm) {
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    DailyMetricBadge(metric: .oepe, value: entry.oepe)
+                    DailyMetricBadge(metric: .kvsHealthyUsage, value: entry.kvsHealthyUsage)
+                    DailyMetricBadge(metric: .kvsTimePerItem, value: entry.kvsTimePerItem)
+                    DailyMetricBadge(metric: .tpph, value: entry.tpph)
+                }
+                HStack(spacing: AppTheme.Spacing.sm) {
+                    DailyMetricBadge(metric: .r2p, value: entry.r2p)
+                    DailyMetricBadge(metric: .punchLaborPct, value: entry.punchLaborPct)
+                    DailyMetricBadge(metric: .dtPullForwardPct, value: entry.dtPullForwardPct)
+                    Spacer()
+                }
             }
         }
         .padding(AppTheme.Spacing.lg)
@@ -239,22 +232,20 @@ struct DailyMetricCard: View {
         )
     }
     
-    private var timeSliceIcon: String {
-        switch entry.timeSlice.lowercased() {
-        case let s where s.contains("breakfast"): return "sunrise"
-        case let s where s.contains("lunch"): return "sun.max"
-        case let s where s.contains("dinner"): return "sunset"
-        case let s where s.contains("overnight"): return "moon.stars"
+    private var shiftLabelIcon: String {
+        switch entry.shiftLabel.lowercased() {
+        case "open": return "sunrise"
+        case "mid": return "sun.max"
+        case "close": return "sunset"
         default: return "clock"
         }
     }
     
-    private var timeSliceColor: Color {
-        switch entry.timeSlice.lowercased() {
-        case let s where s.contains("breakfast"): return AppTheme.Colors.shiftMorning
-        case let s where s.contains("lunch"): return AppTheme.Colors.shiftDay
-        case let s where s.contains("dinner"): return AppTheme.Colors.shiftEvening
-        case let s where s.contains("overnight"): return AppTheme.Colors.shiftNight
+    private var shiftLabelColor: Color {
+        switch entry.shiftLabel.lowercased() {
+        case "open": return AppTheme.Colors.shiftMorning
+        case "mid": return AppTheme.Colors.shiftDay
+        case "close": return AppTheme.Colors.shiftEvening
         default: return AppTheme.Colors.primaryGradientStart
         }
     }
@@ -295,100 +286,74 @@ struct DailyMetricBadge: View {
     }
 }
 
-// MARK: - Metric Time Slice Card
+// MARK: - Metric Shift Label Card
 
-/// Card displaying all 4 metrics for a single time slice
-struct MetricTimeSliceCard: View {
+/// Card displaying all 7 metrics for a single shift label (aggregated)
+struct MetricShiftLabelCard: View {
     let metric: AggregatedMetric
     
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         VStack(alignment: .leading, spacing: AppTheme.Spacing.md) {
-            // Time slice header
+            // Shift label header
             HStack {
-                Image(systemName: timeSliceIcon)
+                Image(systemName: shiftLabelIcon)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(timeSliceColor)
+                    .foregroundStyle(shiftLabelColor)
                 
-                Text(metric.timeSlice)
+                Text(metric.shiftLabel)
                     .font(AppTheme.Typography.headline)
                     .foregroundStyle(AppTheme.Colors.textPrimary)
                 
                 Spacer()
                 
-                // Store badge (for future multi-store support)
                 if !metric.storeNsn.isEmpty {
                     Text("#\(metric.storeNsn)")
                         .font(AppTheme.Typography.caption)
                         .foregroundStyle(AppTheme.Colors.textTertiary)
                         .padding(.horizontal, AppTheme.Spacing.sm)
                         .padding(.vertical, AppTheme.Spacing.xs)
-                        .background(
-                            Capsule()
-                                .fill(AppTheme.Colors.backgroundSecondary)
-                        )
+                        .background(Capsule().fill(AppTheme.Colors.backgroundSecondary))
                 }
             }
             
-            // Metrics grid
+            // Metrics grid - 7 metrics
             LazyVGrid(columns: [
                 GridItem(.flexible(), spacing: AppTheme.Spacing.md),
                 GridItem(.flexible(), spacing: AppTheme.Spacing.md)
             ], spacing: AppTheme.Spacing.md) {
-                MetricCell(
-                    metric: .oepe,
-                    value: metric.oepeAverage,
-                    count: metric.oepeCount
-                )
-                
-                MetricCell(
-                    metric: .kvsHealthyUsage,
-                    value: metric.kvsHealthyUsageAverage,
-                    count: metric.kvsHealthyUsageCount
-                )
-                
-                MetricCell(
-                    metric: .tpph,
-                    value: metric.tpphAverage,
-                    count: metric.tpphCount
-                )
-                
-                MetricCell(
-                    metric: .r2p,
-                    value: metric.r2pAverage,
-                    count: metric.r2pCount
-                )
+                MetricCell(metric: .oepe, value: metric.oepeAverage, count: metric.oepeCount)
+                MetricCell(metric: .kvsHealthyUsage, value: metric.kvsHealthyUsageAverage, count: metric.kvsHealthyUsageCount)
+                MetricCell(metric: .kvsTimePerItem, value: metric.kvsTimePerItemAverage, count: metric.kvsTimePerItemCount)
+                MetricCell(metric: .tpph, value: metric.tpphAverage, count: metric.tpphCount)
+                MetricCell(metric: .r2p, value: metric.r2pAverage, count: metric.r2pCount)
+                MetricCell(metric: .punchLaborPct, value: metric.punchLaborPctAverage, count: metric.punchLaborPctCount)
+                MetricCell(metric: .dtPullForwardPct, value: metric.dtPullForwardPctAverage, count: metric.dtPullForwardPctCount)
             }
         }
         .padding(AppTheme.Spacing.lg)
         .background(
             RoundedRectangle(cornerRadius: AppTheme.Radius.large)
                 .fill(AppTheme.Colors.cardBackground)
-                .shadow(
-                    color: colorScheme == .dark ? .clear : Color.black.opacity(0.05),
-                    radius: 8,
-                    y: 2
-                )
+                .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.05), radius: 8, y: 2)
         )
     }
     
-    private var timeSliceIcon: String {
-        switch metric.timeSlice.lowercased() {
-        case "breakfast": return "sunrise"
-        case "lunch": return "sun.max"
-        case "dinner": return "sunset"
-        case "overnight": return "moon.stars"
+    private var shiftLabelIcon: String {
+        switch metric.shiftLabel.lowercased() {
+        case "open": return "sunrise"
+        case "mid": return "sun.max"
+        case "close": return "sunset"
         default: return "clock"
         }
     }
     
-    private var timeSliceColor: Color {
-        switch metric.timeSlice.lowercased() {
-        case "breakfast": return AppTheme.Colors.shiftMorning
-        case "lunch": return AppTheme.Colors.shiftDay
-        case "dinner": return AppTheme.Colors.shiftEvening
-        case "overnight": return AppTheme.Colors.shiftNight
+    private var shiftLabelColor: Color {
+        switch metric.shiftLabel.lowercased() {
+        case "open": return AppTheme.Colors.shiftMorning
+        case "mid": return AppTheme.Colors.shiftDay
+        case "close": return AppTheme.Colors.shiftEvening
         default: return AppTheme.Colors.primaryGradientStart
         }
     }
