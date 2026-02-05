@@ -1536,7 +1536,7 @@ async function lookupShiftRunner(
     if (runnerDoc.exists) {
       const data = runnerDoc.data();
       return {
-        employeeId: data?.localId ?? -1,
+        employeeId: data?.employeeId ?? -1,
         runnerName: data?.runnerName ?? "Unassigned",
       };
     }
