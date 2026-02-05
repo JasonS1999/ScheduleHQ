@@ -137,9 +137,34 @@ The system automatically routes CSV data to the correct manager based on the sto
 
 ---
 
-## CSV File Format
+## CSV File Formats
 
-The script expects CSV files with these columns:
+The Cloud Function automatically detects the CSV format based on column headers and processes accordingly.
+
+### Format 1: Hourly Summary (Recommended)
+
+| Column | Description | Aggregation |
+|--------|-------------|-------------|
+| Loc | Store location number | - |
+| End Time | Hour end time (5:00, 6:00... 25:00) | - |
+| All Net Sales | Net sales amount | SUM |
+| STW GC | Guest count | SUM |
+| OEPE | Order entry to payment end | AVG |
+| KVS Time Per Item | KVS time per item | AVG |
+| KVS Healthy Usage | KVS healthy usage metric | AVG |
+| DT Pull Forward % | Drive-thru pulled forward % | AVG |
+| Punch Labor | Punch labor percentage | AVG |
+| TPPH | Transactions per person hour | AVG |
+| R2P | Ready to pay metric | SUM |
+
+**How it works:**
+- Hourly data is aggregated into shift type buckets based on `shiftTypes` configured in manager settings
+- Each shift type has `rangeStart` and `rangeEnd` times (e.g., Open: 04:30-11:00)
+- The `employeeId` is assigned from `shiftRunners/{date}_{shiftType}` (e.g., `2026-02-03_open`)
+- Total rows and all-zero rows are automatically skipped
+- Hours past midnight (25:00, 26:00) are normalized by subtracting 24
+
+### Format 2: Manager Summary (Legacy)
 
 | Column | Description |
 |--------|-------------|
@@ -176,13 +201,42 @@ The Cloud Function extracts the date from the filename. If no date is found, it 
 
 ## Firestore Data Structure
 
-Data is saved to:
+Data is saved to `managers/{managerUid}/shiftManagerReports/{YYYY-MM-DD}`:
+
+### Hourly Format (aggregated by shift type)
 ```
-managers/{managerUid}/shiftManagerReports/{YYYY-MM-DD}
 ├── importedAt: timestamp
 ├── fileName: string
 ├── location: string
 ├── reportDate: string
+├── format: "hourly"
+├── totalEntries: number
+└── entries: [
+    {
+      employeeId: number,        // From shiftRunner, -1 if unassigned
+      runnerName: string,        // From shiftRunner or "Unassigned"
+      shiftType: string,         // Shift key (e.g., "open", "lunch")
+      shiftLabel: string,        // Shift label (e.g., "Open", "Lunch")
+      allNetSales: number,       // SUM of hours in shift range
+      stwGc: number,             // SUM
+      oepe: number,              // AVG
+      kvsTimePerItem: number,    // AVG
+      kvsHealthyUsage: number,   // AVG
+      dtPullForwardPct: number,  // AVG
+      punchLaborPct: number,     // AVG
+      tpph: number,              // AVG
+      r2p: number                // SUM
+    }
+]
+```
+
+### Manager Format (per-manager entries)
+```
+├── importedAt: timestamp
+├── fileName: string
+├── location: string
+├── reportDate: string
+├── format: "manager"
 ├── totalEntries: number
 ├── unmatchedEntries: number
 └── entries: [
