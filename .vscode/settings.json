@@ -8,5 +8,6 @@
         "xcrun": true,
         "xcodebuild": true,
         "firebase": true
-    }
+    },
+    "cmake.sourceDirectory": "E:/ScheduleHQ/ScheduleHQ_Desktop/windows"
 }
