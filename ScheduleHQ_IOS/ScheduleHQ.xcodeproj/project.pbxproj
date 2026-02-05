@@ -3,11 +3,12 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		0AAB46BAAB0DD5A0AFF0E7AA /* TimeOffRequestSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BE6C3986FD645E15AF3477C /* TimeOffRequestSheet.swift */; };
+		0B922D936631E8C1FF4D9BD2 /* ProfileImageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E989165773E01AAD329A138E /* ProfileImageService.swift */; };
 		0C59C51AE9424942624B5F18 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0C6F1E1DBE1292E92372B7F0 /* GoogleService-Info.plist */; };
 		182813827F4BDFDDFDB72C45 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7C953C3D6DA36FAE700E7D /* Theme.swift */; };
 		1D14005DFAA0BFBE39B98167 /* AlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */; };
@@ -17,6 +18,8 @@
 		2B74B11A870A880A9FFFA927 /* DateExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */; };
 		3C68A267424E317F9E436093 /* TimeOffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94BCEB5C7FDA763F14A4A7D6 /* TimeOffView.swift */; };
 		3D53801AD2E9F47AB2C8A08B /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0F9FACEAD596FF93CD323A /* LoginView.swift */; };
+		3F387ECCF27AB9B4D5C131CB /* EmployeeAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0426A9A306140D02C156EDC /* EmployeeAvatarView.swift */; };
+		3F9DC31CFDDACAE4029DC0DA /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 9FB23A00D340A2EC701374EF /* FirebaseStorage */; };
 		44EBD5EFD316334804F31B97 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 90C7A67BDC79663F94D0E43F /* FirebaseFirestore */; };
 		4566189371A820C4171E3B19 /* TimeOffRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9EA878796EB4258354D037 /* TimeOffRequest.swift */; };
 		4D70A5E0827BEE76BD8CF877 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E66190F1A0B15F8F9B9120EF /* FirebaseAuth */; };
@@ -69,10 +72,12 @@
 		AAEAB20480BFF2ECA17B060F /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
 		C0DB78F4FF757782641B82F7 /* ScheduleHQApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleHQApp.swift; sourceTree = "<group>"; };
 		D0307FE788D9CE086C375A92 /* AppUser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUser.swift; sourceTree = "<group>"; };
+		D0426A9A306140D02C156EDC /* EmployeeAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmployeeAvatarView.swift; sourceTree = "<group>"; };
 		D22CC2DEA63E7BAA243734BB /* DateExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateExtensions.swift; sourceTree = "<group>"; };
 		D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonComponents.swift; sourceTree = "<group>"; };
-		E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ScheduleHQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ScheduleHQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E8D6CAE99B7A0FB9D43907C9 /* DayTeamScheduleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTeamScheduleSheet.swift; sourceTree = "<group>"; };
+		E989165773E01AAD329A138E /* ProfileImageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileImageService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +88,7 @@
 				4D70A5E0827BEE76BD8CF877 /* FirebaseAuth in Frameworks */,
 				44EBD5EFD316334804F31B97 /* FirebaseFirestore in Frameworks */,
 				CFE2B2CB2A5D898D11B8D9FD /* FirebaseMessaging in Frameworks */,
+				3F9DC31CFDDACAE4029DC0DA /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,6 +134,7 @@
 				3F1A23909951E3C4CE3B0317 /* AuthManager.swift */,
 				3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */,
 				99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */,
+				E989165773E01AAD329A138E /* ProfileImageService.swift */,
 				8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */,
 				3E039007796C297B7AC53558 /* TimeOffManager.swift */,
 			);
@@ -163,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				D82581CB9E285C9F37EDBC0F /* CommonComponents.swift */,
+				D0426A9A306140D02C156EDC /* EmployeeAvatarView.swift */,
 				87C97A32247DDD600B3359BE /* ShiftCard.swift */,
 				8F7C953C3D6DA36FAE700E7D /* Theme.swift */,
 				8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */,
@@ -242,6 +250,7 @@
 				E66190F1A0B15F8F9B9120EF /* FirebaseAuth */,
 				90C7A67BDC79663F94D0E43F /* FirebaseFirestore */,
 				E6D360FC6FC3009A295D3083 /* FirebaseMessaging */,
+				9FB23A00D340A2EC701374EF /* FirebaseStorage */,
 			);
 			productName = ScheduleHQ;
 			productReference = E1ADE9D2C043EC90150B729A /* ScheduleHQ.app */;
@@ -257,7 +266,6 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					F07628E263942AC95FF1F9C5 = {
-						DevelopmentTeam = S4LN25J73K;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -275,7 +283,6 @@
 			packageReferences = (
 				F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -308,11 +315,13 @@
 				2B74B11A870A880A9FFFA927 /* DateExtensions.swift in Sources */,
 				BE1ACAFBC8D3946E8C00B4E6 /* DayTeamScheduleSheet.swift in Sources */,
 				2330B8F5BCD266AF8097631F /* Employee.swift in Sources */,
+				3F387ECCF27AB9B4D5C131CB /* EmployeeAvatarView.swift in Sources */,
 				C86EDA36CDD1865C119F0CF1 /* EmployeeCache.swift in Sources */,
 				3D53801AD2E9F47AB2C8A08B /* LoginView.swift in Sources */,
 				E592F50A830F1D2064DE8CCC /* MainTabView.swift in Sources */,
 				5F9029B115770887D39C3473 /* NetworkMonitor.swift in Sources */,
 				8A23DE6CCA08BAA24EE22D9C /* OfflineQueueManager.swift in Sources */,
+				0B922D936631E8C1FF4D9BD2 /* ProfileImageService.swift in Sources */,
 				D3E1B0E340AEA5764C216AA6 /* ProfileView.swift in Sources */,
 				F4C25B981F6BE6EA8B181E62 /* ScheduleHQApp.swift in Sources */,
 				79ED2D42D7B2A2A1B3E45C29 /* ScheduleManager.swift in Sources */,
@@ -341,10 +350,11 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = S4LN25J73K;
+				DEVELOPMENT_TEAM = C4TP727P3K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Select a profile photo";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -488,10 +498,11 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = S4LN25J73K;
+				DEVELOPMENT_TEAM = C4TP727P3K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Select a profile photo";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -548,6 +559,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		9FB23A00D340A2EC701374EF /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = F4B090936A1C1C43AE301554 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
 		};
 		E66190F1A0B15F8F9B9120EF /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;

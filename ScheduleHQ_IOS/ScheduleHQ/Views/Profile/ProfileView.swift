@@ -98,7 +98,7 @@ struct ProfileView: View {
                     .disabled(!networkMonitor.isConnected || isUploadingPhoto)
                     .opacity(networkMonitor.isConnected && !isUploadingPhoto ? 1 : 0.5)
                 }
-                .onChange(of: selectedPhotoItem) { _, newItem in
+                .onChange(of: selectedPhotoItem) { newItem in
                     if let newItem = newItem {
                         Task {
                             await handlePhotoSelection(newItem)
@@ -174,11 +174,12 @@ struct ProfileView: View {
         selectedPhotoItem = nil
         
         guard let managerUid = authManager.managerUid,
-              let employeeDocId = authManager.employee?.documentId else {
+              let employeeId = authManager.appUser?.employeeId else {
             alertManager.showError(ProfileImageError.noEmployeeId)
             return
         }
         
+        let employeeDocId = String(employeeId)
         isUploadingPhoto = true
         
         do {
