@@ -1506,6 +1506,82 @@ function aggregateHourlyData(
 }
 
 /**
+ * Look up shift runner for a given date and shift type
+ * Document ID format: {YYYY-MM-DD}_{shiftTypeKey} (e.g., "2026-02-03_open")
+ * 
+ * @param managerUid Manager's UID
+ * @param date Date in YYYY-MM-DD format
+ * @param shiftTypeKey Shift type key (e.g., "open", "lunch")
+ * @returns Runner info or default "Unassigned" with employeeId -1
+ */
+async function lookupShiftRunner(
+  managerUid: string,
+  date: string,
+  shiftTypeKey: string
+): Promise<{ employeeId: number; runnerName: string }> {
+  const docId = `${date}_${shiftTypeKey}`;
+  
+  try {
+    const runnerDoc = await db
+      .collection("managers")
+      .doc(managerUid)
+      .collection("shiftRunners")
+      .doc(docId)
+      .get();
+
+    if (runnerDoc.exists) {
+      const data = runnerDoc.data();
+      return {
+        employeeId: data?.localId ?? -1,
+        runnerName: data?.runnerName ?? "Unassigned",
+      };
+    }
+  } catch (error) {
+    logger.warn(`Error looking up shiftRunner ${docId}:`, error);
+  }
+
+  return { employeeId: -1, runnerName: "Unassigned" };
+}
+
+/**
+ * Build HourlySummaryEntry objects from aggregated data with runner info
+ */
+async function buildHourlySummaryEntries(
+  buckets: Map<string, { shiftType: ShiftType; sumData: HourlyBucket; avgData: HourlyBucket; count: number }>,
+  managerUid: string,
+  reportDate: string
+): Promise<HourlySummaryEntry[]> {
+  const entries: HourlySummaryEntry[] = [];
+
+  // Sort buckets by shift type sort order
+  const sortedBuckets = Array.from(buckets.values())
+    .filter(b => b.count > 0) // Only include shifts with data
+    .sort((a, b) => a.shiftType.sortOrder - b.shiftType.sortOrder);
+
+  for (const bucket of sortedBuckets) {
+    const runner = await lookupShiftRunner(managerUid, reportDate, bucket.shiftType.key);
+
+    entries.push({
+      employeeId: runner.employeeId,
+      runnerName: runner.runnerName,
+      shiftType: bucket.shiftType.key,
+      shiftLabel: bucket.shiftType.label,
+      allNetSales: Math.round(bucket.sumData.allNetSales * 100) / 100,
+      stwGc: bucket.sumData.stwGc,
+      oepe: Math.round(bucket.avgData.oepe * 100) / 100,
+      kvsTimePerItem: Math.round(bucket.avgData.kvsTimePerItem * 100) / 100,
+      kvsHealthyUsage: Math.round(bucket.avgData.kvsHealthyUsage * 100) / 100,
+      dtPullForwardPct: Math.round(bucket.avgData.dtPullForwardPct * 100) / 100,
+      punchLaborPct: Math.round(bucket.avgData.punchLaborPct * 100) / 100,
+      tpph: Math.round(bucket.avgData.tpph * 100) / 100,
+      r2p: bucket.sumData.r2p,
+    });
+  }
+
+  return entries;
+}
+
+/**
  * Triggered when a CSV file is uploaded to shift_manager_imports/
  * Parses the CSV, matches manager names to employees, and saves to Firestore.
  */
