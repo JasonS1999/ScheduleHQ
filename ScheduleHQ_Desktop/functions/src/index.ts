@@ -1189,6 +1189,38 @@ interface ShiftManagerEntry {
 }
 
 /**
+ * Hourly Summary entry structure (aggregated by shift type)
+ * Used when processing hourly CSV format with "End Time" column
+ */
+interface HourlySummaryEntry {
+  employeeId: number;      // From shiftRunner lookup, -1 if unassigned
+  runnerName: string;      // From shiftRunner or "Unassigned"
+  shiftType: string;       // Shift type key (e.g., "open", "lunch", "close")
+  shiftLabel: string;      // Shift type label (e.g., "Open", "Lunch", "Close")
+  allNetSales: number;     // SUM
+  stwGc: number;           // SUM (STW GC column)
+  oepe: number;            // AVG
+  kvsTimePerItem: number;  // AVG
+  kvsHealthyUsage: number; // AVG
+  dtPullForwardPct: number;// AVG
+  punchLaborPct: number;   // AVG
+  tpph: number;            // AVG
+  r2p: number;             // SUM
+}
+
+/**
+ * Shift type definition from managerSettings
+ */
+interface ShiftType {
+  id: number;
+  key: string;
+  label: string;
+  rangeStart: string;  // "HH:mm" format
+  rangeEnd: string;    // "HH:mm" format
+  sortOrder: number;
+}
+
+/**
  * Parse a numeric value from CSV, handling various formats
  */
 function parseNumber(value: string | undefined): number {
