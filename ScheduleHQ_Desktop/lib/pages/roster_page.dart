@@ -76,9 +76,7 @@ class _RosterPageState extends State<RosterPage> {
   }
 
   Future<void> _addEmployee() async {
-    String firstName = "";
-    String lastName = "";
-    String nickname = "";
+    String name = "";
     String jobCode = _jobCodes.isNotEmpty ? _jobCodes.first.code : "Assistant";
     String? email;
     int vacationAllowed = 0;
@@ -94,28 +92,10 @@ class _RosterPageState extends State<RosterPage> {
               children: [
                 TextField(
                   decoration: const InputDecoration(
-                    labelText: "First Name *",
+                    labelText: "Name *",
                     hintText: "Required",
                   ),
-                  onChanged: (v) => firstName = v,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Last Name *",
-                    hintText: "Required",
-                  ),
-                  onChanged: (v) => lastName = v,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Nickname",
-                    hintText: "Optional - shown instead of first name",
-                  ),
-                  onChanged: (v) => nickname = v,
+                  onChanged: (v) => name = v,
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 12),
@@ -165,17 +145,15 @@ class _RosterPageState extends State<RosterPage> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
+                if (name.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('First and Last name are required')),
+                    const SnackBar(content: Text('Name is required')),
                   );
                   return;
                 }
 
                 final newEmployee = Employee(
-                  firstName: firstName.trim(),
-                  lastName: lastName.trim(),
-                  nickname: nickname.trim().isEmpty ? null : nickname.trim(),
+                  firstName: name.trim(),
                   jobCode: jobCode,
                   email: email,
                   vacationWeeksAllowed: vacationAllowed,
@@ -206,9 +184,7 @@ class _RosterPageState extends State<RosterPage> {
   }
 
   Future<void> _editEmployee(Employee e) async {
-    String firstName = e.firstName ?? '';
-    String lastName = e.lastName ?? '';
-    String nickname = e.nickname ?? '';
+    String name = e.firstName ?? '';
     String jobCode = e.jobCode;
     String? email = e.email;
     int vacationAllowed = e.vacationWeeksAllowed;
@@ -224,31 +200,11 @@ class _RosterPageState extends State<RosterPage> {
               children: [
                 TextField(
                   decoration: const InputDecoration(
-                    labelText: "First Name *",
+                    labelText: "Name *",
                     hintText: "Required",
                   ),
-                  controller: TextEditingController(text: firstName),
-                  onChanged: (v) => firstName = v,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Last Name *",
-                    hintText: "Required",
-                  ),
-                  controller: TextEditingController(text: lastName),
-                  onChanged: (v) => lastName = v,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Nickname",
-                    hintText: "Optional - shown instead of first name",
-                  ),
-                  controller: TextEditingController(text: nickname),
-                  onChanged: (v) => nickname = v,
+                  controller: TextEditingController(text: name),
+                  onChanged: (v) => name = v,
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 12),
@@ -308,17 +264,15 @@ class _RosterPageState extends State<RosterPage> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (firstName.trim().isEmpty || lastName.trim().isEmpty) {
+                if (name.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('First and Last name are required')),
+                    const SnackBar(content: Text('Name is required')),
                   );
                   return;
                 }
                 
                 final updatedEmployee = e.copyWith(
-                  firstName: firstName.trim(),
-                  lastName: lastName.trim(),
-                  nickname: nickname.trim().isEmpty ? null : nickname.trim(),
+                  firstName: name.trim(),
                   jobCode: jobCode,
                   email: email,
                   vacationWeeksAllowed: vacationAllowed,
@@ -405,6 +359,10 @@ class _RosterPageState extends State<RosterPage> {
     setState(() => _isSyncingAccounts = true);
     
     try {
+      // First sync all employee data to Firestore
+      await FirestoreSyncService.instance.syncAllEmployees();
+      
+      // Then sync accounts (create Firebase Auth accounts for employees)
       final result = await FirestoreSyncService.instance.syncAllEmployeeAccounts();
       
       if (!mounted) return;

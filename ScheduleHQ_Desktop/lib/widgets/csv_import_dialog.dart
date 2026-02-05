@@ -43,38 +43,16 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
     });
   }
 
-  /// Convert full name to "FirstName L." format in proper case
-  /// Also returns parsed firstName and lastName
+  /// Convert full name to proper case
   String _formatName(String fullName) {
-    final parsed = _parseName(fullName);
-    final first = parsed['firstName'] ?? '';
-    final last = parsed['lastName'] ?? '';
-    
-    if (first.isEmpty && last.isEmpty) return '';
-    if (last.isEmpty) return first;
-    
-    // Display as "FirstName L."
-    return '$first ${last[0].toUpperCase()}.';
-  }
-
-  /// Parse full name into firstName and lastName with proper casing
-  Map<String, String> _parseName(String fullName) {
     final trimmed = fullName.trim();
-    if (trimmed.isEmpty) return {'firstName': '', 'lastName': ''};
-
-    final parts = trimmed.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return {'firstName': '', 'lastName': ''};
-
-    if (parts.length == 1) {
-      return {'firstName': _toProperCase(parts[0]), 'lastName': ''};
-    }
-
-    // First part is first name, rest is last name
-    final firstName = _toProperCase(parts[0]);
-    final lastName = parts.sublist(1).map(_toProperCase).join(' ');
+    if (trimmed.isEmpty) return '';
     
-    return {'firstName': firstName, 'lastName': lastName};
+    // Split into words and proper case each
+    final parts = trimmed.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    return parts.map(_toProperCase).join(' ');
   }
+
 
   /// Convert string to proper case (first letter uppercase, rest lowercase)
   String _toProperCase(String s) {
@@ -181,13 +159,11 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   Future<void> _importCurrentEmployee() async {
     if (_selectedJobCode == null) return;
 
-    final rawName = _rawNames[_currentIndex];
-    final parsed = _parseName(rawName);
+    final name = _formatName(_rawNames[_currentIndex]);
 
     await _employeeDao.insertEmployee(
       Employee(
-        firstName: parsed['firstName'],
-        lastName: parsed['lastName'],
+        firstName: name,
         jobCode: _selectedJobCode!,
         vacationWeeksAllowed: 0,
         vacationWeeksUsed: 0,

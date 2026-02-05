@@ -25,25 +25,15 @@ class Employee {
     this.vacationWeeksUsed = 0,
   });
 
-  /// Display name: nickname if set, otherwise firstName
-  /// Falls back to "Unknown" if neither is set
-  String get displayName => nickname?.isNotEmpty == true 
-      ? nickname! 
-      : (firstName?.isNotEmpty == true ? firstName! : 'Unknown');
+  /// Display name: same as firstName
+  /// Falls back to "Unknown" if not set
+  String get displayName => firstName?.isNotEmpty == true ? firstName! : 'Unknown';
 
-  /// Full name: "FirstName LastName"
-  String get fullName {
-    final first = firstName ?? '';
-    final last = lastName ?? '';
-    if (first.isEmpty && last.isEmpty) return 'Unknown';
-    if (first.isEmpty) return last;
-    if (last.isEmpty) return first;
-    return '$first $last';
-  }
+  /// Full name: same as firstName (lastName deprecated)
+  String get fullName => firstName?.isNotEmpty == true ? firstName! : 'Unknown';
 
-  /// Legacy name field for backwards compatibility
-  /// Returns fullName
-  String get name => fullName;
+  /// Name getter - returns firstName
+  String get name => firstName?.isNotEmpty == true ? firstName! : 'Unknown';
 
   Employee copyWith({
     int? id,
