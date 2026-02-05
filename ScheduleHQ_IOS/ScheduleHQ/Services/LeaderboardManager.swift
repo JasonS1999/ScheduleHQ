@@ -229,6 +229,9 @@ final class LeaderboardManager: ObservableObject {
         
         for dateStr in dates {
             do {
+                // Fetch shift runners for this date to get employeeId/employeeUid
+                let shiftRunners = try await fetchShiftRunners(managerUid: managerUid, date: dateStr)
+                
                 let docRef = db.collection("managers")
                     .document(managerUid)
                     .collection("shiftManagerReports")
@@ -242,7 +245,7 @@ final class LeaderboardManager: ObservableObject {
                 
                 if let entriesData = data["entries"] as? [[String: Any]] {
                     for entryData in entriesData {
-                        if var entry = parseEntry(from: entryData) {
+                        if var entry = parseEntry(from: entryData, shiftRunners: shiftRunners) {
                             entry.storeNsn = storeNsn
                             entry.reportDate = dateStr
                             entry.managerUid = managerUid
@@ -258,14 +261,60 @@ final class LeaderboardManager: ObservableObject {
         return allEntries
     }
     
-    private func parseEntry(from data: [String: Any]) -> ShiftManagerEntry? {
-        guard let employeeId = data["employeeId"] as? Int,
-              let shiftLabel = data["shiftLabel"] as? String else {
+    /// Fetch shift runners for a specific date to get employeeId/employeeUid
+    private func fetchShiftRunners(managerUid: String, date: String) async throws -> [String: (employeeId: Int, employeeUid: String?)] {
+        var runners: [String: (employeeId: Int, employeeUid: String?)] = [:]
+        
+        let runnersRef = db.collection("managers")
+            .document(managerUid)
+            .collection("shiftRunners")
+        
+        // Query runners for this date (document IDs are formatted as {date}_{shiftType})
+        let snapshot = try await runnersRef
+            .whereField("date", isEqualTo: date)
+            .getDocuments(source: .server)
+        
+        for doc in snapshot.documents {
+            let data = doc.data()
+            if let shiftType = data["shiftType"] as? String,
+               let employeeId = data["employeeId"] as? Int {
+                let employeeUid = data["employeeUid"] as? String
+                runners[shiftType.lowercased()] = (employeeId: employeeId, employeeUid: employeeUid)
+                print("LeaderboardManager: Found runner for \(date)/\(shiftType): employeeId=\(employeeId), uid=\(employeeUid ?? "nil")")
+            }
+        }
+        
+        return runners
+    }
+    
+    private func parseEntry(from data: [String: Any], shiftRunners: [String: (employeeId: Int, employeeUid: String?)]) -> ShiftManagerEntry? {
+        let shiftLabel = data["shiftLabel"] as? String ?? ""
+        let shiftType = data["shiftType"] as? String ?? ""
+        
+        // Try to get employeeId from entry data first, then fall back to shiftRunners
+        var employeeId = data["employeeId"] as? Int
+        var employeeUid = data["employeeUid"] as? String
+        
+        // Look up from shiftRunners using shiftType (e.g., "open", "close")
+        if let runner = shiftRunners[shiftType.lowercased()] {
+            // Use shiftRunner data if entry doesn't have it
+            if employeeId == nil || employeeId == 0 {
+                employeeId = runner.employeeId
+            }
+            if employeeUid == nil || employeeUid?.isEmpty == true {
+                employeeUid = runner.employeeUid
+            }
+        }
+        
+        // Require at least employeeId to create an entry
+        guard let finalEmployeeId = employeeId, finalEmployeeId > 0 else {
+            print("LeaderboardManager: Skipping entry - no employeeId found for shiftType=\(shiftType)")
             return nil
         }
         
         return ShiftManagerEntry(
-            employeeId: employeeId,
+            employeeId: finalEmployeeId,
+            employeeUid: employeeUid,
             runnerName: data["runnerName"] as? String ?? "",
             shiftLabel: shiftLabel,
             shiftType: data["shiftType"] as? String ?? "",
@@ -307,6 +356,7 @@ final class LeaderboardManager: ObservableObject {
             
             var aggregated = AggregatedMetric(
                 employeeId: first.employeeId,
+                employeeUid: first.employeeUid,
                 storeNsn: first.storeNsn,
                 managerUid: first.managerUid,
                 shiftLabel: first.shiftLabel
@@ -376,7 +426,7 @@ final class LeaderboardManager: ObservableObject {
     func leaderboardEntries() -> [LeaderboardEntry] {
         let currentEmployeeId = authManager.employeeLocalId
         
-        var metricsByEmployeeStore: [String: (employeeId: Int, storeNsn: String, managerUid: String, value: Double, count: Int)] = [:]
+        var metricsByEmployeeStore: [String: (employeeId: Int, employeeUid: String?, storeNsn: String, managerUid: String, value: Double, count: Int)] = [:]
         
         for metric in aggregatedMetrics {
             guard let value = metric.average(for: selectedMetric) else { continue }
@@ -386,9 +436,11 @@ final class LeaderboardManager: ObservableObject {
             if let existing = metricsByEmployeeStore[key] {
                 let totalCount = existing.count + metric.count(for: selectedMetric)
                 let weightedValue = (existing.value * Double(existing.count) + value * Double(metric.count(for: selectedMetric))) / Double(totalCount)
-                metricsByEmployeeStore[key] = (metric.employeeId, metric.storeNsn, metric.managerUid, weightedValue, totalCount)
+                // Keep existing employeeUid if we have it, otherwise use new one
+                let uid = existing.employeeUid ?? metric.employeeUid
+                metricsByEmployeeStore[key] = (metric.employeeId, uid, metric.storeNsn, metric.managerUid, weightedValue, totalCount)
             } else {
-                metricsByEmployeeStore[key] = (metric.employeeId, metric.storeNsn, metric.managerUid, value, metric.count(for: selectedMetric))
+                metricsByEmployeeStore[key] = (metric.employeeId, metric.employeeUid, metric.storeNsn, metric.managerUid, value, metric.count(for: selectedMetric))
             }
         }
         
@@ -404,6 +456,7 @@ final class LeaderboardManager: ObservableObject {
             LeaderboardEntry(
                 rank: index + 1,
                 employeeId: item.employeeId,
+                employeeUid: item.employeeUid,
                 storeNsn: item.storeNsn,
                 managerUid: item.managerUid,
                 metricValue: item.value,

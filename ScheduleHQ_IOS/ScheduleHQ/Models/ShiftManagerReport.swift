@@ -81,6 +81,7 @@ struct ShiftManagerEntry: Codable, Identifiable, Equatable {
     var id: String { "\(employeeId)-\(shiftLabel)-\(reportDate)" }
     
     let employeeId: Int
+    let employeeUid: String?
     let runnerName: String
     let shiftLabel: String
     let shiftType: String
@@ -100,7 +101,7 @@ struct ShiftManagerEntry: Codable, Identifiable, Equatable {
     var managerUid: String = ""
     
     enum CodingKeys: String, CodingKey {
-        case employeeId, runnerName, shiftLabel, shiftType
+        case employeeId, employeeUid, runnerName, shiftLabel, shiftType
         case allNetSales, gc, stwGc, dtPullForwardPct
         case kvsHealthyUsage, kvsTimePerItem, oepe, punchLaborPct, tpph, r2p
     }
@@ -124,6 +125,7 @@ struct AggregatedMetric: Identifiable, Equatable {
     var id: String { "\(employeeId)-\(storeNsn)-\(shiftLabel)" }
     
     let employeeId: Int
+    let employeeUid: String?
     let storeNsn: String
     let managerUid: String
     let shiftLabel: String
@@ -176,6 +178,7 @@ struct LeaderboardEntry: Identifiable, Equatable {
     
     let rank: Int
     let employeeId: Int
+    let employeeUid: String?
     let storeNsn: String
     let managerUid: String
     let metricValue: Double

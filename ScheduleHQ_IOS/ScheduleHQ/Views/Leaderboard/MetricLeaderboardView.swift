@@ -102,7 +102,11 @@ struct LeaderboardRow: View {
     private let employeeCache = EmployeeCache.shared
     
     private var employee: Employee? {
-        employeeCache.employee(forId: entry.employeeId)
+        // Try by UID first (most reliable), then by local ID
+        if let uid = entry.employeeUid, let emp = employeeCache.employee(for: uid) {
+            return emp
+        }
+        return employeeCache.employee(forId: entry.employeeId)
     }
     
     private var employeeName: String {
