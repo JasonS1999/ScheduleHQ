@@ -155,7 +155,7 @@ The Cloud Function automatically detects the CSV format based on column headers 
 | DT Pull Forward % | Drive-thru pulled forward % | AVG |
 | Punch Labor | Punch labor percentage | AVG |
 | TPPH | Transactions per person hour | AVG |
-| R2P | Ready to pay metric | SUM |
+| R2P | Ready to pay metric | AVG |
 
 **How it works:**
 - Hourly data is aggregated into shift type buckets based on `shiftTypes` configured in manager settings
@@ -225,7 +225,7 @@ Data is saved to `managers/{managerUid}/shiftManagerReports/{YYYY-MM-DD}`:
       dtPullForwardPct: number,  // AVG
       punchLaborPct: number,     // AVG
       tpph: number,              // AVG
-      r2p: number                // SUM
+      r2p: number                // AVG
     }
 ]
 ```

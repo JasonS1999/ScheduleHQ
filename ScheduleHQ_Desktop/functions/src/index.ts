@@ -1457,8 +1457,11 @@ function aggregateHourlyData(
 
     const matchedShift = getShiftTypeForHour(endTimeHour, shiftTypes);
     if (!matchedShift) {
+      logger.log(`Hour ${endTimeHour}:00 (data ${endTimeHour === 0 ? 23 : endTimeHour - 1}:00) - no shift match`);
       continue; // Hour doesn't match any shift type
     }
+
+    logger.log(`End Time ${endTimeHour}:00 → ${matchedShift.key}`);
 
     const bucket = buckets.get(matchedShift.key);
     if (!bucket) continue;
@@ -1474,13 +1477,13 @@ function aggregateHourlyData(
     const tpph = parseNumber(getColumn(row, "TPPH"));
     const r2p = parseNumber(getColumn(row, "R2P"));
 
-    // SUM fields: allNetSales, stwGc, r2p
+    // SUM fields: allNetSales, stwGc
     bucket.sumData.allNetSales += allNetSales;
     bucket.sumData.stwGc += stwGc;
-    bucket.sumData.r2p += r2p;
 
-    // AVG fields: accumulate for later averaging
+    // AVG fields: accumulate for later averaging (including r2p)
     bucket.avgData.oepe += oepe;
+    bucket.avgData.r2p += r2p;
     bucket.avgData.kvsTimePerItem += kvsTimePerItem;
     bucket.avgData.kvsHealthyUsage += kvsHealthyUsage;
     bucket.avgData.dtPullForwardPct += dtPullForwardPct;
@@ -1499,6 +1502,7 @@ function aggregateHourlyData(
       bucket.avgData.dtPullForwardPct = bucket.avgData.dtPullForwardPct / bucket.count;
       bucket.avgData.punchLaborPct = bucket.avgData.punchLaborPct / bucket.count;
       bucket.avgData.tpph = bucket.avgData.tpph / bucket.count;
+      bucket.avgData.r2p = bucket.avgData.r2p / bucket.count;
     }
   }
 
@@ -1574,7 +1578,7 @@ async function buildHourlySummaryEntries(
       dtPullForwardPct: Math.round(bucket.avgData.dtPullForwardPct * 100) / 100,
       punchLaborPct: Math.round(bucket.avgData.punchLaborPct * 100) / 100,
       tpph: Math.round(bucket.avgData.tpph * 100) / 100,
-      r2p: bucket.sumData.r2p,
+      r2p: Math.round(bucket.avgData.r2p * 100) / 100,
     });
   }
 
