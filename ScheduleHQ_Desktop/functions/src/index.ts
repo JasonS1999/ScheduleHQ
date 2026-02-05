@@ -1314,6 +1314,54 @@ function detectCsvFormat(row: Record<string, string>): CsvFormat {
 }
 
 /**
+ * Parse "End Time" column value (e.g., "5:00", "13:00", "25:00")
+ * Returns hour in 0-23 range (values >= 24 are normalized by subtracting 24)
+ */
+function parseEndTimeHour(value: string): number {
+  if (!value) return -1;
+  const cleaned = value.trim();
+  // Match H:MM or HH:MM format
+  const match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return -1;
+  
+  let hour = parseInt(match[1], 10);
+  // Normalize hours past midnight (25:00 → 1, 26:00 → 2, etc.)
+  if (hour >= 24) {
+    hour = hour - 24;
+  }
+  return hour;
+}
+
+/**
+ * Check if a CSV row is a "total" row that should be skipped
+ */
+function isTotalRow(row: Record<string, string>): boolean {
+  const loc = getColumn(row, "Loc").toLowerCase();
+  const endTime = getColumn(row, "End Time").toLowerCase();
+  return loc === "total" || endTime === "total";
+}
+
+/**
+ * Check if all metric columns in a row are zero/empty
+ * @param row CSV row to check
+ * @returns true if all metrics are zero and row should be skipped
+ */
+function isAllZeroRow(row: Record<string, string>): boolean {
+  const metrics = [
+    parseNumber(getColumn(row, "All Net Sales")),
+    parseNumber(getColumn(row, "STW GC")),
+    parseNumber(getColumn(row, "OEPE")),
+    parseNumber(getColumn(row, "KVS Time Per Item")),
+    parseNumber(getColumn(row, "KVS Healthy Usage")),
+    parseNumber(getColumn(row, "DT Pull Forward %")),
+    parseNumber(getColumn(row, "Punch Labor")),
+    parseNumber(getColumn(row, "TPPH")),
+    parseNumber(getColumn(row, "R2P")),
+  ];
+  return metrics.every(m => m === 0);
+}
+
+/**
  * Triggered when a CSV file is uploaded to shift_manager_imports/
  * Parses the CSV, matches manager names to employees, and saves to Firestore.
  */
