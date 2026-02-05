@@ -13,8 +13,19 @@ enum DateRangeType: String, CaseIterable, Identifiable {
     case day = "Day"
     case week = "Week"
     case month = "Month"
+    case quarter = "Quarter"
     
     var id: String { rawValue }
+    
+    /// Date range types available for the Leaderboard view (Month, Quarter only)
+    static var leaderboardCases: [DateRangeType] {
+        [.month, .quarter]
+    }
+    
+    /// Date range types available for My Metrics view (Day, Week, Month, Quarter)
+    static var myMetricsCases: [DateRangeType] {
+        [.day, .week, .month, .quarter]
+    }
 }
 
 // MARK: - Leaderboard Metric

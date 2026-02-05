@@ -26,7 +26,7 @@ final class LeaderboardManager: ObservableObject {
     
     // MARK: - Filters
     
-    @Published var selectedDateRangeType: DateRangeType = .week
+    @Published var selectedDateRangeType: DateRangeType = .month
     @Published var selectedDate: Date = Date()
     @Published var selectedTimeSlice: TimeSlice = .all
     @Published var selectedMetric: LeaderboardMetric = .oepe
@@ -57,6 +57,24 @@ final class LeaderboardManager: ObservableObject {
             let firstOfMonth = calendar.date(from: components) ?? selectedDate
             let lastOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: firstOfMonth) ?? selectedDate
             return (calendar.startOfDay(for: firstOfMonth), calendar.startOfDay(for: lastOfMonth))
+            
+        case .quarter:
+            // Quarters: Q1 (Jan-Mar), Q2 (Apr-Jun), Q3 (Jul-Sep), Q4 (Oct-Dec)
+            let components = calendar.dateComponents([.year, .month], from: selectedDate)
+            let month = components.month ?? 1
+            let year = components.year ?? 2024
+            
+            // Determine quarter start month (1, 4, 7, or 10)
+            let quarterStartMonth = ((month - 1) / 3) * 3 + 1
+            
+            var startComponents = DateComponents()
+            startComponents.year = year
+            startComponents.month = quarterStartMonth
+            startComponents.day = 1
+            
+            let firstOfQuarter = calendar.date(from: startComponents) ?? selectedDate
+            let lastOfQuarter = calendar.date(byAdding: DateComponents(month: 3, day: -1), to: firstOfQuarter) ?? selectedDate
+            return (calendar.startOfDay(for: firstOfQuarter), calendar.startOfDay(for: lastOfQuarter))
         }
     }
     
@@ -79,6 +97,13 @@ final class LeaderboardManager: ObservableObject {
         case .month:
             formatter.dateFormat = "MMMM yyyy"
             return formatter.string(from: start)
+            
+        case .quarter:
+            let calendar = Calendar.current
+            let month = calendar.component(.month, from: start)
+            let year = calendar.component(.year, from: start)
+            let quarterNumber = ((month - 1) / 3) + 1
+            return "Q\(quarterNumber) \(year)"
         }
     }
     
@@ -92,6 +117,8 @@ final class LeaderboardManager: ObservableObject {
             selectedDate = calendar.date(byAdding: .weekOfYear, value: -1, to: selectedDate) ?? selectedDate
         case .month:
             selectedDate = calendar.date(byAdding: .month, value: -1, to: selectedDate) ?? selectedDate
+        case .quarter:
+            selectedDate = calendar.date(byAdding: .month, value: -3, to: selectedDate) ?? selectedDate
         }
     }
     
@@ -105,6 +132,8 @@ final class LeaderboardManager: ObservableObject {
             selectedDate = calendar.date(byAdding: .weekOfYear, value: 1, to: selectedDate) ?? selectedDate
         case .month:
             selectedDate = calendar.date(byAdding: .month, value: 1, to: selectedDate) ?? selectedDate
+        case .quarter:
+            selectedDate = calendar.date(byAdding: .month, value: 3, to: selectedDate) ?? selectedDate
         }
     }
     

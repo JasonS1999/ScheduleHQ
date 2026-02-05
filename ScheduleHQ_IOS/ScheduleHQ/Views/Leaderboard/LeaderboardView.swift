@@ -85,16 +85,28 @@ struct LeaderboardView: View {
                 // Re-aggregate with new time slice filter
                 leaderboardManager.recomputeAggregation()
             }
+            .onChange(of: selectedTab) { _ in
+                // When switching tabs, ensure date range type is valid for the new view
+                let validRanges = selectedTab == 0 ? DateRangeType.myMetricsCases : DateRangeType.leaderboardCases
+                if !validRanges.contains(leaderboardManager.selectedDateRangeType) {
+                    leaderboardManager.selectedDateRangeType = validRanges.first ?? .month
+                }
+            }
         }
     }
     
     // MARK: - Filters Section
     
+    /// Get the available date range types based on the current view
+    private var availableDateRangeTypes: [DateRangeType] {
+        selectedTab == 0 ? DateRangeType.myMetricsCases : DateRangeType.leaderboardCases
+    }
+    
     private var filtersSection: some View {
         VStack(spacing: AppTheme.Spacing.md) {
             // Date range type picker
             Picker("Range", selection: $leaderboardManager.selectedDateRangeType) {
-                ForEach(DateRangeType.allCases) { rangeType in
+                ForEach(availableDateRangeTypes) { rangeType in
                     Text(rangeType.rawValue).tag(rangeType)
                 }
             }
