@@ -181,35 +181,36 @@ struct LeaderboardView: View {
                     
                     // Metric picker (leaderboard only)
                     if selectedTab == 1 {
-                    Menu {
-                        ForEach(LeaderboardMetric.allCases) { metric in
-                            Button {
-                                leaderboardManager.selectedMetric = metric
-                            } label: {
-                                HStack {
-                                    Text(metric.displayName)
-                                    if leaderboardManager.selectedMetric == metric {
-                                        Image(systemName: "checkmark")
+                        Menu {
+                            ForEach(LeaderboardMetric.allCases) { metric in
+                                Button {
+                                    leaderboardManager.selectedMetric = metric
+                                } label: {
+                                    HStack {
+                                        Text(metric.displayName)
+                                        if leaderboardManager.selectedMetric == metric {
+                                            Image(systemName: "checkmark")
+                                        }
                                     }
                                 }
                             }
+                        } label: {
+                            HStack(spacing: AppTheme.Spacing.xs) {
+                                Image(systemName: "chart.bar")
+                                    .font(.system(size: 12))
+                                Text(leaderboardManager.selectedMetric.displayName)
+                                    .font(AppTheme.Typography.caption)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10))
+                            }
+                            .padding(.horizontal, AppTheme.Spacing.md)
+                            .padding(.vertical, AppTheme.Spacing.sm)
+                            .background(
+                                Capsule()
+                                    .fill(AppTheme.Colors.backgroundSecondary)
+                            )
+                            .foregroundStyle(AppTheme.Colors.textPrimary)
                         }
-                    } label: {
-                        HStack(spacing: AppTheme.Spacing.xs) {
-                            Image(systemName: "chart.bar")
-                                .font(.system(size: 12))
-                            Text(leaderboardManager.selectedMetric.displayName)
-                                .font(AppTheme.Typography.caption)
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10))
-                        }
-                        .padding(.horizontal, AppTheme.Spacing.md)
-                        .padding(.vertical, AppTheme.Spacing.sm)
-                        .background(
-                            Capsule()
-                                .fill(AppTheme.Colors.backgroundSecondary)
-                        )
-                        .foregroundStyle(AppTheme.Colors.textPrimary)
                     }
                     
                     Spacer()
