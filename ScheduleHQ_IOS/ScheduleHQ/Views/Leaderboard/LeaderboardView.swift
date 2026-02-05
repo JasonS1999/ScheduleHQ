@@ -144,8 +144,8 @@ struct LeaderboardView: View {
             }
             .padding(.horizontal, AppTheme.Spacing.xl)
             
-            // Time slice and metric filters (leaderboard mode only)
-            if selectedTab == 1 {
+            // Time slice filter (leaderboard mode OR My Metrics Day view)
+            if selectedTab == 1 || (selectedTab == 0 && leaderboardManager.selectedDateRangeType == .day) {
                 HStack(spacing: AppTheme.Spacing.md) {
                     // Time slice picker
                     Menu {
@@ -179,7 +179,8 @@ struct LeaderboardView: View {
                         .foregroundStyle(AppTheme.Colors.textPrimary)
                     }
                     
-                    // Metric picker
+                    // Metric picker (leaderboard only)
+                    if selectedTab == 1 {
                     Menu {
                         ForEach(LeaderboardMetric.allCases) { metric in
                             Button {

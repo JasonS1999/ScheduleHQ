@@ -38,7 +38,14 @@ enum LeaderboardMetric: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    var displayName: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .kvsHealthyUsage:
+            return "Side 2 %"
+        default:
+            return rawValue
+        }
+    }
     
     /// True if lower values are better (sort ascending), false if higher is better (sort descending)
     var sortAscending: Bool {
