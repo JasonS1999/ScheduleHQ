@@ -291,19 +291,20 @@ final class LeaderboardManager: ObservableObject {
         let shiftLabel = data["shiftLabel"] as? String ?? ""
         let shiftType = data["shiftType"] as? String ?? ""
         
-        // Try to get employeeId from entry data first, then fall back to shiftRunners
+        // Initialize from entry data (may be incorrect/missing)
         var employeeId = data["employeeId"] as? Int
         var employeeUid = data["employeeUid"] as? String
         
+        print("LeaderboardManager: Parsing entry - shiftType='\(shiftType)', shiftLabel='\(shiftLabel)', entry.employeeId=\(employeeId ?? -1)")
+        
         // Look up from shiftRunners using shiftType (e.g., "open", "close")
+        // ALWAYS prefer shiftRunners data since it has the correct employee linkage
         if let runner = shiftRunners[shiftType.lowercased()] {
-            // Use shiftRunner data if entry doesn't have it
-            if employeeId == nil || employeeId == 0 {
-                employeeId = runner.employeeId
-            }
-            if employeeUid == nil || employeeUid?.isEmpty == true {
-                employeeUid = runner.employeeUid
-            }
+            print("LeaderboardManager: Found matching runner - using employeeId=\(runner.employeeId), uid=\(runner.employeeUid ?? "nil")")
+            employeeId = runner.employeeId
+            employeeUid = runner.employeeUid
+        } else {
+            print("LeaderboardManager: No runner found for shiftType='\(shiftType.lowercased())'. Available runners: \(shiftRunners.keys.joined(separator: ", "))")
         }
         
         // Require at least employeeId to create an entry
