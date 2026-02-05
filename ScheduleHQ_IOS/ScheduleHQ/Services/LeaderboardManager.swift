@@ -195,14 +195,16 @@ final class LeaderboardManager: ObservableObject {
             }
             
             var types: [ShiftType] = [.all]
-            for typeData in shiftTypesData {
-                if let id = typeData["id"] as? Int,
-                   let key = typeData["key"] as? String,
+            for (index, typeData) in shiftTypesData.enumerated() {
+                // key and label are required, id is optional (default to index)
+                if let key = typeData["key"] as? String,
                    let label = typeData["label"] as? String {
+                    let id = typeData["id"] as? Int ?? index
                     types.append(ShiftType(id: id, key: key, label: label))
                 }
             }
             shiftTypes = types
+            print("LeaderboardManager: Loaded \(types.count - 1) shift types: \(types.map { $0.label })")
             
         } catch {
             print("LeaderboardManager: Error fetching shift types: \(error)")

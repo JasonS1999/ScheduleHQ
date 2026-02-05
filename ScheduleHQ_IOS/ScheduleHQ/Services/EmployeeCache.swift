@@ -84,6 +84,9 @@ final class EmployeeCache: ObservableObject {
             var cacheById: [Int: Employee] = [:]
             
             for document in snapshot.documents {
+                let rawData = document.data()
+                print("EmployeeCache: Parsing \(document.documentID) - localId: \(rawData["localId"] ?? "nil"), id: \(rawData["id"] ?? "nil"), name: \(rawData["name"] ?? "nil")")
+                
                 if let employee = try? document.data(as: Employee.self) {
                     // Cache by UID if available
                     if let uid = employee.uid {
@@ -92,6 +95,10 @@ final class EmployeeCache: ObservableObject {
                     // Cache by local ID if available
                     if let id = employee.id {
                         cacheById[id] = employee
+                    } else if let docIdInt = Int(document.documentID) {
+                        // Fallback: use document ID as local ID if id/localId fields are nil
+                        cacheById[docIdInt] = employee
+                        print("EmployeeCache: Using document ID \(docIdInt) as local ID for \(employee.name)")
                     }
                 }
             }
