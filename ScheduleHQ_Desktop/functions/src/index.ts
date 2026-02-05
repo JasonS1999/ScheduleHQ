@@ -1656,103 +1656,158 @@ export const processShiftManagerCSV = onObjectFinalized(
       const managerUid = settingsSnapshot.docs[0].id;
       logger.log(`Found manager ${managerUid} for store ${location}`);
 
-      // Get all employees for this manager
-      const employeesSnapshot = await db
-        .collection("managers")
-        .doc(managerUid)
-        .collection("employees")
-        .get();
-
-      // Build employee lookup map by name field (case-insensitive)
-      const employeeMap = new Map<string, { id: number; name: string }>();
-      
-      employeesSnapshot.forEach((doc) => {
-        const data = doc.data();
-        const name = (data.name || "").toLowerCase().trim();
-        const localId = data.localId || parseInt(doc.id) || 0;
-        
-        if (name) {
-          // Key format: "firstname lastname" (lowercase)
-          employeeMap.set(name, { id: localId, name: data.name });
-        }
-      });
-
-      logger.log(`Loaded ${employeeMap.size} employees for matching`);
-
       // Extract date from filename
       const reportDate = extractDateFromFilename(filename);
 
-      // Process each row
-      const matchedEntries: ShiftManagerEntry[] = [];
-      let unmatchedCount = 0;
+      // Detect CSV format and process accordingly
+      const csvFormat = detectCsvFormat(records[0] || {});
+      logger.log(`Detected CSV format: ${csvFormat}`);
 
-      for (const row of records) {
-        const managerName = getColumn(row, "Manager Name");
+      if (csvFormat === "hourly") {
+        // =========================================
+        // HOURLY FORMAT: Aggregate by shift type
+        // =========================================
         
-        // Normalize "LastName, FirstName" → "FirstName LastName"
-        const normalizedName = normalizeManagerName(managerName);
-
-        if (!normalizedName) {
-          logger.warn(`Could not parse manager name: "${managerName}"`);
-          unmatchedCount++;
-          continue;
+        // Get shiftTypes from manager settings
+        const settingsData = settingsSnapshot.docs[0].data();
+        const shiftTypes: ShiftType[] = settingsData.shiftTypes || [];
+        
+        if (shiftTypes.length === 0) {
+          logger.error("No shiftTypes configured for manager. Cannot aggregate hourly data.");
+          await file.delete();
+          return;
         }
 
-        // Look up employee by normalized name (case-insensitive)
-        const lookupKey = normalizedName.toLowerCase();
-        const employee = employeeMap.get(lookupKey);
+        logger.log(`Found ${shiftTypes.length} shift types: ${shiftTypes.map(s => s.key).join(", ")}`);
 
-        if (!employee) {
-          logger.warn(`No employee match for: "${managerName}" → "${normalizedName}" (key: ${lookupKey})`);
-          unmatchedCount++;
-          continue;
+        // Aggregate hourly data by shift type
+        const aggregatedBuckets = aggregateHourlyData(records, shiftTypes);
+        
+        // Build entries with runner info
+        const hourlyEntries = await buildHourlySummaryEntries(aggregatedBuckets, managerUid, reportDate);
+
+        logger.log(`Created ${hourlyEntries.length} shift-aggregated entries`);
+
+        // Save to Firestore
+        if (hourlyEntries.length > 0) {
+          const reportRef = db
+            .collection("managers")
+            .doc(managerUid)
+            .collection("shiftManagerReports")
+            .doc(reportDate);
+
+          await reportRef.set({
+            importedAt: admin.firestore.FieldValue.serverTimestamp(),
+            fileName: filename,
+            location: location,
+            reportDate: reportDate,
+            format: "hourly",
+            totalEntries: hourlyEntries.length,
+            entries: hourlyEntries,
+          });
+
+          logger.log(`Saved hourly report to Firestore: managers/${managerUid}/shiftManagerReports/${reportDate}`);
+        } else {
+          logger.warn("No shift-aggregated entries to save");
         }
 
-        // Create entry using flexible column matching
-        const entry: ShiftManagerEntry = {
-          employeeId: employee.id,
-          managerName: employee.name, // Use the employee's actual name from Firestore
-          timeSlice: getColumn(row, "Time Slice"),
-          allNetSales: parseNumber(getColumn(row, "All Net Sales")),
-          numberOfShifts: parseNumber(getColumn(row, "# of Shifts")),
-          gc: parseNumber(getColumn(row, "GC")),
-          dtPulledForwardPct: parseNumber(getColumn(row, "DT Pulled Forward %")),
-          kvsHealthyUsage: parseNumber(getColumn(row, "KVS Healthy Usage")),
-          oepe: parseNumber(getColumn(row, "OEPE")),
-          punchLaborPct: parseNumber(getColumn(row, "Punch Labor %")),
-          dtGc: parseNumber(getColumn(row, "DT GC")),
-          tpph: parseNumber(getColumn(row, "TPPH")),
-          averageCheck: parseNumber(getColumn(row, "Average Check")),
-          actVsNeed: parseNumber(getColumn(row, "Act vs Need")),
-          r2p: parseNumber(getColumn(row, "R2P")),
-        };
+      } else {
+        // =========================================
+        // MANAGER FORMAT: Original per-manager logic
+        // =========================================
 
-        matchedEntries.push(entry);
-      }
-
-      logger.log(`Matched ${matchedEntries.length} entries, ${unmatchedCount} unmatched`);
-
-      // Save to Firestore
-      if (matchedEntries.length > 0) {
-        const reportRef = db
+        // Get all employees for this manager
+        const employeesSnapshot = await db
           .collection("managers")
           .doc(managerUid)
-          .collection("shiftManagerReports")
-          .doc(reportDate);
+          .collection("employees")
+          .get();
 
-        await reportRef.set({
-          importedAt: admin.firestore.FieldValue.serverTimestamp(),
-          fileName: filename,
-          location: location, // Store location from CSV lookup
-          reportDate: reportDate,
-          totalEntries: matchedEntries.length,
-          unmatchedEntries: unmatchedCount,
-          entries: matchedEntries,
+        // Build employee lookup map by name field (case-insensitive)
+        const employeeMap = new Map<string, { id: number; name: string }>();
+        
+        employeesSnapshot.forEach((doc) => {
+          const data = doc.data();
+          const name = (data.name || "").toLowerCase().trim();
+          const localId = data.localId || parseInt(doc.id) || 0;
+          
+          if (name) {
+            employeeMap.set(name, { id: localId, name: data.name });
+          }
         });
 
-        logger.log(`Saved report to Firestore: managers/${managerUid}/shiftManagerReports/${reportDate}`);
-      } else {
-        logger.warn("No matched entries to save");
+        logger.log(`Loaded ${employeeMap.size} employees for matching`);
+
+        // Process each row
+        const matchedEntries: ShiftManagerEntry[] = [];
+        let unmatchedCount = 0;
+
+        for (const row of records) {
+          const managerName = getColumn(row, "Manager Name");
+          
+          const normalizedName = normalizeManagerName(managerName);
+
+          if (!normalizedName) {
+            logger.warn(`Could not parse manager name: "${managerName}"`);
+            unmatchedCount++;
+            continue;
+          }
+
+          const lookupKey = normalizedName.toLowerCase();
+          const employee = employeeMap.get(lookupKey);
+
+          if (!employee) {
+            logger.warn(`No employee match for: "${managerName}" → "${normalizedName}" (key: ${lookupKey})`);
+            unmatchedCount++;
+            continue;
+          }
+
+          const entry: ShiftManagerEntry = {
+            employeeId: employee.id,
+            managerName: employee.name,
+            timeSlice: getColumn(row, "Time Slice"),
+            allNetSales: parseNumber(getColumn(row, "All Net Sales")),
+            numberOfShifts: parseNumber(getColumn(row, "# of Shifts")),
+            gc: parseNumber(getColumn(row, "GC")),
+            dtPulledForwardPct: parseNumber(getColumn(row, "DT Pulled Forward %")),
+            kvsHealthyUsage: parseNumber(getColumn(row, "KVS Healthy Usage")),
+            oepe: parseNumber(getColumn(row, "OEPE")),
+            punchLaborPct: parseNumber(getColumn(row, "Punch Labor %")),
+            dtGc: parseNumber(getColumn(row, "DT GC")),
+            tpph: parseNumber(getColumn(row, "TPPH")),
+            averageCheck: parseNumber(getColumn(row, "Average Check")),
+            actVsNeed: parseNumber(getColumn(row, "Act vs Need")),
+            r2p: parseNumber(getColumn(row, "R2P")),
+          };
+
+          matchedEntries.push(entry);
+        }
+
+        logger.log(`Matched ${matchedEntries.length} entries, ${unmatchedCount} unmatched`);
+
+        // Save to Firestore
+        if (matchedEntries.length > 0) {
+          const reportRef = db
+            .collection("managers")
+            .doc(managerUid)
+            .collection("shiftManagerReports")
+            .doc(reportDate);
+
+          await reportRef.set({
+            importedAt: admin.firestore.FieldValue.serverTimestamp(),
+            fileName: filename,
+            location: location,
+            reportDate: reportDate,
+            format: "manager",
+            totalEntries: matchedEntries.length,
+            unmatchedEntries: unmatchedCount,
+            entries: matchedEntries,
+          });
+
+          logger.log(`Saved manager report to Firestore: managers/${managerUid}/shiftManagerReports/${reportDate}`);
+        } else {
+          logger.warn("No matched entries to save");
+        }
       }
 
       // Delete processed file from Storage
