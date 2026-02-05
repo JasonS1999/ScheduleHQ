@@ -1362,6 +1362,50 @@ function isAllZeroRow(row: Record<string, string>): boolean {
 }
 
 /**
+ * Parse time string "HH:mm" to minutes since midnight
+ */
+function parseTimeToMinutes(timeStr: string): number {
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return 0;
+  return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+}
+
+/**
+ * Determine which shift type an hour belongs to based on shift ranges
+ * The "end time" in CSV represents the END of that hour's data
+ * e.g., "6:00" means data from 5:00-6:00, so we use hour-1 for matching
+ * 
+ * @param endTimeHour The hour from "End Time" column (already normalized 0-23)
+ * @param shiftTypes Array of shift type definitions with rangeStart/rangeEnd
+ * @returns The matching shift type key, or null if no match
+ */
+function getShiftTypeForHour(endTimeHour: number, shiftTypes: ShiftType[]): ShiftType | null {
+  // End Time represents end of the hour bucket, so 6:00 means the 5:00-5:59 period
+  // Use endTimeHour - 1 to get the actual hour the data represents
+  const dataHour = endTimeHour === 0 ? 23 : endTimeHour - 1;
+  const dataMinutes = dataHour * 60;
+
+  for (const st of shiftTypes) {
+    const rangeStart = parseTimeToMinutes(st.rangeStart);
+    let rangeEnd = parseTimeToMinutes(st.rangeEnd);
+
+    // Handle overnight ranges (e.g., 20:00 to 01:00)
+    if (rangeEnd <= rangeStart) {
+      // Overnight shift: either dataMinutes >= rangeStart OR dataMinutes < rangeEnd
+      if (dataMinutes >= rangeStart || dataMinutes < rangeEnd) {
+        return st;
+      }
+    } else {
+      // Normal daytime shift
+      if (dataMinutes >= rangeStart && dataMinutes < rangeEnd) {
+        return st;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Triggered when a CSV file is uploaded to shift_manager_imports/
  * Parses the CSV, matches manager names to employees, and saves to Firestore.
  */
