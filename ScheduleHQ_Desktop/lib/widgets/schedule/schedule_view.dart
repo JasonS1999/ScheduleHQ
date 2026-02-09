@@ -462,27 +462,21 @@ class _ScheduleViewState extends State<ScheduleView> {
     }
   }
 
-  Future<void> _handleWeekAction(String action) async {
-    // Get current week start (Sunday)
-    final weekStart = _date.subtract(Duration(days: _date.weekday % 7));
-    final weekStartDate = DateTime(
-      weekStart.year,
-      weekStart.month,
-      weekStart.day,
-    );
+  Future<void> _handleMonthAction(String action) async {
+    final monthStart = DateTime(_date.year, _date.month, 1);
 
-    if (action == 'copyWeekToNext') {
-      final nextWeekStart = weekStartDate.add(const Duration(days: 7));
-      await _copyWeekTo(weekStartDate, nextWeekStart);
-    } else if (action == 'copyWeekToDate') {
-      final targetDate = await _showWeekPicker(context, weekStartDate);
-      if (targetDate != null) {
-        await _copyWeekTo(weekStartDate, targetDate);
+    if (action == 'copyMonthToNext') {
+      final nextMonthStart = DateTime(_date.year, _date.month + 1, 1);
+      await _copyMonthTo(monthStart, nextMonthStart);
+    } else if (action == 'copyMonthToDate') {
+      final targetMonth = await _showMonthPicker(context, monthStart);
+      if (targetMonth != null) {
+        await _copyMonthTo(monthStart, targetMonth);
       }
-    } else if (action == 'clearWeek') {
-      await _clearWeek(weekStartDate);
+    } else if (action == 'clearMonth') {
+      await _clearMonth(monthStart);
     } else if (action == 'autoFillFromTemplates') {
-      await _autoFillFromTemplates(weekStartDate);
+      await _autoFillFromTemplates(monthStart);
     }
   }
 
@@ -510,32 +504,42 @@ class _ScheduleViewState extends State<ScheduleView> {
     }
   }
 
-  Future<void> _copyWeekTo(
-    DateTime sourceWeekStart,
-    DateTime targetWeekStart,
+  Future<void> _copyMonthTo(
+    DateTime sourceMonthStart,
+    DateTime targetMonthStart,
   ) async {
-    // Get all shifts from source week
-    final sourceShifts = await _shiftDao.getByWeek(sourceWeekStart);
+    final sourceMonthEnd = DateTime(sourceMonthStart.year, sourceMonthStart.month + 1, 0);
+    final targetMonthEnd = DateTime(targetMonthStart.year, targetMonthStart.month + 1, 0);
+
+    // Get all shifts from source month
+    final sourceShifts = await _shiftDao.getByDateRange(
+      sourceMonthStart,
+      sourceMonthEnd.add(const Duration(days: 1)),
+    );
 
     if (sourceShifts.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No shifts to copy from this week')),
+          const SnackBar(content: Text('No shifts to copy from this month')),
         );
       }
       return;
     }
+
+    final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final sourceName = '${monthNames[sourceMonthStart.month - 1]} ${sourceMonthStart.year}';
+    final targetName = '${monthNames[targetMonthStart.month - 1]} ${targetMonthStart.year}';
 
     // Confirm the copy
     if (!mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Copy Week'),
+        title: const Text('Copy Month'),
         content: Text(
-          'Copy ${sourceShifts.length} shift(s) from week of '
-          '${sourceWeekStart.month}/${sourceWeekStart.day} '
-          'to week of ${targetWeekStart.month}/${targetWeekStart.day}?',
+          'Copy ${sourceShifts.length} shift(s) from $sourceName to $targetName?\n\n'
+          'Shifts on days that don\'t exist in the target month will be skipped.',
         ),
         actions: [
           TextButton(
@@ -552,48 +556,55 @@ class _ScheduleViewState extends State<ScheduleView> {
 
     if (confirm != true) return;
 
-    // Calculate the offset between weeks
-    final dayOffset = targetWeekStart.difference(sourceWeekStart).inDays;
+    // Create new shifts for the target month
+    final newShifts = <Shift>[];
+    for (final s in sourceShifts) {
+      final sourceDay = s.startTime.day;
+      // Skip if the target month doesn't have this day
+      if (sourceDay > targetMonthEnd.day) continue;
 
-    // Create new shifts for the target week
-    final newShifts = sourceShifts.map((s) {
-      return Shift(
+      final dayOffset = DateTime(targetMonthStart.year, targetMonthStart.month, sourceDay)
+          .difference(DateTime(sourceMonthStart.year, sourceMonthStart.month, sourceDay))
+          .inDays;
+
+      newShifts.add(Shift(
         employeeId: s.employeeId,
         startTime: s.startTime.add(Duration(days: dayOffset)),
         endTime: s.endTime.add(Duration(days: dayOffset)),
         label: s.label,
         notes: s.notes,
-      );
-    }).toList();
+      ));
+    }
 
     // Insert all new shifts
     await _shiftDao.insertAll(newShifts);
 
-    // Navigate to target week and refresh
+    // Navigate to target month and refresh
     setState(() {
-      _date = targetWeekStart;
+      _date = targetMonthStart;
     });
     await _refreshShifts();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Copied ${newShifts.length} shift(s) to new week'),
+          content: Text('Copied ${newShifts.length} shift(s) to $targetName'),
         ),
       );
     }
   }
 
-  Future<void> _clearWeek(DateTime weekStart) async {
-    final weekEnd = weekStart.add(const Duration(days: 7));
+  Future<void> _clearMonth(DateTime monthStart) async {
+    final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
+    final monthEndExclusive = monthEnd.add(const Duration(days: 1));
 
     // Count shifts to clear
-    final shifts = await _shiftDao.getByWeek(weekStart);
+    final shifts = await _shiftDao.getByDateRange(monthStart, monthEndExclusive);
 
     if (shifts.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No shifts to clear in this week')),
+          const SnackBar(content: Text('No shifts to clear in this month')),
         );
       }
       return;
@@ -608,11 +619,11 @@ class _ScheduleViewState extends State<ScheduleView> {
           children: [
             Icon(Icons.warning, color: Colors.red),
             SizedBox(width: 8),
-            Text('Clear Week'),
+            Text('Clear Month'),
           ],
         ),
         content: Text(
-          'Are you sure you want to delete ${shifts.length} shift(s) from this week?\n\n'
+          'Are you sure you want to delete ${shifts.length} shift(s) from this month?\n\n'
           'This action cannot be undone.',
         ),
         actions: [
@@ -631,41 +642,97 @@ class _ScheduleViewState extends State<ScheduleView> {
 
     if (confirm != true) return;
 
-    // Delete all shifts in the week
-    await _shiftDao.deleteByDateRange(weekStart, weekEnd);
+    // Delete all shifts in the month
+    await _shiftDao.deleteByDateRange(monthStart, monthEndExclusive);
     await _refreshShifts();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Cleared ${shifts.length} shift(s) from this week'),
+          content: Text('Cleared ${shifts.length} shift(s) from this month'),
         ),
       );
     }
   }
 
-  Future<DateTime?> _showWeekPicker(
+  Future<DateTime?> _showMonthPicker(
     BuildContext context,
-    DateTime currentWeek,
+    DateTime currentMonth,
   ) async {
-    return showDatePicker(
+    final monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                         'July', 'August', 'September', 'October', 'November', 'December'];
+    int selectedYear = currentMonth.year;
+    int selectedMonth = currentMonth.month;
+
+    // Move to next month as default
+    selectedMonth++;
+    if (selectedMonth > 12) {
+      selectedMonth = 1;
+      selectedYear++;
+    }
+
+    return showDialog<DateTime>(
       context: context,
-      initialDate: currentWeek.add(const Duration(days: 7)),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-      helpText: 'Select the start of the target week (any day in the week)',
-    ).then((selected) {
-      if (selected != null) {
-        // Normalize to Sunday of that week
-        return selected.subtract(Duration(days: selected.weekday % 7));
-      }
-      return null;
-    });
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Target Month'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: () => setDialogState(() => selectedYear--),
+                      ),
+                      Text('$selectedYear', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: () => setDialogState(() => selectedYear++),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(12, (i) {
+                      final month = i + 1;
+                      final isSelected = month == selectedMonth;
+                      return ChoiceChip(
+                        label: Text(monthNames[i].substring(0, 3)),
+                        selected: isSelected,
+                        onSelected: (_) => setDialogState(() => selectedMonth = month),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, DateTime(selectedYear, selectedMonth, 1)),
+                  child: const Text('Select'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   final WeeklyTemplateDao _weeklyTemplateDao = WeeklyTemplateDao();
 
-  Future<void> _autoFillFromTemplates(DateTime weekStart) async {
+  Future<void> _autoFillFromTemplates(DateTime monthStart) async {
+    final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
+
     // Get employees who have weekly templates
     final employeeIdsWithTemplates = await _weeklyTemplateDao
         .getEmployeeIdsWithTemplates();
@@ -710,7 +777,7 @@ class _ScheduleViewState extends State<ScheduleView> {
       builder: (ctx) => _AutoFillFromWeeklyTemplatesDialog(
         employees: employeesWithTemplates,
         weeklyTemplateDao: _weeklyTemplateDao,
-        weekStart: weekStart,
+        weekStart: monthStart,
       ),
     );
 
@@ -743,12 +810,16 @@ class _ScheduleViewState extends State<ScheduleView> {
     for (final employeeId in selectedEmployeeIds) {
       final employeeTemplates = templates[employeeId] ?? [];
 
-      for (final template in employeeTemplates) {
-        // Skip blank days (no shift and not marked as OFF)
-        if (template.isBlank) continue;
-
-        final dayIndex = template.dayOfWeek;
-        final day = weekStart.add(Duration(days: dayIndex));
+      // Iterate every day in the month and apply the matching template entry
+      for (var day = monthStart;
+           !day.isAfter(monthEnd);
+           day = day.add(const Duration(days: 1))) {
+        final dayOfWeek = day.weekday % 7; // 0=Sun, 1=Mon, ..., 6=Sat
+        final template = employeeTemplates.cast<WeeklyTemplateEntry?>().firstWhere(
+          (t) => t!.dayOfWeek == dayOfWeek,
+          orElse: () => null,
+        );
+        if (template == null || template.isBlank) continue;
 
         // Check if employee already has a shift this day
         final existingShifts = _shifts
@@ -862,7 +933,7 @@ class _ScheduleViewState extends State<ScheduleView> {
     await _refreshShifts();
 
     if (mounted) {
-      String message = 'Created $shiftsCreated shift(s) from weekly templates';
+      String message = 'Created $shiftsCreated shift(s) from templates';
       if (shiftsDeleted > 0) {
         message += ', replaced $shiftsDeleted existing shift(s)';
       }
@@ -1051,7 +1122,7 @@ class _ScheduleViewState extends State<ScheduleView> {
         PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'More Options',
-            onSelected: (value) => _handleWeekAction(value),
+            onSelected: (value) => _handleMonthAction(value),
             itemBuilder: (context) => [
               const PopupMenuItem(
                 value: 'autoFillFromTemplates',
@@ -1065,33 +1136,33 @@ class _ScheduleViewState extends State<ScheduleView> {
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
-                value: 'copyWeekToNext',
+                value: 'copyMonthToNext',
                 child: Row(
                   children: [
                     Icon(Icons.content_copy, size: 20),
                     SizedBox(width: 8),
-                    Text('Copy Week to Next Week'),
+                    Text('Copy Month to Next Month'),
                   ],
                 ),
               ),
               const PopupMenuItem(
-                value: 'copyWeekToDate',
+                value: 'copyMonthToDate',
                 child: Row(
                   children: [
                     Icon(Icons.date_range, size: 20),
                     SizedBox(width: 8),
-                    Text('Copy Week to Date...'),
+                    Text('Copy Month to Date...'),
                   ],
                 ),
               ),
               const PopupMenuItem(
-                value: 'clearWeek',
+                value: 'clearMonth',
                 child: Row(
                   children: [
                     Icon(Icons.delete_sweep, size: 20, color: Colors.red),
                     SizedBox(width: 8),
                     Text(
-                      'Clear This Week',
+                      'Clear This Month',
                       style: TextStyle(color: Colors.red),
                     ),
                   ],
