@@ -8,6 +8,8 @@ import '../models/pnl_entry.dart';
 import '../models/store_hours.dart';
 import '../services/pnl_calculation_service.dart';
 import '../services/pnl_pdf_service.dart';
+import '../services/app_colors.dart';
+import '../utils/color_helpers.dart';
 
 /// Row edit mode
 enum _EditMode { editable, dollarOnly, percentOnly, readOnly }
@@ -17,10 +19,11 @@ class _RowConfig {
   final _EditMode mode;
   final double? fixedDollar;
   final double? fixedPercent;
-  final double? defaultDollar;  // Default value when creating new period
+  final double? defaultDollar; // Default value when creating new period
   final double? defaultPercent; // Default value when creating new period
   final bool useGoalPercent; // Special case for GOAL row
-  final bool useSalesPercent; // Special case for SALES (ALL NET) = NON-PRODUCT % + 100%
+  final bool
+  useSalesPercent; // Special case for SALES (ALL NET) = NON-PRODUCT % + 100%
 
   const _RowConfig(
     this.mode, {
@@ -34,18 +37,41 @@ class _RowConfig {
 
   // Convenience constructors
   const _RowConfig.editable({double? defaultDollar, double? defaultPercent})
-      : this(_EditMode.editable, defaultDollar: defaultDollar, defaultPercent: defaultPercent);
+    : this(
+        _EditMode.editable,
+        defaultDollar: defaultDollar,
+        defaultPercent: defaultPercent,
+      );
   const _RowConfig.dollarOnly({double? fixedPercent, double? defaultDollar})
-      : this(_EditMode.dollarOnly, fixedPercent: fixedPercent, defaultDollar: defaultDollar);
+    : this(
+        _EditMode.dollarOnly,
+        fixedPercent: fixedPercent,
+        defaultDollar: defaultDollar,
+      );
   const _RowConfig.percentOnly({double? fixedDollar, double? defaultPercent})
-      : this(_EditMode.percentOnly, fixedDollar: fixedDollar, defaultPercent: defaultPercent);
-  const _RowConfig.readOnly({double? fixedDollar, double? fixedPercent, bool useSalesPercent = false})
-      : this(_EditMode.readOnly, fixedDollar: fixedDollar, fixedPercent: fixedPercent, useSalesPercent: useSalesPercent);
+    : this(
+        _EditMode.percentOnly,
+        fixedDollar: fixedDollar,
+        defaultPercent: defaultPercent,
+      );
+  const _RowConfig.readOnly({
+    double? fixedDollar,
+    double? fixedPercent,
+    bool useSalesPercent = false,
+  }) : this(
+         _EditMode.readOnly,
+         fixedDollar: fixedDollar,
+         fixedPercent: fixedPercent,
+         useSalesPercent: useSalesPercent,
+       );
   const _RowConfig.goal() : this(_EditMode.readOnly, useGoalPercent: true);
-  const _RowConfig.salesTotal() : this(_EditMode.dollarOnly, useSalesPercent: true);
+  const _RowConfig.salesTotal()
+    : this(_EditMode.dollarOnly, useSalesPercent: true);
 
-  bool get isDollarEditable => mode == _EditMode.editable || mode == _EditMode.dollarOnly;
-  bool get isPercentEditable => mode == _EditMode.editable || mode == _EditMode.percentOnly;
+  bool get isDollarEditable =>
+      mode == _EditMode.editable || mode == _EditMode.dollarOnly;
+  bool get isPercentEditable =>
+      mode == _EditMode.editable || mode == _EditMode.percentOnly;
 }
 
 class PnlPage extends StatefulWidget {
@@ -66,25 +92,28 @@ class _PnlPageState extends State<PnlPage> {
   // .percentOnly()  - % editable, $ calculated (can add fixedDollar)
   // .readOnly()     - both read-only (can add fixedDollar/fixedPercent)
   // .goal()         - uses special GOAL % lookup
-  
+
   static const _rowConfigs = <String, _RowConfig>{
     // === SALES ===
-    'SALES (ALL NET)': _RowConfig.readOnly(useSalesPercent: true),    // Read-only (entered in header), % = NON-PRODUCT % + 100%
-    'NON-PRODUCT SALES': _RowConfig.percentOnly(),                    // % editable, $ calculated from SALES ALL NET
-    'PRODUCT NET SALES': _RowConfig.readOnly(fixedPercent: 100.0),    // Calculated: SALES ALL NET - NON-PRODUCT, % fixed 100%
-    
+    'SALES (ALL NET)': _RowConfig.readOnly(
+      useSalesPercent: true,
+    ), // Read-only (entered in header), % = NON-PRODUCT % + 100%
+    'NON-PRODUCT SALES':
+        _RowConfig.percentOnly(), // % editable, $ calculated from SALES ALL NET
+    'PRODUCT NET SALES': _RowConfig.readOnly(
+      fixedPercent: 100.0,
+    ), // Calculated: SALES ALL NET - NON-PRODUCT, % fixed 100%
     // === COGS ===
-    'FOOD COST': _RowConfig.percentOnly(),                             // $ editable, % calculated
-    'PAPER COST': _RowConfig.percentOnly(),                            // $ editable, % calculated
-    'GROSS PROFIT': _RowConfig.readOnly(),                            // Calculated: SALES ALL NET - FOOD - PAPER
-    
+    'FOOD COST': _RowConfig.percentOnly(), // $ editable, % calculated
+    'PAPER COST': _RowConfig.percentOnly(), // $ editable, % calculated
+    'GROSS PROFIT':
+        _RowConfig.readOnly(), // Calculated: SALES ALL NET - FOOD - PAPER
     // === LABOR ===
-    'LABOR - MANAGEMENT': _RowConfig.dollarOnly(),                    // $ editable, % calculated
-    'LABOR - CREW': _RowConfig.percentOnly(),                          // $ editable, % calculated
-    'LABOR - TOTAL': _RowConfig.readOnly(),                           // Calculated: MGMT + CREW
-    
+    'LABOR - MANAGEMENT': _RowConfig.dollarOnly(), // $ editable, % calculated
+    'LABOR - CREW': _RowConfig.percentOnly(), // $ editable, % calculated
+    'LABOR - TOTAL': _RowConfig.readOnly(), // Calculated: MGMT + CREW
     // === CONTROLLABLES ===
-    'PAYROLL TAXES': _RowConfig.percentOnly(),                        
+    'PAYROLL TAXES': _RowConfig.percentOnly(),
     'BONUSES': _RowConfig.dollarOnly(),
     'ADVERTISING - CO-OP': _RowConfig.percentOnly(),
     'ADVERTISING - OPNAD': _RowConfig.percentOnly(),
@@ -97,19 +126,29 @@ class _PnlPageState extends State<PnlPage> {
     'UTILITIES': _RowConfig.percentOnly(),
     'CASH +/-': _RowConfig.dollarOnly(),
     'DUES & SUBSCRIPTIONS': _RowConfig.dollarOnly(),
-    'CONTROLLABLES': _RowConfig.readOnly(),                           // Calculated: sum of above
-    
+    'CONTROLLABLES': _RowConfig.readOnly(), // Calculated: sum of above
     // === FINAL ===
-    'P.A.C.': _RowConfig.readOnly(),                                  // Calculated: GROSS PROFIT - LABOR TOTAL - CONTROLLABLES
-    'GOAL': _RowConfig.goal(),                                        // Calculated: uses PAC goal lookup table
+    'P.A.C.':
+        _RowConfig.readOnly(), // Calculated: GROSS PROFIT - LABOR TOTAL - CONTROLLABLES
+    'GOAL': _RowConfig.goal(), // Calculated: uses PAC goal lookup table
   };
 
   // Highlight colors by label
-  static const _yellowRows = {'SALES (ALL NET)', 'GROSS PROFIT', 'LABOR - TOTAL', 'CONTROLLABLES'};
+  static const _yellowRows = {
+    'SALES (ALL NET)',
+    'GROSS PROFIT',
+    'LABOR - TOTAL',
+    'CONTROLLABLES',
+  };
   static const _cyanRows = {'P.A.C.', 'GOAL'};
-  
+
   // Section break rows (thick top border)
-  static const _sectionBreaks = {'FOOD COST', 'LABOR - MANAGEMENT', 'PAYROLL TAXES', 'P.A.C.'};
+  static const _sectionBreaks = {
+    'FOOD COST',
+    'LABOR - MANAGEMENT',
+    'PAYROLL TAXES',
+    'P.A.C.',
+  };
 
   // Labor hours lookup table based on daily sales
   static const _laborHoursTable = <int, int>{
@@ -191,13 +230,15 @@ class _PnlPageState extends State<PnlPage> {
 
     // Update sales controller
     final salesAllNet = _getSalesAllNet();
-    _salesController.text = salesAllNet > 0 ? salesAllNet.toStringAsFixed(2) : '';
-    
+    _salesController.text = salesAllNet > 0
+        ? salesAllNet.toStringAsFixed(2)
+        : '';
+
     final productNetSales = _getProductNetSales();
 
     // Update avgWage controller
-    _avgWageController.text = _currentPeriod!.avgWage > 0 
-        ? _currentPeriod!.avgWage.toStringAsFixed(2) 
+    _avgWageController.text = _currentPeriod!.avgWage > 0
+        ? _currentPeriod!.avgWage.toStringAsFixed(2)
         : '';
 
     // Clear and rebuild controllers
@@ -208,35 +249,51 @@ class _PnlPageState extends State<PnlPage> {
     for (final item in _lineItems) {
       if (item.id != null) {
         final config = _getRowConfig(item);
-        
+
         // Dollar controller - use fixed value or actual value
         final dollarText = config.fixedDollar != null
             ? config.fixedDollar!.toStringAsFixed(2)
             : (item.value != 0 ? item.value.toStringAsFixed(2) : '');
         _valueControllers[item.id!] = TextEditingController(text: dollarText);
-        
+
         // Percent controller - use fixed value, stored %, sales sum, or calculated %
         String percentText;
         if (config.fixedPercent != null) {
           percentText = config.fixedPercent!.toStringAsFixed(1);
         } else if (config.useSalesPercent) {
           // SALES (ALL NET) % = NON-PRODUCT SALES % + 100%
-          final nonProdPercent = _lineItems.firstWhere(
-            (i) => i.label == 'NON-PRODUCT SALES',
-            orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
-          ).percentage;
+          final nonProdPercent = _lineItems
+              .firstWhere(
+                (i) => i.label == 'NON-PRODUCT SALES',
+                orElse: () => PnlLineItem(
+                  periodId: 0,
+                  label: '',
+                  sortOrder: 0,
+                  category: PnlCategory.sales,
+                ),
+              )
+              .percentage;
           percentText = (nonProdPercent + 100.0).toStringAsFixed(1);
         } else if (item.label == 'NON-PRODUCT SALES') {
           // NON-PRODUCT SALES uses stored percentage (this is the editable field)
-          percentText = item.percentage != 0 ? item.percentage.toStringAsFixed(1) : '';
+          percentText = item.percentage != 0
+              ? item.percentage.toStringAsFixed(1)
+              : '';
         } else {
           // Calculate % from PRODUCT NET SALES (the base)
-          percentText = item.value != 0 
-              ? PnlCalculationService.calculatePercentage(item.value, productNetSales).toStringAsFixed(1)
+          percentText = item.value != 0
+              ? PnlCalculationService.calculatePercentage(
+                  item.value,
+                  productNetSales,
+                ).toStringAsFixed(1)
               : '';
         }
-        _percentControllers[item.id!] = TextEditingController(text: percentText);
-        _commentControllers[item.id!] = TextEditingController(text: item.comment);
+        _percentControllers[item.id!] = TextEditingController(
+          text: percentText,
+        );
+        _commentControllers[item.id!] = TextEditingController(
+          text: item.comment,
+        );
       }
     }
 
@@ -257,13 +314,20 @@ class _PnlPageState extends State<PnlPage> {
       return const _RowConfig.dollarOnly();
     }
     // Default: calculated items are read-only, others are dollarOnly
-    return item.isCalculated ? const _RowConfig.readOnly() : const _RowConfig.dollarOnly();
+    return item.isCalculated
+        ? const _RowConfig.readOnly()
+        : const _RowConfig.dollarOnly();
   }
 
   double _getSalesAllNet() {
     final item = _lineItems.firstWhere(
       (i) => i.label == 'SALES (ALL NET)',
-      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+      orElse: () => PnlLineItem(
+        periodId: 0,
+        label: '',
+        sortOrder: 0,
+        category: PnlCategory.sales,
+      ),
     );
     return item.value;
   }
@@ -271,7 +335,12 @@ class _PnlPageState extends State<PnlPage> {
   double _getProductNetSales() {
     final item = _lineItems.firstWhere(
       (i) => i.label == 'PRODUCT NET SALES',
-      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+      orElse: () => PnlLineItem(
+        periodId: 0,
+        label: '',
+        sortOrder: 0,
+        category: PnlCategory.sales,
+      ),
     );
     return item.value;
   }
@@ -279,7 +348,12 @@ class _PnlPageState extends State<PnlPage> {
   double _getNonProductSalesPercent() {
     final item = _lineItems.firstWhere(
       (i) => i.label == 'NON-PRODUCT SALES',
-      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.sales),
+      orElse: () => PnlLineItem(
+        periodId: 0,
+        label: '',
+        sortOrder: 0,
+        category: PnlCategory.sales,
+      ),
     );
     return item.percentage;
   }
@@ -287,7 +361,12 @@ class _PnlPageState extends State<PnlPage> {
   double _getLaborCrewValue() {
     final item = _lineItems.firstWhere(
       (i) => i.label == 'LABOR - CREW',
-      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.labor),
+      orElse: () => PnlLineItem(
+        periodId: 0,
+        label: '',
+        sortOrder: 0,
+        category: PnlCategory.labor,
+      ),
     );
     return item.value;
   }
@@ -295,34 +374,40 @@ class _PnlPageState extends State<PnlPage> {
   double _getPacPercent() {
     final productNetSales = _getProductNetSales();
     if (productNetSales <= 0) return 0.0;
-    
+
     final pacItem = _lineItems.firstWhere(
       (i) => i.label == 'P.A.C.',
-      orElse: () => PnlLineItem(periodId: 0, label: '', sortOrder: 0, category: PnlCategory.controllables),
+      orElse: () => PnlLineItem(
+        periodId: 0,
+        label: '',
+        sortOrder: 0,
+        category: PnlCategory.controllables,
+      ),
     );
     return (pacItem.value / productNetSales) * 100;
   }
 
   void _onValueChanged(PnlLineItem item, String newValue) {
     final value = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
-    
+
     // Update item value
     final index = _lineItems.indexWhere((i) => i.id == item.id);
     if (index >= 0) {
       _lineItems[index] = _lineItems[index].copyWith(value: value);
-      
+
       // Recalculate all
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
-      
+
       // Apply auto labor calculation if enabled and SALES changed
       if (item.label == 'SALES (ALL NET)') {
         _applyAutoLaborIfEnabled();
       }
-      
+
       // Update percentage field based on config
       final config = _getRowConfig(item);
       if (config.fixedPercent != null) {
-        _percentControllers[item.id!]?.text = config.fixedPercent!.toStringAsFixed(1);
+        _percentControllers[item.id!]?.text = config.fixedPercent!
+            .toStringAsFixed(1);
       } else if (config.useSalesPercent) {
         // SALES (ALL NET) % = NON-PRODUCT SALES % + 100%
         final salesPercent = _getNonProductSalesPercent() + 100.0;
@@ -333,7 +418,10 @@ class _PnlPageState extends State<PnlPage> {
       } else {
         // For dollarOnly rows, calculate % from $
         final productNetSales = _getProductNetSales();
-        final percent = PnlCalculationService.calculatePercentage(value, productNetSales);
+        final percent = PnlCalculationService.calculatePercentage(
+          value,
+          productNetSales,
+        );
         _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
       }
 
@@ -350,7 +438,7 @@ class _PnlPageState extends State<PnlPage> {
     if (newPercent.isEmpty || newPercent.endsWith('.')) {
       return;
     }
-    
+
     final percent = double.tryParse(newPercent) ?? 0;
     final config = _getRowConfig(item);
 
@@ -363,12 +451,18 @@ class _PnlPageState extends State<PnlPage> {
       } else {
         // For percentOnly rows, calculate $ from % (rounded to $100)
         final productNetSales = _getProductNetSales();
-        final rawValue = PnlCalculationService.calculateValueFromPercentage(percent, productNetSales);
+        final rawValue = PnlCalculationService.calculateValueFromPercentage(
+          percent,
+          productNetSales,
+        );
         final value = PnlCalculationService.roundToNearest100(rawValue);
-        
+
         // For NON-PRODUCT SALES, store the percentage since that's the user input
         if (item.label == 'NON-PRODUCT SALES') {
-          _lineItems[index] = _lineItems[index].copyWith(value: value, percentage: percent);
+          _lineItems[index] = _lineItems[index].copyWith(
+            value: value,
+            percentage: percent,
+          );
         } else {
           _lineItems[index] = _lineItems[index].copyWith(value: value);
         }
@@ -392,25 +486,29 @@ class _PnlPageState extends State<PnlPage> {
 
   void _updateCalculatedRowControllers() {
     final productNetSales = _getProductNetSales();
-    
+
     for (final item in _lineItems) {
       if (item.id != null) {
         final config = _getRowConfig(item);
-        
+
         // For percentOnly rows, recalculate $ from stored % and new sales (rounded to $100)
-        if (config.mode == _EditMode.percentOnly && config.fixedDollar == null) {
+        if (config.mode == _EditMode.percentOnly &&
+            config.fixedDollar == null) {
           // Get the current % from the controller (user's input)
           final percentText = _percentControllers[item.id!]?.text ?? '0';
           final percent = double.tryParse(percentText) ?? 0;
-          final rawValue = PnlCalculationService.calculateValueFromPercentage(percent, productNetSales);
+          final rawValue = PnlCalculationService.calculateValueFromPercentage(
+            percent,
+            productNetSales,
+          );
           final newValue = PnlCalculationService.roundToNearest100(rawValue);
-          
+
           // Update the line item value
           final index = _lineItems.indexWhere((i) => i.id == item.id);
           if (index >= 0) {
             _lineItems[index] = _lineItems[index].copyWith(value: newValue);
           }
-          
+
           // Update the controller
           _valueControllers[item.id!]?.text = newValue.toStringAsFixed(2);
         }
@@ -421,26 +519,32 @@ class _PnlPageState extends State<PnlPage> {
               : item.value.toStringAsFixed(2);
           _valueControllers[item.id!]?.text = dollarText;
         }
-        
+
         // Update percent controller for non-editable items
         if (!config.isPercentEditable) {
           if (config.fixedPercent != null) {
-            _percentControllers[item.id!]?.text = config.fixedPercent!.toStringAsFixed(1);
+            _percentControllers[item.id!]?.text = config.fixedPercent!
+                .toStringAsFixed(1);
           } else if (config.useSalesPercent) {
             // SALES (ALL NET) % = NON-PRODUCT SALES % + 100%
             final salesPercent = _getNonProductSalesPercent() + 100.0;
-            _percentControllers[item.id!]?.text = salesPercent.toStringAsFixed(1);
+            _percentControllers[item.id!]?.text = salesPercent.toStringAsFixed(
+              1,
+            );
           } else {
-            final percent = PnlCalculationService.calculatePercentage(item.value, productNetSales);
+            final percent = PnlCalculationService.calculatePercentage(
+              item.value,
+              productNetSales,
+            );
             _percentControllers[item.id!]?.text = percent.toStringAsFixed(1);
           }
         }
       }
     }
-    
+
     // Recalculate totals after updating percentOnly rows
     _lineItems = PnlCalculationService.recalculateAll(_lineItems);
-    
+
     // Update calculated row controllers again with new totals
     for (final item in _lineItems) {
       if (item.id != null && item.isCalculated) {
@@ -460,21 +564,21 @@ class _PnlPageState extends State<PnlPage> {
 
   void _onSalesChanged(String value) {
     final sales = double.tryParse(value.replaceAll(',', '')) ?? 0;
-    
+
     // Update SALES (ALL NET) line item
     final index = _lineItems.indexWhere((i) => i.label == 'SALES (ALL NET)');
     if (index >= 0) {
       _lineItems[index] = _lineItems[index].copyWith(value: sales);
-      
+
       // Recalculate all
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
-      
+
       // Apply auto labor if enabled
       _applyAutoLaborIfEnabled();
-      
+
       // Update all calculated rows' controllers
       _updateCalculatedRowControllers();
-      
+
       setState(() => _hasChanges = true);
       _scheduleAutosave();
     }
@@ -490,7 +594,9 @@ class _PnlPageState extends State<PnlPage> {
 
   void _onAutoLaborChanged(bool? enabled) {
     _autoLaborEnabled = enabled ?? false;
-    _currentPeriod = _currentPeriod?.copyWith(autoLaborEnabled: _autoLaborEnabled);
+    _currentPeriod = _currentPeriod?.copyWith(
+      autoLaborEnabled: _autoLaborEnabled,
+    );
     if (_autoLaborEnabled) {
       _applyAutoLaborIfEnabled();
     }
@@ -503,7 +609,10 @@ class _PnlPageState extends State<PnlPage> {
 
     final salesAllNet = _getSalesAllNet();
     final avgWage = _currentPeriod!.avgWage;
-    final daysInMonth = DateUtils.getDaysInMonth(_currentPeriod!.year, _currentPeriod!.month);
+    final daysInMonth = DateUtils.getDaysInMonth(
+      _currentPeriod!.year,
+      _currentPeriod!.month,
+    );
 
     if (salesAllNet <= 0 || avgWage <= 0) return;
 
@@ -515,15 +624,21 @@ class _PnlPageState extends State<PnlPage> {
 
     // Calculate labor crew cost = hours * avg wage * days in month (rounded to $100)
     final rawLaborCrewCost = hours * avgWage * daysInMonth;
-    final laborCrewCost = PnlCalculationService.roundToNearest100(rawLaborCrewCost);
+    final laborCrewCost = PnlCalculationService.roundToNearest100(
+      rawLaborCrewCost,
+    );
 
     // Find and update LABOR - CREW item
-    final crewIndex = _lineItems.indexWhere((item) => item.label == 'LABOR - CREW');
+    final crewIndex = _lineItems.indexWhere(
+      (item) => item.label == 'LABOR - CREW',
+    );
     if (crewIndex >= 0) {
       final crewItem = _lineItems[crewIndex];
       final productNetSales = _getProductNetSales();
-      final percentage = productNetSales > 0 ? (laborCrewCost / productNetSales) * 100 : 0.0;
-      
+      final percentage = productNetSales > 0
+          ? (laborCrewCost / productNetSales) * 100
+          : 0.0;
+
       _lineItems[crewIndex] = crewItem.copyWith(
         value: laborCrewCost,
         percentage: percentage,
@@ -531,10 +646,12 @@ class _PnlPageState extends State<PnlPage> {
 
       // Update the controllers for LABOR - CREW if they exist
       if (crewItem.id != null) {
-        _valueControllers[crewItem.id!]?.text = laborCrewCost.toStringAsFixed(2);
+        _valueControllers[crewItem.id!]?.text = laborCrewCost.toStringAsFixed(
+          2,
+        );
         _percentControllers[crewItem.id!]?.text = percentage.toStringAsFixed(1);
       }
-      
+
       // Recalculate all dependent values
       _lineItems = PnlCalculationService.recalculateAll(_lineItems);
     }
@@ -558,13 +675,14 @@ class _PnlPageState extends State<PnlPage> {
     for (int i = 0; i < thresholds.length - 1; i++) {
       final lowerThreshold = thresholds[i];
       final upperThreshold = thresholds[i + 1];
-      
+
       if (dailySales >= lowerThreshold && dailySales < upperThreshold) {
         final lowerHours = _laborHoursTable[lowerThreshold]!;
         final upperHours = _laborHoursTable[upperThreshold]!;
-        
+
         // Linear interpolation
-        final ratio = (dailySales - lowerThreshold) / (upperThreshold - lowerThreshold);
+        final ratio =
+            (dailySales - lowerThreshold) / (upperThreshold - lowerThreshold);
         return lowerHours + (upperHours - lowerHours) * ratio;
       }
     }
@@ -647,7 +765,11 @@ class _PnlPageState extends State<PnlPage> {
     if (existing != null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Period for ${_getMonthName(month)} $year already exists')),
+          SnackBar(
+            content: Text(
+              'Period for ${_getMonthName(month)} $year already exists',
+            ),
+          ),
         );
       }
       return existing;
@@ -660,8 +782,18 @@ class _PnlPageState extends State<PnlPage> {
 
   String _getMonthName(int month) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return months[month - 1];
   }
@@ -675,16 +807,16 @@ class _PnlPageState extends State<PnlPage> {
     }
 
     // Find previous period
-    final previousPeriods = _allPeriods.where((p) => p.id != _currentPeriod!.id).toList();
+    final previousPeriods = _allPeriods
+        .where((p) => p.id != _currentPeriod!.id)
+        .toList();
     if (previousPeriods.isEmpty) return;
 
     // Show dialog to select which period and which lines to copy
     final result = await showDialog<_CopyResult>(
       context: context,
-      builder: (context) => _CopyFromPreviousDialog(
-        periods: previousPeriods,
-        dao: _dao,
-      ),
+      builder: (context) =>
+          _CopyFromPreviousDialog(periods: previousPeriods, dao: _dao),
     );
 
     if (result != null && result.selectedItemIds.isNotEmpty) {
@@ -699,7 +831,9 @@ class _PnlPageState extends State<PnlPage> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Copied ${result.selectedItemIds.length} items')),
+          SnackBar(
+            content: Text('Copied ${result.selectedItemIds.length} items'),
+          ),
         );
       }
     }
@@ -733,7 +867,10 @@ class _PnlPageState extends State<PnlPage> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Remove',
+              style: TextStyle(color: context.appColors.destructive),
+            ),
           ),
         ],
       ),
@@ -762,19 +899,19 @@ class _PnlPageState extends State<PnlPage> {
       return isDark ? Colors.cyan.shade900 : Colors.cyan.shade100;
     }
     if (_yellowRows.contains(item.label)) {
-      return isDark ? Colors.yellow.shade900.withValues(alpha: 0.3) : Colors.yellow.shade100;
+      return isDark
+          ? Colors.yellow.shade900.withValues(alpha: 0.3)
+          : Colors.yellow.shade100;
     }
     return Colors.transparent;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final isDark = context.isDarkMode;
+
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final storeName = StoreHours.cached.storeName;
@@ -790,7 +927,10 @@ class _PnlPageState extends State<PnlPage> {
               const SizedBox(width: 16),
               Text(
                 storeNsn,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.normal),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.normal,
+                ),
               ),
             ],
             const Spacer(),
@@ -800,10 +940,16 @@ class _PnlPageState extends State<PnlPage> {
               icon: const Icon(Icons.calendar_month, size: 24),
               label: Text(
                 _currentPeriod?.periodDisplay ?? 'Select Period',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
               ),
             ),
             const Spacer(),
@@ -844,7 +990,9 @@ class _PnlPageState extends State<PnlPage> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                     ],
@@ -863,7 +1011,9 @@ class _PnlPageState extends State<PnlPage> {
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
                     ],
@@ -876,31 +1026,46 @@ class _PnlPageState extends State<PnlPage> {
                   builder: (context) {
                     final avgWage = _currentPeriod?.avgWage ?? 0;
                     final laborCrew = _getLaborCrewValue();
-                    final daysInMonth = _currentPeriod != null 
-                        ? DateUtils.getDaysInMonth(_currentPeriod!.year, _currentPeriod!.month)
+                    final daysInMonth = _currentPeriod != null
+                        ? DateUtils.getDaysInMonth(
+                            _currentPeriod!.year,
+                            _currentPeriod!.month,
+                          )
                         : 30;
                     final weeksInMonth = daysInMonth / 7.0;
-                    
-                    final monthlyHours = avgWage > 0 ? laborCrew / avgWage : 0.0;
-                    final weeklyHours = weeksInMonth > 0 ? monthlyHours / weeksInMonth : 0.0;
-                    
+
+                    final monthlyHours = avgWage > 0
+                        ? laborCrew / avgWage
+                        : 0.0;
+                    final weeklyHours = weeksInMonth > 0
+                        ? monthlyHours / weeksInMonth
+                        : 0.0;
+
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.purple.shade900 : Colors.purple.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.purple),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: AppDecorations.tintedCard(
+                        context,
+                        Colors.purple,
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             '${weeklyHours.toStringAsFixed(1)} hrs/wk',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
                           Text(
                             '${monthlyHours.toStringAsFixed(0)} hrs/mo',
-                            style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.appColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
@@ -910,59 +1075,70 @@ class _PnlPageState extends State<PnlPage> {
                 const Spacer(),
                 // P.A.C. display
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.cyan.shade900 : Colors.cyan.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.cyan),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
+                  decoration: AppDecorations.tintedCard(context, Colors.cyan),
                   child: Text(
                     'P.A.C.: ${_percentFormat.format(_getPacPercent())}%',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
                 // Goal display with checkmark/X indicator
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.blue.shade900 : Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
+                  decoration: AppDecorations.tintedCard(context, Colors.blue),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         'GOAL: ${_percentFormat.format(goalPercent)}%',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       if (_getPacPercent() >= goalPercent)
-                        const Icon(Icons.check_circle, color: Colors.green, size: 20)
+                        Icon(
+                          Icons.check_circle,
+                          color: context.appColors.successForeground,
+                          size: 20,
+                        )
                       else
-                        const Icon(Icons.cancel, color: Colors.red, size: 20),
+                        Icon(
+                          Icons.cancel,
+                          color: context.appColors.destructive,
+                          size: 20,
+                        ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 16),
                 // Auto Labor checkbox
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.green.shade900.withOpacity(0.5) : Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _autoLaborEnabled ? Colors.green : Colors.grey,
-                    ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
                   ),
+                  decoration: _autoLaborEnabled
+                      ? AppDecorations.tintedCard(context, Colors.green)
+                      : AppDecorations.borderedContainer(context),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Checkbox(
                         value: _autoLaborEnabled,
                         onChanged: _onAutoLaborChanged,
-                        activeColor: Colors.green,
+                        activeColor: context.appColors.successForeground,
                       ),
                       const Text(
                         'Auto Labor',
@@ -987,21 +1163,19 @@ class _PnlPageState extends State<PnlPage> {
     final productNetSales = _getProductNetSales();
 
     return Table(
-      border: TableBorder.all(
-        color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-      ),
+      border: TableBorder.all(color: context.appColors.tableBorder),
       columnWidths: const {
-        0: FlexColumnWidth(2.5),  // Label
-        1: FlexColumnWidth(1.5),  // Projected $
-        2: FlexColumnWidth(1),    // Projected %
-        3: FlexColumnWidth(2),    // Comments
-        4: FixedColumnWidth(48),  // Actions (delete for user-added)
+        0: FlexColumnWidth(2.5), // Label
+        1: FlexColumnWidth(1.5), // Projected $
+        2: FlexColumnWidth(1), // Projected %
+        3: FlexColumnWidth(2), // Comments
+        4: FixedColumnWidth(48), // Actions (delete for user-added)
       },
       children: [
         // Header row
         TableRow(
           decoration: BoxDecoration(
-            color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+            color: context.appColors.tableHeaderBackground,
           ),
           children: const [
             Padding(
@@ -1010,33 +1184,44 @@ class _PnlPageState extends State<PnlPage> {
             ),
             Padding(
               padding: EdgeInsets.all(12),
-              child: Text('PROJECTED \$', 
+              child: Text(
+                'PROJECTED \$',
                 style: TextStyle(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.right,
               ),
             ),
             Padding(
               padding: EdgeInsets.all(12),
-              child: Text('PROJECTED %', 
+              child: Text(
+                'PROJECTED %',
                 style: TextStyle(fontWeight: FontWeight.bold),
                 textAlign: TextAlign.right,
               ),
             ),
             Padding(
               padding: EdgeInsets.all(12),
-              child: Text('COMMENTS', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: Text(
+                'COMMENTS',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             SizedBox(), // Actions column header
           ],
         ),
 
         // Data rows
-        ..._lineItems.map((item) => _buildTableRow(item, productNetSales, isDark)),
+        ..._lineItems.map(
+          (item) => _buildTableRow(item, productNetSales, isDark),
+        ),
       ],
     );
   }
 
-  TableRow _buildTableRow(PnlLineItem item, double productNetSales, bool isDark) {
+  TableRow _buildTableRow(
+    PnlLineItem item,
+    double productNetSales,
+    bool isDark,
+  ) {
     final config = _getRowConfig(item);
     final rowColor = _getRowColor(item, isDark);
     final needsTopBorder = _sectionBreaks.contains(item.label);
@@ -1045,7 +1230,12 @@ class _PnlPageState extends State<PnlPage> {
       decoration: BoxDecoration(
         color: rowColor,
         border: needsTopBorder
-            ? Border(top: BorderSide(color: Colors.grey.shade500, width: 2))
+            ? Border(
+                top: BorderSide(
+                  color: context.appColors.borderMedium,
+                  width: 2,
+                ),
+              )
             : null,
       ),
       children: [
@@ -1065,20 +1255,24 @@ class _PnlPageState extends State<PnlPage> {
 
   Widget _buildLabelCell(PnlLineItem item) {
     // Bold only the highlighted rows (totals)
-    final isBoldRow = _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
+    final isBoldRow =
+        _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Text(
         item.label,
-        style: TextStyle(fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal),
+        style: TextStyle(
+          fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal,
+        ),
       ),
     );
   }
 
   Widget _buildDollarCell(PnlLineItem item, _RowConfig config) {
     final displayValue = config.fixedDollar ?? item.value;
-    final isBoldRow = _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
-    
+    final isBoldRow =
+        _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: config.isDollarEditable
@@ -1089,10 +1283,17 @@ class _PnlPageState extends State<PnlPage> {
                 prefixText: '\$ ',
                 border: OutlineInputBorder(),
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
               ),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+              ],
               onChanged: (v) => _onValueChanged(item, v),
             )
           : Padding(
@@ -1100,13 +1301,19 @@ class _PnlPageState extends State<PnlPage> {
               child: Text(
                 _currencyFormat.format(displayValue),
                 textAlign: TextAlign.right,
-                style: TextStyle(fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal),
+                style: TextStyle(
+                  fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal,
+                ),
               ),
             ),
     );
   }
 
-  Widget _buildPercentCell(PnlLineItem item, _RowConfig config, double productNetSales) {
+  Widget _buildPercentCell(
+    PnlLineItem item,
+    _RowConfig config,
+    double productNetSales,
+  ) {
     if (config.isPercentEditable) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1120,12 +1327,14 @@ class _PnlPageState extends State<PnlPage> {
             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+          ],
           onChanged: (v) => _onPercentChanged(item, v),
         ),
       );
     }
-    
+
     // Read-only percentage display
     String percentText;
     if (config.fixedPercent != null) {
@@ -1138,10 +1347,12 @@ class _PnlPageState extends State<PnlPage> {
       final salesPercent = _getNonProductSalesPercent() + 100.0;
       percentText = '${_percentFormat.format(salesPercent)}%';
     } else {
-      percentText = '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, productNetSales))}%';
+      percentText =
+          '${_percentFormat.format(PnlCalculationService.calculatePercentage(item.value, productNetSales))}%';
     }
-    
-    final isBoldRow = _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
+
+    final isBoldRow =
+        _yellowRows.contains(item.label) || _cyanRows.contains(item.label);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Padding(
@@ -1149,7 +1360,9 @@ class _PnlPageState extends State<PnlPage> {
         child: Text(
           percentText,
           textAlign: TextAlign.right,
-          style: TextStyle(fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal),
+          style: TextStyle(
+            fontWeight: isBoldRow ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ),
     );
@@ -1178,12 +1391,16 @@ class _PnlPageState extends State<PnlPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade600,
+                  color: context.appColors.successForeground,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text(
+                child: Text(
                   'AUTO',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: context.appColors.textOnSuccess,
+                  ),
                 ),
               ),
               const SizedBox(width: 4),
@@ -1191,7 +1408,7 @@ class _PnlPageState extends State<PnlPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
-                color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                color: context.appColors.surfaceContainer,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -1214,14 +1431,22 @@ class _PnlPageState extends State<PnlPage> {
     if (item.isUserAdded) {
       return IconButton(
         onPressed: () => _removeControllableRow(item),
-        icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+        icon: Icon(
+          Icons.remove_circle_outline,
+          color: context.appColors.destructive,
+          size: 20,
+        ),
         tooltip: 'Remove',
       );
     }
     if (item.label == 'CONTROLLABLES') {
       return IconButton(
         onPressed: _addControllableRow,
-        icon: const Icon(Icons.add_circle_outline, color: Colors.green, size: 20),
+        icon: Icon(
+          Icons.add_circle_outline,
+          color: context.appColors.successForeground,
+          size: 20,
+        ),
         tooltip: 'Add Line Item',
       );
     }
@@ -1270,7 +1495,10 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
           children: [
             // Existing periods
             if (_periods.isNotEmpty) ...[
-              const Text('Existing Periods:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text(
+                'Existing Periods:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               SizedBox(
                 height: 200,
@@ -1297,7 +1525,10 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
             ],
 
             // Create new period
-            const Text('Create New Period:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Create New Period:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -1312,10 +1543,23 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
                     items: List.generate(12, (i) {
                       final month = i + 1;
                       const months = [
-                        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                        'Jan',
+                        'Feb',
+                        'Mar',
+                        'Apr',
+                        'May',
+                        'Jun',
+                        'Jul',
+                        'Aug',
+                        'Sep',
+                        'Oct',
+                        'Nov',
+                        'Dec',
                       ];
-                      return DropdownMenuItem(value: month, child: Text(months[i]));
+                      return DropdownMenuItem(
+                        value: month,
+                        child: Text(months[i]),
+                      );
                     }),
                     onChanged: (v) => setState(() => _newMonth = v!),
                   ),
@@ -1331,7 +1575,10 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
                     ),
                     items: List.generate(5, (i) {
                       final year = DateTime.now().year - 2 + i;
-                      return DropdownMenuItem(value: year, child: Text('$year'));
+                      return DropdownMenuItem(
+                        value: year,
+                        child: Text('$year'),
+                      );
                     }),
                     onChanged: (v) => setState(() => _newYear = v!),
                   ),
@@ -1343,7 +1590,10 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
-                  final newPeriod = await widget.onCreateNew(_newMonth, _newYear);
+                  final newPeriod = await widget.onCreateNew(
+                    _newMonth,
+                    _newYear,
+                  );
                   if (newPeriod != null && context.mounted) {
                     Navigator.pop(context, newPeriod);
                   }
@@ -1368,7 +1618,9 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Period'),
-        content: Text('Are you sure you want to delete ${period.periodDisplay}? This will delete all P&L data for this period.'),
+        content: Text(
+          'Are you sure you want to delete ${period.periodDisplay}? This will delete all P&L data for this period.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1376,7 +1628,11 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(
+                context,
+              ).extension<AppColors>()!.destructive,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -1388,7 +1644,7 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
       setState(() {
         _periods.removeWhere((p) => p.id == period.id);
       });
-      
+
       // If the deleted period was the current period, close dialog with null
       if (period.id == widget.currentPeriod?.id && mounted) {
         Navigator.pop(context, null);
@@ -1405,7 +1661,8 @@ class _CopyFromPreviousDialog extends StatefulWidget {
   const _CopyFromPreviousDialog({required this.periods, required this.dao});
 
   @override
-  State<_CopyFromPreviousDialog> createState() => _CopyFromPreviousDialogState();
+  State<_CopyFromPreviousDialog> createState() =>
+      _CopyFromPreviousDialogState();
 }
 
 class _CopyFromPreviousDialogState extends State<_CopyFromPreviousDialog> {
@@ -1519,12 +1776,12 @@ class _CopyFromPreviousDialogState extends State<_CopyFromPreviousDialog> {
           onPressed: _selectedIds.isEmpty
               ? null
               : () => Navigator.pop(
-                    context,
-                    _CopyResult(
-                      fromPeriod: _selectedPeriod!,
-                      selectedItemIds: _selectedIds.toList(),
-                    ),
+                  context,
+                  _CopyResult(
+                    fromPeriod: _selectedPeriod!,
+                    selectedItemIds: _selectedIds.toList(),
                   ),
+                ),
           child: Text('Copy ${_selectedIds.length} Items'),
         ),
       ],
