@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../database/shift_type_dao.dart';
 import '../../models/shift_type.dart';
+import '../../services/app_colors.dart';
 
 class ShiftRunnerColorsTab extends StatefulWidget {
   const ShiftRunnerColorsTab({super.key});
@@ -118,16 +119,21 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'The time window that defines this shift.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(
+                        color: context.appColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _buildTimeRangePicker(
                       startTime: rangeStart,
                       endTime: rangeEnd,
-                      onStartTimeChanged: (time) => setDialogState(() => rangeStart = time),
-                      onEndTimeChanged: (time) => setDialogState(() => rangeEnd = time),
+                      onStartTimeChanged: (time) =>
+                          setDialogState(() => rangeStart = time),
+                      onEndTimeChanged: (time) =>
+                          setDialogState(() => rangeEnd = time),
                     ),
                     const SizedBox(height: 24),
                     const Divider(),
@@ -137,16 +143,21 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'The shift created when a runner is assigned without an existing shift.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(
+                        color: context.appColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _buildTimeRangePicker(
                       startTime: defaultStart,
                       endTime: defaultEnd,
-                      onStartTimeChanged: (time) => setDialogState(() => defaultStart = time),
-                      onEndTimeChanged: (time) => setDialogState(() => defaultEnd = time),
+                      onStartTimeChanged: (time) =>
+                          setDialogState(() => defaultStart = time),
+                      onEndTimeChanged: (time) =>
+                          setDialogState(() => defaultEnd = time),
                     ),
                   ],
                 ),
@@ -164,13 +175,16 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       );
                       return;
                     }
-                    Navigator.pop(ctx, shiftType.copyWith(
-                      label: labelController.text,
-                      rangeStart: rangeStart,
-                      rangeEnd: rangeEnd,
-                      defaultShiftStart: defaultStart,
-                      defaultShiftEnd: defaultEnd,
-                    ));
+                    Navigator.pop(
+                      ctx,
+                      shiftType.copyWith(
+                        label: labelController.text,
+                        rangeStart: rangeStart,
+                        rangeEnd: rangeEnd,
+                        defaultShiftStart: defaultStart,
+                        defaultShiftEnd: defaultEnd,
+                      ),
+                    );
                   },
                   child: const Text('Save'),
                 ),
@@ -248,7 +262,8 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                                   child: const Text('Cancel'),
                                 ),
                                 TextButton(
-                                  onPressed: () => Navigator.pop(ctx2, tempColor),
+                                  onPressed: () =>
+                                      Navigator.pop(ctx2, tempColor),
                                   child: const Text('Select'),
                                 ),
                               ],
@@ -266,9 +281,15 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                         decoration: BoxDecoration(
                           color: pickedColor,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade400),
+                          border: Border.all(
+                            color: context.appColors.borderMedium,
+                          ),
                         ),
-                        child: const Icon(Icons.colorize, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.colorize,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -277,16 +298,21 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'The time window that defines this shift.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(
+                        color: context.appColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _buildTimeRangePicker(
                       startTime: rangeStart,
                       endTime: rangeEnd,
-                      onStartTimeChanged: (time) => setDialogState(() => rangeStart = time),
-                      onEndTimeChanged: (time) => setDialogState(() => rangeEnd = time),
+                      onStartTimeChanged: (time) =>
+                          setDialogState(() => rangeStart = time),
+                      onEndTimeChanged: (time) =>
+                          setDialogState(() => rangeEnd = time),
                     ),
                     const SizedBox(height: 24),
                     const Divider(),
@@ -296,16 +322,21 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'The shift created when a runner is assigned without an existing shift.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(
+                        color: context.appColors.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _buildTimeRangePicker(
                       startTime: defaultStart,
                       endTime: defaultEnd,
-                      onStartTimeChanged: (time) => setDialogState(() => defaultStart = time),
-                      onEndTimeChanged: (time) => setDialogState(() => defaultEnd = time),
+                      onStartTimeChanged: (time) =>
+                          setDialogState(() => defaultStart = time),
+                      onEndTimeChanged: (time) =>
+                          setDialogState(() => defaultEnd = time),
                     ),
                   ],
                 ),
@@ -324,16 +355,19 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       return;
                     }
                     final nextOrder = await _dao.getNextSortOrder();
-                    Navigator.pop(ctx, ShiftType(
-                      key: ShiftType.generateKey(),
-                      label: labelController.text,
-                      sortOrder: nextOrder,
-                      rangeStart: rangeStart,
-                      rangeEnd: rangeEnd,
-                      defaultShiftStart: defaultStart,
-                      defaultShiftEnd: defaultEnd,
-                      colorHex: _colorToHex(pickedColor),
-                    ));
+                    Navigator.pop(
+                      ctx,
+                      ShiftType(
+                        key: ShiftType.generateKey(),
+                        label: labelController.text,
+                        sortOrder: nextOrder,
+                        rangeStart: rangeStart,
+                        rangeEnd: rangeEnd,
+                        defaultShiftStart: defaultStart,
+                        defaultShiftEnd: defaultEnd,
+                        colorHex: _colorToHex(pickedColor),
+                      ),
+                    );
                   },
                   child: const Text('Add'),
                 ),
@@ -362,8 +396,10 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Shift Type'),
-        content: Text('Are you sure you want to delete "${shiftType.label}"? '
-            'This will not delete existing shift runner assignments, but they will no longer be displayed.'),
+        content: Text(
+          'Are you sure you want to delete "${shiftType.label}"? '
+          'This will not delete existing shift runner assignments, but they will no longer be displayed.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -371,7 +407,10 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: context.appColors.destructive),
+            ),
           ),
         ],
       ),
@@ -387,12 +426,12 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
-    
+
     setState(() {
       final item = _shiftTypes.removeAt(oldIndex);
       _shiftTypes.insert(newIndex, item);
     });
-    
+
     await _dao.updateSortOrders(_shiftTypes);
     await _loadData();
   }
@@ -422,13 +461,18 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                     ),
                   );
                   if (picked != null) {
-                    onStartTimeChanged('${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
+                    onStartTimeChanged(
+                      '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
+                    );
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
+                    border: Border.all(color: context.appColors.borderMedium),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
@@ -461,13 +505,18 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                     ),
                   );
                   if (picked != null) {
-                    onEndTimeChanged('${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}');
+                    onEndTimeChanged(
+                      '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
+                    );
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 16,
+                  ),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
+                    border: Border.all(color: context.appColors.borderMedium),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
@@ -521,9 +570,9 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Configure your shift types. Drag to reorder, click the color to change it, or use the settings icon to edit details.',
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: context.appColors.textSecondary),
           ),
           const SizedBox(height: 24),
           Expanded(
@@ -533,12 +582,12 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
               itemBuilder: (context, index) {
                 final shiftType = _shiftTypes[index];
                 final color = _hexToColor(shiftType.colorHex);
-                
+
                 // Check if default employee shift differs from range
-                final hasCustomEmployeeShift = 
+                final hasCustomEmployeeShift =
                     shiftType.defaultShiftStart != shiftType.rangeStart ||
                     shiftType.defaultShiftEnd != shiftType.rangeEnd;
-                
+
                 return Card(
                   key: ValueKey(shiftType.id),
                   margin: const EdgeInsets.only(bottom: 12),
@@ -548,7 +597,10 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       children: [
                         ReorderableDragStartListener(
                           index: index,
-                          child: const Icon(Icons.drag_handle, color: Colors.grey),
+                          child: Icon(
+                            Icons.drag_handle,
+                            color: context.appColors.textTertiary,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         InkWell(
@@ -560,9 +612,15 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                             decoration: BoxDecoration(
                               color: color,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade400),
+                              border: Border.all(
+                                color: context.appColors.borderMedium,
+                              ),
                             ),
-                            child: const Icon(Icons.colorize, color: Colors.white, size: 20),
+                            child: const Icon(
+                              Icons.colorize,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ],
@@ -575,12 +633,17 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       children: [
                         Text(
                           '${_formatTime(shiftType.rangeStart)} - ${_formatTime(shiftType.rangeEnd)}',
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: TextStyle(
+                            color: context.appColors.textSecondary,
+                          ),
                         ),
                         if (hasCustomEmployeeShift) ...[
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: color.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(4),
@@ -598,14 +661,20 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
+                            color: context.appColors.surfaceContainer,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             shiftType.colorHex.toUpperCase(),
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -618,7 +687,7 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () => _deleteShiftType(shiftType),
                           tooltip: 'Delete shift type',
-                          color: Colors.red.shade300,
+                          color: context.appColors.destructive,
                         ),
                       ],
                     ),

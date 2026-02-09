@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/store_hours.dart';
 import '../../providers/store_settings_provider.dart';
+import '../../services/app_colors.dart';
 
 class StoreHoursTab extends StatefulWidget {
   const StoreHoursTab({super.key});
@@ -13,13 +14,24 @@ class StoreHoursTab extends StatefulWidget {
 class _StoreHoursTabState extends State<StoreHoursTab> {
   // Day names for display
   static const List<String> _dayNames = [
-    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
   ];
-  
+
   // Map day names to DateTime weekday constants
   static const List<int> _dayValues = [
-    DateTime.sunday, DateTime.monday, DateTime.tuesday, DateTime.wednesday, 
-    DateTime.thursday, DateTime.friday, DateTime.saturday
+    DateTime.sunday,
+    DateTime.monday,
+    DateTime.tuesday,
+    DateTime.wednesday,
+    DateTime.thursday,
+    DateTime.friday,
+    DateTime.saturday,
   ];
 
   @override
@@ -59,9 +71,13 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
     return storeHours.getCloseTimeForDay(_dayValues[dayIndex]);
   }
 
-  Future<void> _updateTimeForDay(int dayIndex, bool isOpen, String? newTime) async {
+  Future<void> _updateTimeForDay(
+    int dayIndex,
+    bool isOpen,
+    String? newTime,
+  ) async {
     if (newTime == null) return;
-    
+
     final provider = context.read<StoreSettingsProvider>();
     await provider.updateStoreHoursTime(dayIndex, isOpen, newTime);
   }
@@ -118,7 +134,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                       Text(
                         'This information will appear on PDF exports.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
+                          color: context.appColors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -182,31 +198,46 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                       Text(
                         'Set different open/close times for each day. Times are displayed as "Op" (Open) and "CL" (Close) in the schedule.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey[600],
+                          color: context.appColors.textSecondary,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Quick apply row
                       Row(
                         children: [
-                          const Icon(Icons.copy_all, size: 18, color: Colors.grey),
+                          Icon(
+                            Icons.copy_all,
+                            size: 18,
+                            color: context.appColors.textTertiary,
+                          ),
                           const SizedBox(width: 8),
-                          const Text('Quick apply: ', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                          Text(
+                            'Quick apply: ',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.appColors.textTertiary,
+                            ),
+                          ),
                           TextButton(
                             onPressed: () => provider.applyToAllDays(
-                              _getOpenTimeForDay(1, storeHours), // Use Monday's times
+                              _getOpenTimeForDay(
+                                1,
+                                storeHours,
+                              ), // Use Monday's times
                               _getCloseTimeForDay(1, storeHours),
                             ),
-                            child: const Text("Use Monday's hours for all days"),
+                            child: const Text(
+                              "Use Monday's hours for all days",
+                            ),
                           ),
                         ],
                       ),
-                      
+
                       const SizedBox(height: 8),
                       const Divider(),
                       const SizedBox(height: 8),
-                      
+
                       // Header row
                       Row(
                         children: [
@@ -217,7 +248,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: Colors.grey[700],
+                                color: context.appColors.textSecondary,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -228,7 +259,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 13,
-                                color: Colors.grey[700],
+                                color: context.appColors.textSecondary,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -236,9 +267,12 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      
+
                       // Day rows
-                      ...List.generate(7, (index) => _buildDayRow(index, timeOptions, storeHours)),
+                      ...List.generate(
+                        7,
+                        (index) => _buildDayRow(index, timeOptions, storeHours),
+                      ),
                     ],
                   ),
                 ),
@@ -263,7 +297,10 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                       const SizedBox(height: 8),
                       Text(
                         'How times appear in schedule cells:',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.appColors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -271,7 +308,10 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                         children: [
                           _buildPreviewCell('Op', 'Store opens'),
                           const SizedBox(width: 16),
-                          const Icon(Icons.arrow_forward, color: Colors.grey),
+                          Icon(
+                            Icons.arrow_forward,
+                            color: context.appColors.textTertiary,
+                          ),
                           const SizedBox(width: 16),
                           _buildPreviewCell('CL', 'Store closes'),
                         ],
@@ -285,7 +325,9 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                 child: OutlinedButton.icon(
                   onPressed: () => provider.resetToDefaults(),
                   icon: const Icon(Icons.restore),
-                  label: const Text('Reset All to Defaults (4:30 AM - 1:00 AM)'),
+                  label: const Text(
+                    'Reset All to Defaults (4:30 AM - 1:00 AM)',
+                  ),
                 ),
               ),
             ],
@@ -295,18 +337,20 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
     );
   }
 
-  Widget _buildDayRow(int dayIndex, List<String> timeOptions, StoreHours? storeHours) {
+  Widget _buildDayRow(
+    int dayIndex,
+    List<String> timeOptions,
+    StoreHours? storeHours,
+  ) {
     final openTime = _getOpenTimeForDay(dayIndex, storeHours);
     final closeTime = _getCloseTimeForDay(dayIndex, storeHours);
     final isWeekend = dayIndex == 0 || dayIndex == 6;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final appColors = context.appColors;
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: isWeekend 
-            ? (isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100)
-            : null,
+        color: isWeekend ? appColors.surfaceVariant : null,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -326,9 +370,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                ),
+                border: Border.all(color: appColors.borderMedium),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: DropdownButtonHideUnderline(
@@ -339,7 +381,10 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                   items: timeOptions.map((time) {
                     return DropdownMenuItem(
                       value: time,
-                      child: Text(_formatTimeForDisplay(time), style: const TextStyle(fontSize: 13)),
+                      child: Text(
+                        _formatTimeForDisplay(time),
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     );
                   }).toList(),
                   onChanged: (v) => _updateTimeForDay(dayIndex, true, v),
@@ -352,9 +397,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                ),
+                border: Border.all(color: appColors.borderMedium),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: DropdownButtonHideUnderline(
@@ -365,7 +408,10 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                   items: timeOptions.map((time) {
                     return DropdownMenuItem(
                       value: time,
-                      child: Text(_formatTimeForDisplay(time), style: const TextStyle(fontSize: 13)),
+                      child: Text(
+                        _formatTimeForDisplay(time),
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     );
                   }).toList(),
                   onChanged: (v) => _updateTimeForDay(dayIndex, false, v),
@@ -379,33 +425,25 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
   }
 
   Widget _buildPreviewCell(String label, String description) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final appColors = context.appColors;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(
-          color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-        ),
+        border: Border.all(color: appColors.borderMedium),
         borderRadius: BorderRadius.circular(8),
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
+        color: appColors.surfaceVariant,
       ),
       child: Column(
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             description,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 12, color: appColors.textSecondary),
           ),
         ],
       ),

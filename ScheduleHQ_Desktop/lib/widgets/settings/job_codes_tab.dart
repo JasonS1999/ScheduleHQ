@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/job_code_settings.dart';
 import '../../models/job_code_group.dart';
 import '../../providers/job_code_provider.dart';
+import '../../services/app_colors.dart';
 import '../../utils/dialog_helper.dart';
 import '../../utils/snackbar_helper.dart';
 import 'job_code_editor.dart';
@@ -45,7 +46,11 @@ class _JobCodesTabState extends State<JobCodesTab> {
     );
 
     if (result == true && code.trim().isNotEmpty) {
-      await provider.addJobCode(code: code.trim(), colorHex: '#4285F4', hasPTO: false);
+      await provider.addJobCode(
+        code: code.trim(),
+        colorHex: '#4285F4',
+        hasPTO: false,
+      );
       setState(() => _orderDirty = false);
     }
   }
@@ -56,7 +61,7 @@ class _JobCodesTabState extends State<JobCodesTab> {
     if (newIndex > oldIndex) {
       newIndex -= 1;
     }
-    
+
     provider.reorderJobCode(oldIndex, newIndex);
     setState(() => _orderDirty = true);
   }
@@ -75,10 +80,8 @@ class _JobCodesTabState extends State<JobCodesTab> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => JobCodeEditor(
-        settings: settings, 
-        groups: provider.groups
-      ),
+      builder: (_) =>
+          JobCodeEditor(settings: settings, groups: provider.groups),
     );
     // Refresh data after editing
     await provider.loadData();
@@ -152,9 +155,12 @@ class _JobCodesTabState extends State<JobCodesTab> {
                   label: const Text('Save Order'),
                 ),
                 if (_orderDirty)
-                  const Text(
+                  Text(
                     'Reordered (not saved yet)',
-                    style: TextStyle(color: Colors.orange, fontSize: 12),
+                    style: TextStyle(
+                      color: context.appColors.warningForeground,
+                      fontSize: 12,
+                    ),
                   ),
               ],
             ),
@@ -167,7 +173,9 @@ class _JobCodesTabState extends State<JobCodesTab> {
                 itemBuilder: (context, index) {
                   final jc = provider.jobCodes[index];
                   final group = jc.sortGroup != null
-                      ? provider.groups.where((g) => g.name == jc.sortGroup).firstOrNull
+                      ? provider.groups
+                            .where((g) => g.name == jc.sortGroup)
+                            .firstOrNull
                       : null;
                   return ListTile(
                     key: ValueKey(jc.code),
@@ -178,7 +186,10 @@ class _JobCodesTabState extends State<JobCodesTab> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.drag_handle, color: Colors.grey),
+                            Icon(
+                              Icons.drag_handle,
+                              color: context.appColors.textTertiary,
+                            ),
                             const SizedBox(width: 8),
                             Container(
                               width: 16,
@@ -202,11 +213,18 @@ class _JobCodesTabState extends State<JobCodesTab> {
                       children: [
                         if (group != null)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: _parseColor(group.colorHex).withOpacity(0.2),
+                              color: _parseColor(
+                                group.colorHex,
+                              ).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: _parseColor(group.colorHex)),
+                              border: Border.all(
+                                color: _parseColor(group.colorHex),
+                              ),
                             ),
                             child: Text(
                               group.name,
@@ -220,12 +238,18 @@ class _JobCodesTabState extends State<JobCodesTab> {
                         else
                           Text(
                             'No group',
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+                            style: TextStyle(
+                              color: context.appColors.textTertiary,
+                              fontSize: 11,
+                            ),
                           ),
                         const SizedBox(width: 8),
                         IconButton(
                           tooltip: 'Delete job code',
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: context.appColors.destructive,
+                          ),
                           onPressed: () => _deleteJobCode(jc),
                         ),
                       ],
@@ -314,7 +338,9 @@ class _GroupsDialogState extends State<_GroupsDialog> {
                           decoration: BoxDecoration(
                             color: _parseColor(colorHex),
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.black26),
+                            border: Border.all(
+                              color: context.appColors.borderLight,
+                            ),
                           ),
                         ),
                       ),
@@ -346,9 +372,20 @@ class _GroupsDialogState extends State<_GroupsDialog> {
 
   Future<String?> _pickColor(BuildContext context, String currentColor) async {
     final colors = [
-      '#4285F4', '#DB4437', '#8E24AA', '#009688', '#F4B400',
-      '#5E35B1', '#039BE5', '#43A047', '#F4511E', '#795548',
-      '#607D8B', '#E91E63', '#00BCD4', '#CDDC39',
+      '#4285F4',
+      '#DB4437',
+      '#8E24AA',
+      '#009688',
+      '#F4B400',
+      '#5E35B1',
+      '#039BE5',
+      '#43A047',
+      '#F4511E',
+      '#795548',
+      '#607D8B',
+      '#E91E63',
+      '#00BCD4',
+      '#CDDC39',
     ];
 
     return showDialog<String>(
@@ -371,7 +408,9 @@ class _GroupsDialogState extends State<_GroupsDialog> {
                       color: _parseColor(hex),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: hex == currentColor ? Colors.black : Colors.black12,
+                        color: hex == currentColor
+                            ? context.appColors.borderStrong
+                            : context.appColors.borderLight,
                         width: hex == currentColor ? 2 : 1,
                       ),
                     ),
@@ -422,7 +461,9 @@ class _GroupsDialogState extends State<_GroupsDialog> {
                           decoration: BoxDecoration(
                             color: _parseColor(colorHex),
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.black26),
+                            border: Border.all(
+                              color: context.appColors.borderLight,
+                            ),
                           ),
                         ),
                       ),
@@ -447,7 +488,9 @@ class _GroupsDialogState extends State<_GroupsDialog> {
     );
 
     if (result == true && name.trim().isNotEmpty) {
-      await widget.provider.updateGroup(group.copyWith(name: name.trim(), colorHex: colorHex));
+      await widget.provider.updateGroup(
+        group.copyWith(name: name.trim(), colorHex: colorHex),
+      );
       await _loadGroups();
     }
   }
@@ -486,7 +529,9 @@ class _GroupsDialogState extends State<_GroupsDialog> {
                       child: Text(
                         'No groups yet.\nGroups let you organize job codes together.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+                        style: TextStyle(
+                          color: context.appColors.textSecondary,
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -504,7 +549,10 @@ class _GroupsDialogState extends State<_GroupsDialog> {
                           ),
                           title: Text(group.name),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            icon: Icon(
+                              Icons.delete_outline,
+                              color: context.appColors.destructive,
+                            ),
                             onPressed: () => _deleteGroup(group),
                           ),
                           onTap: () => _editGroup(group),
