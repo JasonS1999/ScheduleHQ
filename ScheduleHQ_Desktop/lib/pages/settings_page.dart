@@ -7,7 +7,9 @@ import '../widgets/settings/shift_templates_tab.dart';
 import '../widgets/settings/store_hours_tab.dart';
 import '../widgets/settings/cloud_sync_tab.dart';
 import '../widgets/settings/account_tab.dart';
-import '../services/theme_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/settings_provider.dart';
+import '../utils/app_constants.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -39,25 +41,24 @@ class _SettingsPageState extends State<SettingsPage>
         title: const Text("Settings"),
         actions: [
           // Theme mode selector
-          ValueListenableBuilder(
-            valueListenable: appThemeMode,
-            builder: (context, ThemeMode mode, _) {
+          Consumer<SettingsProvider>(
+            builder: (context, settings, _) {
               IconData icon;
-              if (mode == ThemeMode.dark) {
+              if (settings.isDarkTheme) {
                 icon = Icons.dark_mode;
-              } else if (mode == ThemeMode.light) {
+              } else if (settings.isLightTheme) {
                 icon = Icons.light_mode;
               } else {
                 icon = Icons.brightness_auto;
               }
 
-              return PopupMenuButton<ThemeMode>(
+              return PopupMenuButton<String>(
                 icon: Icon(icon),
-                onSelected: (m) => appThemeMode.value = m,
+                onSelected: (m) => settings.setThemeMode(m),
                 itemBuilder: (context) => const [
-                  PopupMenuItem(value: ThemeMode.system, child: Text('System')),
-                  PopupMenuItem(value: ThemeMode.light, child: Text('Light')),
-                  PopupMenuItem(value: ThemeMode.dark, child: Text('Dark')),
+                  PopupMenuItem(value: AppConstants.systemThemeKey, child: Text('System')),
+                  PopupMenuItem(value: AppConstants.lightThemeKey, child: Text('Light')),
+                  PopupMenuItem(value: AppConstants.darkThemeKey, child: Text('Dark')),
                 ],
               );
             },

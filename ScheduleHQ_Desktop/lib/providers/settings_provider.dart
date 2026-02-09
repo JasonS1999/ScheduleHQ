@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/settings_dao.dart';
 import '../database/job_code_settings_dao.dart';
 import '../database/shift_runner_settings_dao.dart';
@@ -98,11 +99,10 @@ class SettingsProvider extends BaseProvider {
 
   /// Load UI preferences from local storage
   Future<void> _loadUIPreferences() async {
-    // In a full implementation, you'd load these from SharedPreferences
-    // For now, use defaults
-    _themeMode = AppConstants.systemThemeKey;
-    _show24HourTime = false;
-    _showWeekends = true;
+    final prefs = await SharedPreferences.getInstance();
+    _themeMode = prefs.getString(AppConstants.themePreferenceKey) ?? AppConstants.systemThemeKey;
+    _show24HourTime = prefs.getBool('show_24_hour_time') ?? false;
+    _showWeekends = prefs.getBool('show_weekends') ?? true;
   }
 
   /// Update core settings
@@ -262,8 +262,10 @@ class SettingsProvider extends BaseProvider {
 
   /// Save UI preferences to local storage
   Future<void> _saveUIPreferences() async {
-    // In a full implementation, save to SharedPreferences
-    // For now, just keep in memory
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.themePreferenceKey, _themeMode);
+    await prefs.setBool('show_24_hour_time', _show24HourTime);
+    await prefs.setBool('show_weekends', _showWeekends);
   }
 
   /// Get formatted time based on user preference
