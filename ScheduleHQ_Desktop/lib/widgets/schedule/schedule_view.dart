@@ -1413,11 +1413,6 @@ class _ScheduleViewState extends State<ScheduleView> {
     return names[month - 1];
   }
 
-  String _dayOfWeekAbbr(DateTime date) {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return days[date.weekday % 7];
-  }
-
   /// Show a warning dialog when there's a scheduling conflict
   Future<bool> _showConflictWarning(
     BuildContext context,
