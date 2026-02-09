@@ -26,9 +26,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Initialize SQLite FFI for desktop platforms
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -53,42 +51,42 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<app_auth.AuthProvider>(
           create: (_) => app_auth.AuthProvider(),
         ),
-        
+
         // Settings provider - depends on database initialization
         ChangeNotifierProvider<SettingsProvider>(
           create: (_) => SettingsProvider(),
         ),
-        
+
         // Employee provider
         ChangeNotifierProvider<EmployeeProvider>(
           create: (_) => EmployeeProvider(),
         ),
-        
+
         // Schedule provider
         ChangeNotifierProvider<ScheduleProvider>(
           create: (_) => ScheduleProvider(),
         ),
-        
+
         // Time Off provider
         ChangeNotifierProvider<TimeOffProvider>(
           create: (_) => TimeOffProvider(),
         ),
-        
+
         // Analytics provider
         ChangeNotifierProvider<AnalyticsProvider>(
           create: (_) => AnalyticsProvider(),
         ),
-        
+
         // Approval provider
         ChangeNotifierProvider<ApprovalProvider>(
           create: (_) => ApprovalProvider(),
         ),
-        
+
         // Job Code provider
         ChangeNotifierProvider<JobCodeProvider>(
           create: (_) => JobCodeProvider(),
         ),
-        
+
         // Store Settings provider
         ChangeNotifierProvider<StoreSettingsProvider>(
           create: (_) => StoreSettingsProvider(),
@@ -112,6 +110,54 @@ class MyApp extends StatelessWidget {
               break;
           }
 
+          // Shared component theme overrides
+          final cardThemeLight = CardThemeData(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          );
+          final cardThemeDark = CardThemeData(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFF3D3D3D)),
+            ),
+          );
+          const inputBorderRadius = BorderRadius.all(Radius.circular(8));
+          final inputTheme = InputDecorationTheme(
+            border: const OutlineInputBorder(borderRadius: inputBorderRadius),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: inputBorderRadius,
+              borderSide: BorderSide(color: Colors.grey.shade400),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: inputBorderRadius,
+              borderSide: const BorderSide(width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
+            ),
+            isDense: true,
+          );
+          final buttonShape = WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          );
+          final buttonPadding = const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          );
+          final dialogTheme = DialogThemeData(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          );
+          const dividerTheme = DividerThemeData(thickness: 1);
+          const snackBarTheme = SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            width: 400,
+          );
+
           return MaterialApp(
             title: 'ScheduleHQ',
             debugShowCheckedModeBanner: false,
@@ -120,12 +166,48 @@ class MyApp extends StatelessWidget {
               brightness: Brightness.light,
               useMaterial3: true,
               extensions: const [AppColors.light],
+              cardTheme: cardThemeLight,
+              inputDecorationTheme: inputTheme,
+              filledButtonTheme: FilledButtonThemeData(
+                style: ButtonStyle(shape: buttonShape, padding: buttonPadding),
+              ),
+              elevatedButtonTheme: ElevatedButtonThemeData(
+                style: ButtonStyle(shape: buttonShape, padding: buttonPadding),
+              ),
+              outlinedButtonTheme: OutlinedButtonThemeData(
+                style: ButtonStyle(shape: buttonShape, padding: buttonPadding),
+              ),
+              dialogTheme: dialogTheme,
+              dividerTheme: dividerTheme,
+              snackBarTheme: snackBarTheme,
+              appBarTheme: const AppBarTheme(
+                centerTitle: false,
+                scrolledUnderElevation: 1,
+              ),
             ),
             darkTheme: ThemeData(
               colorSchemeSeed: Colors.blue,
               brightness: Brightness.dark,
               useMaterial3: true,
               extensions: const [AppColors.dark],
+              cardTheme: cardThemeDark,
+              inputDecorationTheme: inputTheme,
+              filledButtonTheme: FilledButtonThemeData(
+                style: ButtonStyle(shape: buttonShape, padding: buttonPadding),
+              ),
+              elevatedButtonTheme: ElevatedButtonThemeData(
+                style: ButtonStyle(shape: buttonShape, padding: buttonPadding),
+              ),
+              outlinedButtonTheme: OutlinedButtonThemeData(
+                style: ButtonStyle(shape: buttonShape, padding: buttonPadding),
+              ),
+              dialogTheme: dialogTheme,
+              dividerTheme: dividerTheme,
+              snackBarTheme: snackBarTheme,
+              appBarTheme: const AppBarTheme(
+                centerTitle: false,
+                scrolledUnderElevation: 1,
+              ),
             ),
             themeMode: themeMode,
             home: const AuthWrapper(),
@@ -167,28 +249,40 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
     if (!_dbInitialized) {
       await AppDatabase.instance.initForManager(uid);
-      
+
       // One-time fix: populate employeeId for existing shift runners
       try {
         final updated = await ShiftRunnerDao().populateMissingEmployeeIds();
         if (updated > 0) {
-          log('Populated employeeId for $updated existing shift runners', name: 'Main');
+          log(
+            'Populated employeeId for $updated existing shift runners',
+            name: 'Main',
+          );
         }
       } catch (e) {
         log('Error populating shift runner employeeIds: $e', name: 'Main');
       }
-      
+
       // Initialize providers that depend on database
       if (mounted) {
-        final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-        final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
-        final scheduleProvider = Provider.of<ScheduleProvider>(context, listen: false);
-        
+        final settingsProvider = Provider.of<SettingsProvider>(
+          context,
+          listen: false,
+        );
+        final employeeProvider = Provider.of<EmployeeProvider>(
+          context,
+          listen: false,
+        );
+        final scheduleProvider = Provider.of<ScheduleProvider>(
+          context,
+          listen: false,
+        );
+
         await settingsProvider.initialize();
         await employeeProvider.initialize();
         await scheduleProvider.initialize();
       }
-      
+
       _dbInitialized = true;
     }
   }
@@ -200,9 +294,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         // Show loading while checking auth state
         if (authProvider.isLoading) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
@@ -230,7 +322,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   ),
                 );
               }
-              
+
               // Show any initialization errors
               if (dbSnapshot.hasError) {
                 return Scaffold(
@@ -257,7 +349,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
                   ),
                 );
               }
-              
+
               return const NavigationShell();
             },
           );
