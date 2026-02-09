@@ -645,14 +645,14 @@ class _ScheduleViewState extends State<ScheduleView> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.warning,
               color: Theme.of(ctx).extension<AppColors>()!.errorIcon,
             ),
-            SizedBox(width: 8),
-            Text('Clear Month'),
+            const SizedBox(width: 8),
+            const Text('Clear Month'),
           ],
         ),
         content: Text(
@@ -2859,7 +2859,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       }
 
                       if (isDragHover) {
-                        return const Center(
+                        return Center(
                           child: Icon(
                             Icons.add,
                             color: Theme.of(context).colorScheme.primary,
@@ -2868,7 +2868,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                         );
                       }
                       if (showDash) {
-                        return const Center(
+                        return Center(
                           child: Text(
                             '-',
                             style: TextStyle(

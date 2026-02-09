@@ -204,7 +204,7 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'Set the default schedule for each day. Leave blank for no default, '
                             'or mark as OFF for days the employee doesn\'t work.',
                             style: TextStyle(

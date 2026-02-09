@@ -104,8 +104,8 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                         ),
                       ),
                       if (otherCodes.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             'Add another job code first before deleting this one.',
                             style: TextStyle(

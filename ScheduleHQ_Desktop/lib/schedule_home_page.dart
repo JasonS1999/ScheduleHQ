@@ -292,6 +292,7 @@ class _DayEntriesSheetState extends State<_DayEntriesSheet> {
         minChildSize: 0.4,
         initialChildSize: 0.6,
         builder: (context, scrollController) {
+          final appColors = context.appColors;
           return Column(
             children: [
               const SizedBox(height: 8),
