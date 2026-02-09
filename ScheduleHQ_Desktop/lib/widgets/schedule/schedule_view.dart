@@ -112,6 +112,7 @@ class _ScheduleViewState extends State<ScheduleView> {
 
   // Counter to trigger shift runner refresh in child views
   int _shiftRunnerRefreshKey = 0;
+  bool _showRunners = true;
 
   @override
   void initState() {
@@ -1119,6 +1120,16 @@ class _ScheduleViewState extends State<ScheduleView> {
             onPressed: () => _showPublishDialog(context),
           ),
         ),
+        Tooltip(
+          message: _showRunners ? 'Hide Runners' : 'Show Runners',
+          child: IconButton(
+            icon: Icon(
+              _showRunners ? Icons.groups : Icons.groups_outlined,
+              color: _showRunners ? Theme.of(context).colorScheme.primary : null,
+            ),
+            onPressed: () => setState(() => _showRunners = !_showRunners),
+          ),
+        ),
         PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             tooltip: 'More Options',
@@ -1183,6 +1194,7 @@ class _ScheduleViewState extends State<ScheduleView> {
       jobCodeSettings: _jobCodeSettings,
       clipboardAvailable: _clipboard != null,
       shiftRunnerRefreshKey: _shiftRunnerRefreshKey,
+      showRunners: _showRunners,
       onShiftRunnerChanged: () {
         setState(() {
           _shiftRunnerRefreshKey++;
@@ -1555,6 +1567,7 @@ class MonthlyScheduleView extends StatefulWidget {
   final VoidCallback? onShiftRunnerChanged;
   final bool clipboardAvailable;
   final int shiftRunnerRefreshKey;
+  final bool showRunners;
 
   const MonthlyScheduleView({
     super.key,
@@ -1572,6 +1585,7 @@ class MonthlyScheduleView extends StatefulWidget {
     this.onShiftRunnerChanged,
     this.clipboardAvailable = false,
     this.shiftRunnerRefreshKey = 0,
+    this.showRunners = true,
   });
 
   @override
@@ -2991,7 +3005,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
               final dayColumnWidth = 120.0;
               const mgrColumnWidth = 40.0;
               const runnerColumnWidth = 55.0;
-              final runnerColumnsTotal = runnerColumnWidth * _shiftTypes.length;
+              final runnerColumnsTotal = widget.showRunners ? runnerColumnWidth * _shiftTypes.length : 0.0;
               const tablePadding =
                   40.0; // Extra padding to prevent edge overhang
 
@@ -3114,31 +3128,32 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                 ),
                                 ...buildEmployeeHeaderCells(),
                                 // Shift runner headers
-                                ..._shiftTypes.map((shiftType) {
-                                  final isDark = Theme.of(context).brightness == Brightness.dark;
-                                  return Container(
-                                    width: runnerColumnWidth,
-                                    height: 60,
-                                    decoration: BoxDecoration(
-                                      color: getShiftColor(shiftType.key).withAlpha(77),
-                                      border: Border.all(
-                                        color: Theme.of(context).dividerColor,
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        ShiftRunner.getLabelForType(shiftType.key),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 11,
-                                          color: isDark ? Colors.white : Colors.black,
+                                if (widget.showRunners)
+                                  ..._shiftTypes.map((shiftType) {
+                                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                                    return Container(
+                                      width: runnerColumnWidth,
+                                      height: 60,
+                                      decoration: BoxDecoration(
+                                        color: getShiftColor(shiftType.key).withAlpha(77),
+                                        border: Border.all(
+                                          color: Theme.of(context).colorScheme.primary,
+                                          width: 2,
                                         ),
                                       ),
-                                    ),
-                                  );
-                                }),
+                                      child: Center(
+                                        child: Text(
+                                          ShiftRunner.getLabelForType(shiftType.key),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 11,
+                                            color: isDark ? Colors.white : Colors.black,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
                               ],
                             ),
                           ),
@@ -3351,52 +3366,71 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                               }).toList(),
 
                                               // Shift runner cells
-                                              ..._shiftTypes.map((shiftType) {
-                                                final runner = getRunnerForCell(day, shiftType.key);
-                                                final hasRunner = runner != null && runner.isNotEmpty;
-                                                final isDark = Theme.of(context).brightness == Brightness.dark;
-                                                return GestureDetector(
-                                                  onSecondaryTapDown: hasRunner
-                                                      ? (details) => showRunnerContextMenu(
-                                                          details.globalPosition,
-                                                          day,
-                                                          shiftType.key,
-                                                        )
-                                                      : null,
-                                                  child: InkWell(
-                                                    onTap: () => _editMonthlyRunner(day, shiftType.key, runner),
-                                                    child: Container(
-                                                      width: runnerColumnWidth,
-                                                      constraints: const BoxConstraints(minHeight: 50),
-                                                      decoration: BoxDecoration(
-                                                        color: hasRunner
-                                                            ? getShiftColor(shiftType.key).withAlpha(38)
-                                                            : null,
-                                                        border: Border(
-                                                          left: BorderSide(
-                                                            color: Theme.of(context).dividerColor,
-                                                            width: 1,
+                                              if (widget.showRunners)
+                                                ..._shiftTypes.map((shiftType) {
+                                                  final runner = getRunnerForCell(day, shiftType.key);
+                                                  final hasRunner = runner != null && runner.isNotEmpty;
+                                                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                                                  return GestureDetector(
+                                                    onSecondaryTapDown: hasRunner
+                                                        ? (details) => showRunnerContextMenu(
+                                                            details.globalPosition,
+                                                            day,
+                                                            shiftType.key,
+                                                          )
+                                                        : null,
+                                                    child: InkWell(
+                                                      onTap: () => _editMonthlyRunner(day, shiftType.key, runner),
+                                                      child: Container(
+                                                        width: runnerColumnWidth,
+                                                        constraints: const BoxConstraints(minHeight: 50),
+                                                        decoration: BoxDecoration(
+                                                          color: hasRunner
+                                                              ? getShiftColor(shiftType.key).withAlpha(38)
+                                                              : null,
+                                                          border: Border(
+                                                            left: BorderSide(
+                                                              color: Theme.of(context).colorScheme.primary,
+                                                              width: shiftType == _shiftTypes.first ? 2 : 1,
+                                                            ),
+                                                            right: shiftType == _shiftTypes.last
+                                                                ? BorderSide(
+                                                                    color: Theme.of(context).colorScheme.primary,
+                                                                    width: 2,
+                                                                  )
+                                                                : BorderSide.none,
+                                                            top: dayIndex == 0
+                                                                ? BorderSide(
+                                                                    color: Theme.of(context).colorScheme.primary,
+                                                                    width: 2,
+                                                                  )
+                                                                : BorderSide.none,
+                                                            bottom: dayIndex == week.where((d) => d != null).length - 1
+                                                                ? BorderSide(
+                                                                    color: Theme.of(context).colorScheme.primary,
+                                                                    width: 2,
+                                                                  )
+                                                                : BorderSide.none,
                                                           ),
                                                         ),
-                                                      ),
-                                                      child: Center(
-                                                        child: Text(
-                                                          runner ?? '',
-                                                          textAlign: TextAlign.center,
-                                                          style: TextStyle(
-                                                            fontSize: 10,
-                                                            color: hasRunner
-                                                                ? (isDark ? Colors.white : Colors.black)
-                                                                : Colors.grey,
+                                                        child: Center(
+                                                          child: Text(
+                                                            runner ?? '',
+                                                            textAlign: TextAlign.center,
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              color: hasRunner
+                                                                  ? (isDark ? Colors.white : Colors.black)
+                                                                  : Colors.grey,
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
                                                           ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
                                                         ),
                                                       ),
                                                     ),
-                                                  ),
-                                                );
-                                              }),
+                                                  );
+                                                }),
                                             ],
                                           ),
                                         ),
