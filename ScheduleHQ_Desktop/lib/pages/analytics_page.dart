@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/employee_provider.dart';
+import '../services/app_colors.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/time_off_provider.dart';
 import '../providers/analytics_provider.dart';
@@ -15,9 +16,8 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> 
+class _AnalyticsPageState extends State<AnalyticsPage>
     with LoadingStateMixin<AnalyticsPage> {
-  
   @override
   void initState() {
     super.initState();
@@ -27,11 +27,23 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   Future<void> _loadAllData() async {
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
-    final scheduleProvider = Provider.of<ScheduleProvider>(context, listen: false);
-    final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
-    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
-    
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
+    final scheduleProvider = Provider.of<ScheduleProvider>(
+      context,
+      listen: false,
+    );
+    final timeOffProvider = Provider.of<TimeOffProvider>(
+      context,
+      listen: false,
+    );
+    final analyticsProvider = Provider.of<AnalyticsProvider>(
+      context,
+      listen: false,
+    );
+
     // Load all required data - each provider handles its own loading state
     await Future.wait([
       employeeProvider.loadEmployees(),
@@ -42,17 +54,26 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   }
 
   void _onSearchChanged(String query) {
-    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
+    final analyticsProvider = Provider.of<AnalyticsProvider>(
+      context,
+      listen: false,
+    );
     analyticsProvider.setSearchQuery(query);
   }
 
   void _onJobCodeChanged(String? jobCode) {
-    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
+    final analyticsProvider = Provider.of<AnalyticsProvider>(
+      context,
+      listen: false,
+    );
     analyticsProvider.setSelectedJobCode(jobCode);
   }
 
   void _onMonthChanged(DateTime month) {
-    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
+    final analyticsProvider = Provider.of<AnalyticsProvider>(
+      context,
+      listen: false,
+    );
     analyticsProvider.setSelectedMonth(month);
   }
 
@@ -60,51 +81,77 @@ class _AnalyticsPageState extends State<AnalyticsPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Analytics")),
-      body: Consumer4<EmployeeProvider, ScheduleProvider, TimeOffProvider, AnalyticsProvider>(
-        builder: (context, employeeProvider, scheduleProvider, timeOffProvider, analyticsProvider, child) {
-          if (employeeProvider.isLoading || scheduleProvider.isLoading || 
-              timeOffProvider.isLoading || analyticsProvider.isLoading) {
-            return const LoadingIndicator();
-          }
+      body:
+          Consumer4<
+            EmployeeProvider,
+            ScheduleProvider,
+            TimeOffProvider,
+            AnalyticsProvider
+          >(
+            builder:
+                (
+                  context,
+                  employeeProvider,
+                  scheduleProvider,
+                  timeOffProvider,
+                  analyticsProvider,
+                  child,
+                ) {
+                  if (employeeProvider.isLoading ||
+                      scheduleProvider.isLoading ||
+                      timeOffProvider.isLoading ||
+                      analyticsProvider.isLoading) {
+                    return const LoadingIndicator();
+                  }
 
-          if (employeeProvider.errorMessage != null || 
-              scheduleProvider.errorMessage != null || timeOffProvider.errorMessage != null ||
-              analyticsProvider.errorMessage != null) {
-            return ErrorMessage(
-              message: employeeProvider.errorMessage ?? 
-                       scheduleProvider.errorMessage ?? 
-                       timeOffProvider.errorMessage ??
-                       analyticsProvider.errorMessage!,
-              onRetry: _loadAllData,
-            );
-          }
+                  if (employeeProvider.errorMessage != null ||
+                      scheduleProvider.errorMessage != null ||
+                      timeOffProvider.errorMessage != null ||
+                      analyticsProvider.errorMessage != null) {
+                    return ErrorMessage(
+                      message:
+                          employeeProvider.errorMessage ??
+                          scheduleProvider.errorMessage ??
+                          timeOffProvider.errorMessage ??
+                          analyticsProvider.errorMessage!,
+                      onRetry: _loadAllData,
+                    );
+                  }
 
-          return RefreshIndicator(
-            onRefresh: _loadAllData,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildFiltersSection(analyticsProvider, employeeProvider),
-                  const SizedBox(height: 24),
-                  _buildAnalyticsTable(
-                    employeeProvider, 
-                    scheduleProvider, 
-                    timeOffProvider, 
-                    analyticsProvider
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+                  return RefreshIndicator(
+                    onRefresh: _loadAllData,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildFiltersSection(
+                            analyticsProvider,
+                            employeeProvider,
+                          ),
+                          const SizedBox(height: 24),
+                          _buildAnalyticsTable(
+                            employeeProvider,
+                            scheduleProvider,
+                            timeOffProvider,
+                            analyticsProvider,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+          ),
     );
   }
 
-  Widget _buildFiltersSection(AnalyticsProvider analyticsProvider, EmployeeProvider employeeProvider) {
-    final jobCodes = analyticsProvider.getAvailableJobCodes(employeeProvider.employees);
+  Widget _buildFiltersSection(
+    AnalyticsProvider analyticsProvider,
+    EmployeeProvider employeeProvider,
+  ) {
+    final jobCodes = analyticsProvider.getAvailableJobCodes(
+      employeeProvider.employees,
+    );
 
     return Card(
       child: Padding(
@@ -124,7 +171,10 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Month:", style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text(
+                        "Month:",
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 8),
                       InkWell(
                         onTap: () async {
@@ -132,16 +182,23 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                             context: context,
                             initialDate: analyticsProvider.selectedMonth,
                             firstDate: DateTime(2020),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 365),
+                            ),
                           );
                           if (selectedMonth != null) {
                             _onMonthChanged(selectedMonth);
                           }
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
+                            border: Border.all(
+                              color: context.appColors.borderMedium,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(
@@ -165,23 +222,31 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Job Code:", style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text(
+                        "Job Code:",
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String?>(
                         value: analyticsProvider.selectedJobCode,
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                         ),
                         items: [
                           const DropdownMenuItem<String?>(
                             value: null,
                             child: Text("All Job Codes"),
                           ),
-                          ...jobCodes.map((code) => DropdownMenuItem<String>(
-                            value: code,
-                            child: Text(code),
-                          )),
+                          ...jobCodes.map(
+                            (code) => DropdownMenuItem<String>(
+                              value: code,
+                              child: Text(code),
+                            ),
+                          ),
                         ],
                         onChanged: _onJobCodeChanged,
                       ),
@@ -273,8 +338,14 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                           DataCell(Text(data.employee.jobCode)),
                           DataCell(Text(data.totalHours.toStringAsFixed(1))),
                           DataCell(Text(data.shiftCount.toString())),
-                          DataCell(Text(data.averageHoursPerShift.toStringAsFixed(1))),
-                          DataCell(Text("${data.midShiftPercentage.toStringAsFixed(0)}%")),
+                          DataCell(
+                            Text(data.averageHoursPerShift.toStringAsFixed(1)),
+                          ),
+                          DataCell(
+                            Text(
+                              "${data.midShiftPercentage.toStringAsFixed(0)}%",
+                            ),
+                          ),
                         ],
                       );
                     }).toList(),

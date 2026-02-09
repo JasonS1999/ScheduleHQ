@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/employee_provider.dart';
+import '../services/app_colors.dart';
 import '../widgets/common/loading_indicator.dart';
 import '../widgets/common/error_message.dart';
 import '../widgets/common/confirmation_dialog.dart';
@@ -32,7 +33,10 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
   }
 
   Future<void> _initializeData() async {
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
     if (employeeProvider.isIdle) {
       await employeeProvider.initialize();
     }
@@ -54,14 +58,14 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
               );
             },
           ),
-          
+
           // Add employee button
           IconButton(
             onPressed: _showAddEmployeeDialog,
             icon: const Icon(Icons.person_add),
             tooltip: 'Add Employee',
           ),
-          
+
           PopupMenuButton<String>(
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
@@ -96,7 +100,8 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
 
           if (employeeProvider.hasError && employeeProvider.items.isEmpty) {
             return ErrorMessage.generic(
-              message: employeeProvider.errorMessage ?? 'Failed to load employees',
+              message:
+                  employeeProvider.errorMessage ?? 'Failed to load employees',
               onRetry: () => employeeProvider.refresh(),
             );
           }
@@ -121,9 +126,7 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
                 _buildEmployeeStats(employeeProvider),
 
               // Employee table
-              Expanded(
-                child: _buildEmployeeTable(employeeProvider),
-              ),
+              Expanded(child: _buildEmployeeTable(employeeProvider)),
             ],
           );
         },
@@ -133,7 +136,7 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
 
   Widget _buildEmployeeStats(EmployeeProvider employeeProvider) {
     final stats = employeeProvider.getEmployeeStats();
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(16),
@@ -160,34 +163,38 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
       children: [
         Text(
           value,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
         ),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }
 
   Widget _buildEmployeeTable(EmployeeProvider employeeProvider) {
     if (employeeProvider.items.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 64, color: Colors.grey),
+            Icon(
+              Icons.people_outline,
+              size: 64,
+              color: context.appColors.textTertiary,
+            ),
             SizedBox(height: 16),
             Text(
               'No employees found',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 18,
+                color: context.appColors.textSecondary,
+              ),
             ),
             SizedBox(height: 8),
             Text(
               'Add your first employee to get started',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: context.appColors.textSecondary),
             ),
           ],
         ),
@@ -216,7 +223,10 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
               DataCell(Text(employee.displayName)),
               DataCell(
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Theme.of(context).colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(12),
@@ -231,9 +241,11 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
                 ),
               ),
               DataCell(Text(employee.email ?? 'No email')),
-              DataCell(Text(
-                '${employee.vacationWeeksUsed}/${employee.vacationWeeksAllowed} weeks',
-              )),
+              DataCell(
+                Text(
+                  '${employee.vacationWeeksUsed}/${employee.vacationWeeksAllowed} weeks',
+                ),
+              ),
               DataCell(
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -268,7 +280,10 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
       try {
         await FirestoreSyncService.instance.syncAllEmployeeAccounts();
         if (mounted) {
-          SnackBarHelper.showSuccess(context, 'Employee accounts synced successfully');
+          SnackBarHelper.showSuccess(
+            context,
+            'Employee accounts synced successfully',
+          );
         }
       } catch (e) {
         if (mounted) {
@@ -279,11 +294,16 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
   }
 
   Future<void> _showAddEmployeeDialog() async {
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
     final jobCodesToSuggestions = employeeProvider.getJobCodeSuggestions();
-    
+
     String firstName = '';
-    String jobCode = jobCodesToSuggestions.isNotEmpty ? jobCodesToSuggestions.first : 'Assistant';
+    String jobCode = jobCodesToSuggestions.isNotEmpty
+        ? jobCodesToSuggestions.first
+        : 'Assistant';
     String? email;
     int vacationWeeksAllowed = 0;
 
@@ -320,7 +340,10 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
 
       // Check if name is unique
       if (!employeeProvider.isNameUnique(firstName)) {
-        SnackBarHelper.showError(context, 'An employee with this name already exists');
+        SnackBarHelper.showError(
+          context,
+          'An employee with this name already exists',
+        );
         return;
       }
 
@@ -344,9 +367,12 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
   }
 
   Future<void> _showEditEmployeeDialog(Employee employee) async {
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
     final jobCodeSuggestions = employeeProvider.getJobCodeSuggestions();
-    
+
     String firstName = employee.firstName ?? '';
     String jobCode = employee.jobCode;
     String? email = employee.email;
@@ -385,7 +411,10 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
 
       // Check if name is unique (excluding current employee)
       if (!employeeProvider.isNameUnique(firstName, excludeId: employee.id)) {
-        SnackBarHelper.showError(context, 'An employee with this name already exists');
+        SnackBarHelper.showError(
+          context,
+          'An employee with this name already exists',
+        );
         return;
       }
 
@@ -413,11 +442,15 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
     final confirmed = await ConfirmationDialog.showDelete(
       context: context,
       title: 'Delete Employee',
-      message: 'Are you sure you want to delete ${employee.displayName}? This action cannot be undone.',
+      message:
+          'Are you sure you want to delete ${employee.displayName}? This action cannot be undone.',
     );
 
     if (confirmed) {
-      final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+      final employeeProvider = Provider.of<EmployeeProvider>(
+        context,
+        listen: false,
+      );
       final success = await employeeProvider.deleteEmployee(employee);
 
       if (success) {
@@ -458,15 +491,18 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
       context: context,
       builder: (context) => const CsvImportDialog(),
     );
-    
+
     // Refresh data after import
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
     await employeeProvider.refresh();
   }
 
   Future<void> _showWeeklyTemplateDialog() async {
     if (_selectedEmployee == null) return;
-    
+
     await showDialog(
       context: context,
       builder: (context) => WeeklyTemplateDialog(employee: _selectedEmployee!),
@@ -509,7 +545,9 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
     super.initState();
     _firstNameController = TextEditingController(text: widget.initialFirstName);
     _emailController = TextEditingController(text: widget.initialEmail);
-    _vacationController = TextEditingController(text: widget.initialVacationWeeks.toString());
+    _vacationController = TextEditingController(
+      text: widget.initialVacationWeeks.toString(),
+    );
     _jobCode = widget.initialJobCode;
   }
 
@@ -550,13 +588,15 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: widget.jobCodeSuggestions.contains(_jobCode) ? _jobCode : null,
+                value: widget.jobCodeSuggestions.contains(_jobCode)
+                    ? _jobCode
+                    : null,
                 decoration: const InputDecoration(labelText: 'Job Code'),
                 items: widget.jobCodeSuggestions
-                    .map((code) => DropdownMenuItem(
-                          value: code,
-                          child: Text(code),
-                        ))
+                    .map(
+                      (code) =>
+                          DropdownMenuItem(value: code, child: Text(code)),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) {
@@ -593,8 +633,8 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
             widget.onSave({
               'firstName': firstName,
               'jobCode': _jobCode,
-              'email': _emailController.text.trim().isNotEmpty 
-                  ? _emailController.text.trim() 
+              'email': _emailController.text.trim().isNotEmpty
+                  ? _emailController.text.trim()
                   : null,
               'vacationWeeks': int.tryParse(_vacationController.text) ?? 0,
             });

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/app_colors.dart';
 
 /// Utility class for showing standardized dialogs throughout the app
 class DialogHelper {
@@ -30,9 +31,7 @@ class DialogHelper {
           ],
         ),
         content: Text(message),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -64,7 +63,7 @@ class DialogHelper {
       message: message,
       confirmText: 'Delete',
       cancelText: 'Cancel',
-      confirmColor: Colors.red,
+      confirmColor: context.appColors.destructive,
       icon: Icons.delete,
     );
   }
@@ -90,9 +89,7 @@ class DialogHelper {
           ],
         ),
         content: Text(message),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         actions: [
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -177,15 +174,15 @@ class DialogHelper {
             Expanded(child: Text(title)),
           ],
         ),
-        content: message != null 
+        content: message != null
             ? Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(message),
                   const SizedBox(height: 16),
-                  ...options.asMap().entries.map((entry) => 
-                    SizedBox(
+                  ...options.asMap().entries.map(
+                    (entry) => SizedBox(
                       width: double.infinity,
                       child: TextButton(
                         onPressed: () => Navigator.of(context).pop(entry.key),
@@ -197,19 +194,21 @@ class DialogHelper {
               )
             : Column(
                 mainAxisSize: MainAxisSize.min,
-                children: options.asMap().entries.map((entry) => 
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(entry.key),
-                      child: Text(entry.value),
-                    ),
-                  ),
-                ).toList(),
+                children: options
+                    .asMap()
+                    .entries
+                    .map(
+                      (entry) => SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pop(entry.key),
+                          child: Text(entry.value),
+                        ),
+                      ),
+                    )
+                    .toList(),
               ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -232,7 +231,7 @@ class DialogHelper {
     required ValueChanged<String> onChanged,
   }) async {
     String value = initialValue ?? '';
-    
+
     final result = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -265,7 +264,7 @@ class DialogHelper {
         );
       },
     );
-    
+
     return result ?? false;
   }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/employee.dart';
 import '../models/settings.dart';
 import '../providers/employee_provider.dart';
+import '../services/app_colors.dart';
 import '../providers/settings_provider.dart';
 import '../providers/time_off_provider.dart';
 import '../utils/loading_state_mixin.dart';
@@ -16,7 +17,7 @@ class PtoVacTrackerPage extends StatefulWidget {
   State<PtoVacTrackerPage> createState() => _PtoVacTrackerPageState();
 }
 
-class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> 
+class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
     with LoadingStateMixin<PtoVacTrackerPage> {
   int _selectedTrimesterYear = DateTime.now().year;
   int? _selectedEmployeeId;
@@ -35,10 +36,19 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
   }
 
   Future<void> _loadProvidersData() async {
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-    final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
-    
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
+    final settingsProvider = Provider.of<SettingsProvider>(
+      context,
+      listen: false,
+    );
+    final timeOffProvider = Provider.of<TimeOffProvider>(
+      context,
+      listen: false,
+    );
+
     // Load all required data
     await Future.wait([
       employeeProvider.loadEmployees(),
@@ -48,11 +58,19 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
   }
 
   void _setDefaultSelectedEmployee() {
-    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
-    final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
-    
-    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(employeeProvider.employees);
-    
+    final employeeProvider = Provider.of<EmployeeProvider>(
+      context,
+      listen: false,
+    );
+    final timeOffProvider = Provider.of<TimeOffProvider>(
+      context,
+      listen: false,
+    );
+
+    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(
+      employeeProvider.employees,
+    );
+
     if (ptoEmployees.isNotEmpty && _selectedEmployeeId == null) {
       setState(() {
         _selectedEmployeeId = ptoEmployees.first.id;
@@ -65,51 +83,76 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
     return Scaffold(
       appBar: AppBar(title: const Text("PTO / VAC Tracker")),
       body: Consumer3<EmployeeProvider, SettingsProvider, TimeOffProvider>(
-        builder: (context, employeeProvider, settingsProvider, timeOffProvider, child) {
-          if (isLoading || employeeProvider.isLoading || settingsProvider.isLoading || timeOffProvider.isLoading) {
-            return const LoadingIndicator();
-          }
+        builder:
+            (
+              context,
+              employeeProvider,
+              settingsProvider,
+              timeOffProvider,
+              child,
+            ) {
+              if (isLoading ||
+                  employeeProvider.isLoading ||
+                  settingsProvider.isLoading ||
+                  timeOffProvider.isLoading) {
+                return const LoadingIndicator();
+              }
 
-          if (employeeProvider.errorMessage != null || settingsProvider.errorMessage != null || timeOffProvider.errorMessage != null) {
-            return ErrorMessage(
-              message: employeeProvider.errorMessage ??
-                       settingsProvider.errorMessage ?? 
-                       timeOffProvider.errorMessage!,
-              onRetry: _loadAllData,
-            );
-          }
+              if (employeeProvider.errorMessage != null ||
+                  settingsProvider.errorMessage != null ||
+                  timeOffProvider.errorMessage != null) {
+                return ErrorMessage(
+                  message:
+                      employeeProvider.errorMessage ??
+                      settingsProvider.errorMessage ??
+                      timeOffProvider.errorMessage!,
+                  onRetry: _loadAllData,
+                );
+              }
 
-          final settings = settingsProvider.settings;
-          if (settings == null) {
-            return const ErrorMessage(
-              message: 'Settings not available',
-            );
-          }
+              final settings = settingsProvider.settings;
+              if (settings == null) {
+                return const ErrorMessage(message: 'Settings not available');
+              }
 
-          return RefreshIndicator(
-            onRefresh: _loadAllData,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildPtoSummaryTable(employeeProvider, settingsProvider, timeOffProvider),
-                  const SizedBox(height: 24),
-                  _buildPtoTrimesterBreakdownSection(employeeProvider, settingsProvider, timeOffProvider),
-                  const SizedBox(height: 24),
-                  _buildVacationSection(employeeProvider, timeOffProvider),
-                ],
-              ),
-            ),
-          );
-        },
+              return RefreshIndicator(
+                onRefresh: _loadAllData,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildPtoSummaryTable(
+                        employeeProvider,
+                        settingsProvider,
+                        timeOffProvider,
+                      ),
+                      const SizedBox(height: 24),
+                      _buildPtoTrimesterBreakdownSection(
+                        employeeProvider,
+                        settingsProvider,
+                        timeOffProvider,
+                      ),
+                      const SizedBox(height: 24),
+                      _buildVacationSection(employeeProvider, timeOffProvider),
+                    ],
+                  ),
+                ),
+              );
+            },
       ),
     );
   }
 
-  Widget _buildPtoSummaryTable(EmployeeProvider employeeProvider, SettingsProvider settingsProvider, TimeOffProvider timeOffProvider) {
+  Widget _buildPtoSummaryTable(
+    EmployeeProvider employeeProvider,
+    SettingsProvider settingsProvider,
+    TimeOffProvider timeOffProvider,
+  ) {
     final settings = settingsProvider.settings!;
-    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(employeeProvider.employees);
+    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(
+      employeeProvider.employees,
+    );
 
     if (ptoEmployees.isEmpty) {
       return Card(
@@ -144,20 +187,25 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _loadAllPtoSummaries(ptoEmployees, settings, timeOffProvider),
+                future: _loadAllPtoSummaries(
+                  ptoEmployees,
+                  settings,
+                  timeOffProvider,
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const LoadingIndicator();
                   }
-                  
+
                   if (snapshot.hasError) {
                     return ErrorMessage(
-                      message: 'Failed to load PTO summaries: ${snapshot.error}',
+                      message:
+                          'Failed to load PTO summaries: ${snapshot.error}',
                     );
                   }
-                  
+
                   final rows = snapshot.data ?? [];
-                  
+
                   return DataTable(
                     columns: const [
                       DataColumn(label: Text("Employee")),
@@ -187,7 +235,11 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
     );
   }
 
-  Future<List<Map<String, dynamic>>> _loadAllPtoSummaries(List<Employee> ptoEmployees, Settings settings, TimeOffProvider timeOffProvider) async {
+  Future<List<Map<String, dynamic>>> _loadAllPtoSummaries(
+    List<Employee> ptoEmployees,
+    Settings settings,
+    TimeOffProvider timeOffProvider,
+  ) async {
     final List<Map<String, dynamic>> summaries = [];
 
     for (final employee in ptoEmployees) {
@@ -208,9 +260,15 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
     return summaries;
   }
 
-  Widget _buildPtoTrimesterBreakdownSection(EmployeeProvider employeeProvider, SettingsProvider settingsProvider, TimeOffProvider timeOffProvider) {
+  Widget _buildPtoTrimesterBreakdownSection(
+    EmployeeProvider employeeProvider,
+    SettingsProvider settingsProvider,
+    TimeOffProvider timeOffProvider,
+  ) {
     final settings = settingsProvider.settings!;
-    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(employeeProvider.employees);
+    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(
+      employeeProvider.employees,
+    );
 
     if (ptoEmployees.isEmpty) {
       return Card(
@@ -248,10 +306,12 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
                 DropdownButton<int>(
                   value: _selectedTrimesterYear,
                   items: List.generate(5, (i) => DateTime.now().year - 2 + i)
-                      .map((year) => DropdownMenuItem(
-                            value: year,
-                            child: Text(year.toString()),
-                          ))
+                      .map(
+                        (year) => DropdownMenuItem(
+                          value: year,
+                          child: Text(year.toString()),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -264,10 +324,12 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
                 DropdownButton<int?>(
                   value: _selectedEmployeeId,
                   items: ptoEmployees
-                      .map((e) => DropdownMenuItem(
-                            value: e.id,
-                            child: Text(e.displayName),
-                          ))
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e.id,
+                          child: Text(e.displayName),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     setState(() => _selectedEmployeeId = value);
@@ -287,7 +349,7 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
                 }
 
                 final summaries = timeOffProvider.calculateTrimesterSummaries(
-                  selectedEmployee, 
+                  selectedEmployee,
                   settings,
                   year: _selectedTrimesterYear,
                 );
@@ -331,7 +393,10 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
     );
   }
 
-  Widget _buildVacationSection(EmployeeProvider employeeProvider, TimeOffProvider timeOffProvider) {
+  Widget _buildVacationSection(
+    EmployeeProvider employeeProvider,
+    TimeOffProvider timeOffProvider,
+  ) {
     // Filter employees who have vacation weeks allocated
     final vacationEmployees = employeeProvider.employees
         .where((e) => e.vacationWeeksAllowed > 0)
@@ -367,7 +432,9 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const Divider(),
-            ...vacationEmployees.map((e) => _buildVacationRow(e, timeOffProvider)),
+            ...vacationEmployees.map(
+              (e) => _buildVacationRow(e, timeOffProvider),
+            ),
           ],
         ),
       ),
@@ -390,18 +457,16 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ),
-          Expanded(
-            child: Text("Allowed: $allowed"),
-          ),
-          Expanded(
-            child: Text("Used: $used"),
-          ),
+          Expanded(child: Text("Allowed: $allowed")),
+          Expanded(child: Text("Used: $used")),
           Expanded(
             child: Text(
               "Remaining: $remaining",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: remaining > 0 ? Colors.green : Colors.red,
+                color: remaining > 0
+                    ? context.appColors.successForeground
+                    : context.appColors.errorForeground,
               ),
             ),
           ),

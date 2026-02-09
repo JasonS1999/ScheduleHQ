@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/employee.dart';
 import '../models/employee_availability.dart';
 import '../database/employee_availability_dao.dart';
+import '../services/app_colors.dart';
 
 class EmployeeAvailabilityPage extends StatefulWidget {
   final Employee employee;
@@ -9,7 +10,8 @@ class EmployeeAvailabilityPage extends StatefulWidget {
   const EmployeeAvailabilityPage({super.key, required this.employee});
 
   @override
-  State<EmployeeAvailabilityPage> createState() => _EmployeeAvailabilityPageState();
+  State<EmployeeAvailabilityPage> createState() =>
+      _EmployeeAvailabilityPageState();
 }
 
 class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
@@ -63,16 +65,28 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
             padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
-                const Text('Pattern Type: ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Pattern Type: ',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButton<String>(
                     value: _selectedPatternType,
                     isExpanded: true,
                     items: const [
-                      DropdownMenuItem(value: 'generic', child: Text('Generic (repeats weekly)')),
-                      DropdownMenuItem(value: 'biweekly', child: Text('2-Week Pattern (alternating weeks)')),
-                      DropdownMenuItem(value: 'monthly', child: Text('Monthly Override (specific dates)')),
+                      DropdownMenuItem(
+                        value: 'generic',
+                        child: Text('Generic (repeats weekly)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'biweekly',
+                        child: Text('2-Week Pattern (alternating weeks)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'monthly',
+                        child: Text('Monthly Override (specific dates)'),
+                      ),
                     ],
                     onChanged: (value) async {
                       if (value != null && value != _selectedPatternType) {
@@ -80,7 +94,9 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
                           context: context,
                           builder: (context) => AlertDialog(
                             title: const Text('Switch Pattern Type'),
-                            content: const Text('Switching pattern types will clear any existing availability settings for the other patterns. Continue?'),
+                            content: const Text(
+                              'Switching pattern types will clear any existing availability settings for the other patterns. Continue?',
+                            ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
@@ -93,28 +109,31 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
                             ],
                           ),
                         );
-                        
+
                         if (confirm == true) {
                           // Clear other pattern types
                           if (value != 'generic') {
                             for (var avail in _genericAvailability) {
-                              if (avail.id != null) await _dao.deleteAvailability(avail.id!);
+                              if (avail.id != null)
+                                await _dao.deleteAvailability(avail.id!);
                             }
                             _genericAvailability = [];
                           }
                           if (value != 'biweekly') {
                             for (var avail in _biweeklyAvailability) {
-                              if (avail.id != null) await _dao.deleteAvailability(avail.id!);
+                              if (avail.id != null)
+                                await _dao.deleteAvailability(avail.id!);
                             }
                             _biweeklyAvailability = [];
                           }
                           if (value != 'monthly') {
                             for (var avail in _monthlyOverrides) {
-                              if (avail.id != null) await _dao.deleteAvailability(avail.id!);
+                              if (avail.id != null)
+                                await _dao.deleteAvailability(avail.id!);
                             }
                             _monthlyOverrides = [];
                           }
-                          
+
                           setState(() {
                             _selectedPatternType = value;
                           });
@@ -127,9 +146,7 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
             ),
           ),
           const Divider(),
-          Expanded(
-            child: _buildSelectedPatternView(),
-          ),
+          Expanded(child: _buildSelectedPatternView()),
         ],
       ),
     );
@@ -149,8 +166,16 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
   }
 
   Widget _buildGenericTab() {
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+    const daysOfWeek = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: 7,
@@ -172,7 +197,8 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
             subtitle: _buildAvailabilitySubtitle(availability),
             trailing: IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: () => _editAvailability(availability, 'generic', index),
+              onPressed: () =>
+                  _editAvailability(availability, 'generic', index),
             ),
           ),
         );
@@ -181,12 +207,23 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
   }
 
   Widget _buildBiweeklyTab() {
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+    const daysOfWeek = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('Week 1', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text(
+          'Week 1',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 8),
         ...List.generate(7, (index) {
           final availability = _biweeklyAvailability.firstWhere(
@@ -207,13 +244,17 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
               subtitle: _buildAvailabilitySubtitle(availability),
               trailing: IconButton(
                 icon: const Icon(Icons.edit),
-                onPressed: () => _editAvailability(availability, 'biweekly', index, 1),
+                onPressed: () =>
+                    _editAvailability(availability, 'biweekly', index, 1),
               ),
             ),
           );
         }),
         const SizedBox(height: 16),
-        const Text('Week 2', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text(
+          'Week 2',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 8),
         ...List.generate(7, (index) {
           final availability = _biweeklyAvailability.firstWhere(
@@ -234,7 +275,8 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
               subtitle: _buildAvailabilitySubtitle(availability),
               trailing: IconButton(
                 icon: const Icon(Icons.edit),
-                onPressed: () => _editAvailability(availability, 'biweekly', index, 2),
+                onPressed: () =>
+                    _editAvailability(availability, 'biweekly', index, 2),
               ),
             ),
           );
@@ -255,28 +297,35 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
                 icon: const Icon(Icons.chevron_left),
                 onPressed: () {
                   setState(() {
-                    _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1);
+                    _selectedMonth = DateTime(
+                      _selectedMonth.year,
+                      _selectedMonth.month - 1,
+                    );
                   });
                 },
               ),
               Text(
                 '${_getMonthName(_selectedMonth.month)} ${_selectedMonth.year}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
                 onPressed: () {
                   setState(() {
-                    _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1);
+                    _selectedMonth = DateTime(
+                      _selectedMonth.year,
+                      _selectedMonth.month + 1,
+                    );
                   });
                 },
               ),
             ],
           ),
         ),
-        Expanded(
-          child: _buildMonthlyCalendar(),
-        ),
+        Expanded(child: _buildMonthlyCalendar()),
       ],
     );
   }
@@ -285,7 +334,7 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
     final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
     final lastDay = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0);
     final startWeekday = firstDay.weekday % 7; // 0 = Sunday
-    
+
     return GridView.builder(
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -318,8 +367,9 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
         }
 
         final date = DateTime(_selectedMonth.year, _selectedMonth.month, day);
-        final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-        
+        final dateStr =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
         final override = _monthlyOverrides.firstWhere(
           (o) => o.specificDate == dateStr,
           orElse: () => EmployeeAvailability(
@@ -337,14 +387,14 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
           onTap: () => _editAvailability(override, 'monthly', null, null, date),
           child: Container(
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey),
+              border: Border.all(color: context.appColors.borderLight),
               color: hasOverride
-                  ? (override.available ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3))
+                  ? (override.available
+                        ? context.appColors.successBackground
+                        : context.appColors.errorBackground)
                   : null,
             ),
-            child: Center(
-              child: Text('$day'),
-            ),
+            child: Center(child: Text('$day')),
           ),
         );
       },
@@ -353,7 +403,10 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
 
   Widget _buildAvailabilitySubtitle(EmployeeAvailability availability) {
     if (!availability.available) {
-      return const Text('Unavailable', style: TextStyle(color: Colors.red));
+      return Text(
+        'Unavailable',
+        style: TextStyle(color: context.appColors.errorForeground),
+      );
     }
     if (availability.allDay) {
       return const Text('Available all day');
@@ -364,10 +417,10 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
   Future<void> _editAvailability(
     EmployeeAvailability availability,
     String type,
-    int? dayOfWeek,
-    [int? weekNumber,
-    DateTime? specificDate]
-  ) async {
+    int? dayOfWeek, [
+    int? weekNumber,
+    DateTime? specificDate,
+  ]) async {
     bool available = availability.available;
     bool allDay = availability.allDay;
     TimeOfDay startTime = availability.startTime != null
@@ -413,7 +466,9 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
               if (available && !allDay) ...[
                 ListTile(
                   title: const Text('Start Time'),
-                  trailing: Text('${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}'),
+                  trailing: Text(
+                    '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+                  ),
                   onTap: () async {
                     final picked = await showTimePicker(
                       context: context,
@@ -428,7 +483,9 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
                 ),
                 ListTile(
                   title: const Text('End Time'),
-                  trailing: Text('${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}'),
+                  trailing: Text(
+                    '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+                  ),
                   onTap: () async {
                     final picked = await showTimePicker(
                       context: context,
@@ -498,8 +555,18 @@ class _EmployeeAvailabilityPageState extends State<EmployeeAvailabilityPage> {
 
   String _getMonthName(int month) {
     const names = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return names[month - 1];
   }

@@ -131,11 +131,7 @@ class _NavigationShellState extends State<NavigationShell> {
                                 authProvider.userEmail!,
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
-                                      color: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.color
-                                          ?.withOpacity(0.7),
+                                      color: context.appColors.textSecondary,
                                     ),
                               ),
                             ],
@@ -154,7 +150,8 @@ class _NavigationShellState extends State<NavigationShell> {
                             height: MediaQuery.of(context).size.height - 200,
                             child: NavigationRail(
                               selectedIndex: _index,
-                              onDestinationSelected: (i) => setState(() => _index = i),
+                              onDestinationSelected: (i) =>
+                                  setState(() => _index = i),
                               labelType: NavigationRailLabelType.all,
                               destinations: const [
                                 NavigationRailDestination(
