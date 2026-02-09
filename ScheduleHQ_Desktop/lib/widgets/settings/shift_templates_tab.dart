@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/shift_template.dart';
 import '../../providers/store_settings_provider.dart';
+import '../../services/app_colors.dart';
 import '../../utils/dialog_helper.dart';
 
 class ShiftTemplatesTab extends StatefulWidget {
@@ -42,7 +43,9 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
               const SizedBox(height: 16),
               ListTile(
                 title: const Text('Start Time'),
-                trailing: Text('${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}'),
+                trailing: Text(
+                  '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+                ),
                 onTap: () async {
                   final picked = await showTimePicker(
                     context: context,
@@ -57,7 +60,9 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
               ),
               ListTile(
                 title: const Text('End Time'),
-                trailing: Text('${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}'),
+                trailing: Text(
+                  '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+                ),
                 onTap: () async {
                   final picked = await showTimePicker(
                     context: context,
@@ -117,7 +122,9 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
               const SizedBox(height: 16),
               ListTile(
                 title: const Text('Start Time'),
-                trailing: Text('${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}'),
+                trailing: Text(
+                  '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
+                ),
                 onTap: () async {
                   final picked = await showTimePicker(
                     context: context,
@@ -132,7 +139,9 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
               ),
               ListTile(
                 title: const Text('End Time'),
-                trailing: Text('${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}'),
+                trailing: Text(
+                  '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
+                ),
                 onTap: () async {
                   final picked = await showTimePicker(
                     context: context,
@@ -173,13 +182,13 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
 
   Future<void> _deleteTemplate(ShiftTemplate template) async {
     final provider = context.read<StoreSettingsProvider>();
-    
+
     final confirmed = await DialogHelper.showConfirmDialog(
       context,
       title: 'Delete Template',
       message: 'Delete "${template.templateName}"?',
       confirmText: 'Delete',
-      confirmColor: Colors.red,
+      confirmColor: context.appColors.destructive,
     );
 
     if (confirmed) {
@@ -220,9 +229,9 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Create custom shift templates with start and end times. Templates are shared across all job codes.',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: context.appColors.textSecondary),
               ),
               const SizedBox(height: 24),
               Align(
@@ -245,7 +254,9 @@ class _ShiftTemplatesTabState extends State<ShiftTemplatesTab> {
                           return Card(
                             child: ListTile(
                               title: Text(template.templateName),
-                              subtitle: Text('${template.startTime} - ${template.endTime}'),
+                              subtitle: Text(
+                                '${template.startTime} - ${template.endTime}',
+                              ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [

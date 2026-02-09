@@ -6,6 +6,7 @@ import '../../database/job_code_settings_dao.dart';
 import '../../models/settings.dart';
 import '../../models/employee.dart';
 import '../../models/job_code_settings.dart';
+import '../../services/app_colors.dart';
 
 class ScheduleSettingsTab extends StatefulWidget {
   const ScheduleSettingsTab({super.key});
@@ -229,10 +230,10 @@ class _ScheduleSettingsTabState extends State<ScheduleSettingsTab> {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             "Select employees to show in the statistics table at the bottom of monthly PDF exports. "
             "Stats include Opens, Mids, Closes, PTO hours, and Vacation days.",
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: context.appColors.textSecondary),
           ),
           const SizedBox(height: 16),
 
@@ -280,7 +281,7 @@ class _ScheduleSettingsTabState extends State<ScheduleSettingsTab> {
           Container(
             constraints: const BoxConstraints(maxHeight: 300),
             decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
+              border: Border.all(color: context.appColors.borderLight),
               borderRadius: BorderRadius.circular(8),
             ),
             child: ListView.builder(

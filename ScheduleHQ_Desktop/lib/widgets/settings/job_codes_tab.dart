@@ -525,7 +525,7 @@ class _GroupsDialogState extends State<_GroupsDialog> {
             const SizedBox(height: 16),
             Expanded(
               child: _groups.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'No groups yet.\nGroups let you organize job codes together.',
                         textAlign: TextAlign.center,
