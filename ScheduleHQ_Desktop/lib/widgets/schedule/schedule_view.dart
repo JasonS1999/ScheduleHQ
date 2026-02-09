@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../database/employee_dao.dart';
 import '../../database/time_off_dao.dart';
@@ -24,10 +24,8 @@ import '../../models/shift_type.dart';
 import '../../models/store_hours.dart';
 import '../../services/app_colors.dart';
 import '../../services/schedule_pdf_service.dart';
-import '../../services/schedule_undo_manager.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/notification_sender_service.dart';
-import 'shift_runner_table.dart';
 
 // Custom intents for keyboard shortcuts
 class CopyIntent extends Intent {
@@ -115,9 +113,6 @@ class _ScheduleViewState extends State<ScheduleView> {
   // simple in-memory clipboard for copy/paste: stores start TimeOfDay, duration, and text
   Map<String, Object?>? _clipboard;
 
-  // Undo/Redo manager
-  final ScheduleUndoManager _undoManager = ScheduleUndoManager();
-
   // Counter to trigger shift runner refresh in child views
   int _shiftRunnerRefreshKey = 0;
 
@@ -126,20 +121,12 @@ class _ScheduleViewState extends State<ScheduleView> {
     super.initState();
     _date = widget.initialDate;
     _mode = widget.initialMode;
-    _undoManager.addListener(_onUndoRedoChange);
     _loadEmployees();
   }
 
   @override
   void dispose() {
-    _undoManager.removeListener(_onUndoRedoChange);
     super.dispose();
-  }
-
-  void _onUndoRedoChange() {
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   List<ShiftPlaceholder> _timeOffToShifts(List<TimeOffEntry> entries) {
@@ -311,57 +298,17 @@ class _ScheduleViewState extends State<ScheduleView> {
     _refreshShifts();
   }
 
-  Future<void> _handleUndo() async {
-    await _undoManager.undo();
-    await _refreshShifts();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Undo successful'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
+  // Direct shift operations (no undo)
+  Future<int> _insertShift(Shift shift) async {
+    return await _shiftDao.insert(shift);
   }
 
-  Future<void> _handleRedo() async {
-    await _undoManager.redo();
-    await _refreshShifts();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Redo successful'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
+  Future<void> _updateShift(Shift newShift) async {
+    await _shiftDao.update(newShift);
   }
 
-  // Undo-aware shift operations
-  Future<int> _insertShiftWithUndo(Shift shift) async {
-    final action = CreateShiftAction(
-      shift: shift,
-      insertFn: (s) => _shiftDao.insert(s),
-      deleteFn: (id) => _shiftDao.delete(id),
-    );
-    await _undoManager.executeAction(action);
-    return shift.id ?? 0;
-  }
-
-  Future<void> _updateShiftWithUndo(Shift oldShift, Shift newShift) async {
-    final action = UpdateShiftAction(
-      oldShift: oldShift,
-      newShift: newShift,
-      updateFn: (s) => _shiftDao.update(s),
-    );
-    await _undoManager.executeAction(action);
-  }
-
-  Future<void> _deleteShiftWithUndo(Shift shift) async {
+  Future<void> _deleteShift(Shift shift) async {
     // Check if there's a runner assigned for this shift's employee, date, and shift type
-    ShiftRunner? deletedRunner;
-
-    // Determine the shift type from the shift's start time
     final shiftType = ShiftRunner.getShiftTypeForTime(
       shift.startTime.hour,
       shift.startTime.minute,
@@ -374,50 +321,29 @@ class _ScheduleViewState extends State<ScheduleView> {
         shift.startTime.day,
       );
 
-      // Get the runner for this date and shift type
       final runner = await _shiftRunnerDao.getForDateAndShift(
         shiftDate,
         shiftType,
       );
 
-      // Check if the runner is the employee being deleted
       if (runner != null) {
         final employee = await _employeeDao.getById(shift.employeeId);
         if (employee != null && runner.runnerName == employee.name) {
-          deletedRunner = runner;
+          await _shiftRunnerDao.delete(shiftDate, shiftType);
+          setState(() {
+            _shiftRunnerRefreshKey++;
+          });
         }
       }
     }
 
-    final action = DeleteShiftAction(
-      shift: shift,
-      insertFn: (s) => _shiftDao.insert(s),
-      deleteFn: (id) => _shiftDao.delete(id),
-      deletedRunner: deletedRunner,
-      upsertRunnerFn: deletedRunner != null
-          ? (r) => _shiftRunnerDao.upsert(r)
-          : null,
-      deleteRunnerFn: deletedRunner != null
-          ? (date, type) => _shiftRunnerDao.delete(date, type)
-          : null,
-    );
-    await _undoManager.executeAction(action);
-
-    // If a runner was deleted, trigger runner table refresh
-    if (deletedRunner != null) {
-      setState(() {
-        _shiftRunnerRefreshKey++;
-      });
+    if (shift.id != null) {
+      await _shiftDao.delete(shift.id!);
     }
   }
 
-  Future<void> _moveShiftWithUndo(Shift oldShift, Shift newShift) async {
-    final action = MoveShiftAction(
-      oldShift: oldShift,
-      newShift: newShift,
-      updateFn: (s) => _shiftDao.update(s),
-    );
-    await _undoManager.executeAction(action);
+  Future<void> _moveShift(Shift newShift) async {
+    await _shiftDao.update(newShift);
   }
 
   Future<void> _handlePrintExport(String action) async {
@@ -1184,27 +1110,6 @@ class _ScheduleViewState extends State<ScheduleView> {
           ],
         ),
         const SizedBox(width: 8),
-        // Undo button
-        Tooltip(
-          message: _undoManager.canUndo
-              ? 'Undo ${_undoManager.undoDescription ?? ''}'
-              : 'Nothing to undo',
-          child: IconButton(
-            icon: const Icon(Icons.undo),
-            onPressed: _undoManager.canUndo ? _handleUndo : null,
-          ),
-        ),
-        // Redo button
-        Tooltip(
-          message: _undoManager.canRedo
-              ? 'Redo ${_undoManager.redoDescription ?? ''}'
-              : 'Nothing to redo',
-          child: IconButton(
-            icon: const Icon(Icons.redo),
-            onPressed: _undoManager.canRedo ? _handleRedo : null,
-          ),
-        ),
-        const SizedBox(width: 8),
         PopupMenuButton<String>(
           icon: const Icon(Icons.print),
           tooltip: 'Print/Export Schedule',
@@ -1397,7 +1302,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                   endTime: end,
                   label: _clipboard!['text'] as String,
                 );
-                await _insertShiftWithUndo(shift);
+                await _insertShift(shift);
                 _clipboard = null;
                 await _refreshShifts();
               },
@@ -1442,7 +1347,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                           label: 'OFF',
                           notes: null,
                         );
-                        await _updateShiftWithUndo(oldShiftModel, updated);
+                        await _updateShift(updated);
                       } else {
                         // Create new OFF shift
                         final newShift = Shift(
@@ -1452,7 +1357,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                           label: 'OFF',
                           notes: null,
                         );
-                        await _insertShiftWithUndo(newShift);
+                        await _insertShift(newShift);
                       }
                       await _refreshShifts();
                       return;
@@ -1469,7 +1374,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                           label: oldShift.text,
                           notes: oldShift.notes,
                         );
-                        await _deleteShiftWithUndo(shiftToDelete);
+                        await _deleteShift(shiftToDelete);
                       }
                     } else {
                       // Check for conflicts (exclude current shift if editing)
@@ -1509,7 +1414,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                           label: oldShift.text,
                           notes: shiftNotes ?? oldShift.notes,
                         );
-                        await _updateShiftWithUndo(oldShiftModel, updated);
+                        await _updateShift(updated);
                       } else {
                         // Insert new
                         final newShift = Shift(
@@ -1519,7 +1424,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                           label: oldShift.text,
                           notes: shiftNotes,
                         );
-                        await _insertShiftWithUndo(newShift);
+                        await _insertShift(newShift);
                       }
                     }
                     await _refreshShifts();
@@ -1571,7 +1476,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                     endTime: newEnd,
                     label: shift.text,
                   );
-                  await _moveShiftWithUndo(oldShiftModel, updated);
+                  await _moveShift(updated);
                 } else {
                   // Insert as new (shouldn't happen for drag, but handle it)
                   final newShift = Shift(
@@ -1580,7 +1485,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                     endTime: newEnd,
                     label: shift.text,
                   );
-                  await _insertShiftWithUndo(newShift);
+                  await _insertShift(newShift);
                 }
                 await _refreshShifts();
               },
@@ -1665,7 +1570,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           endTime: end,
           label: _clipboard!['text'] as String,
         );
-        await _insertShiftWithUndo(shift);
+        await _insertShift(shift);
         _clipboard = null;
         await _refreshShifts();
       },
@@ -1701,7 +1606,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               label: 'OFF',
               notes: null,
             );
-            await _updateShiftWithUndo(oldShiftModel, updated);
+            await _updateShift(updated);
           } else {
             // Create new OFF shift
             final newShift = Shift(
@@ -1711,7 +1616,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               label: 'OFF',
               notes: null,
             );
-            await _insertShiftWithUndo(newShift);
+            await _insertShift(newShift);
           }
           await _refreshShifts();
           return;
@@ -1728,7 +1633,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               label: oldShift.text,
               notes: oldShift.notes,
             );
-            await _deleteShiftWithUndo(shiftToDelete);
+            await _deleteShift(shiftToDelete);
           }
         } else {
           // Update or add with undo
@@ -1749,7 +1654,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               label: oldShift.text,
               notes: shiftNotes ?? oldShift.notes,
             );
-            await _updateShiftWithUndo(oldShiftModel, updated);
+            await _updateShift(updated);
           } else {
             final newShift = Shift(
               employeeId: oldShift.employeeId,
@@ -1758,7 +1663,7 @@ class _ScheduleViewState extends State<ScheduleView> {
               label: oldShift.text,
               notes: shiftNotes,
             );
-            await _insertShiftWithUndo(newShift);
+            await _insertShift(newShift);
           }
         }
         await _refreshShifts();
@@ -1806,7 +1711,7 @@ class _ScheduleViewState extends State<ScheduleView> {
             endTime: newEnd,
             label: shift.text,
           );
-          await _moveShiftWithUndo(oldShiftModel, updated);
+          await _moveShift(updated);
         } else {
           final newShift = Shift(
             employeeId: newEmployeeId,
@@ -1814,7 +1719,7 @@ class _ScheduleViewState extends State<ScheduleView> {
             endTime: newEnd,
             label: shift.text,
           );
-          await _insertShiftWithUndo(newShift);
+          await _insertShift(newShift);
         }
         await _refreshShifts();
       },
@@ -1911,7 +1816,7 @@ class _ScheduleViewState extends State<ScheduleView> {
                       (c) => Padding(
                         padding: const EdgeInsets.only(left: 8, top: 2),
                         child: Text(
-                          '• ${_formatTimeRange(c.startTime, c.endTime)}',
+                          'â€¢ ${_formatTimeRange(c.startTime, c.endTime)}',
                         ),
                       ),
                     ),
@@ -5939,7 +5844,7 @@ class _MonthlyRunnerSearchDialogState
                   style: const TextStyle(fontSize: 16),
                 ),
                 Text(
-                  '${widget.day.month}/${widget.day.day} • ${widget.startTime} - ${widget.endTime}',
+                  '${widget.day.month}/${widget.day.day} â€¢ ${widget.startTime} - ${widget.endTime}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(
