@@ -53,10 +53,17 @@ bool _shouldShowAsLabel(ShiftPlaceholder s) {
   // Check for OFF shift format: 4:00 AM to 3:59 AM (next day)
   final t = s.text.toLowerCase();
   if (t == 'off') {
-    return (s.start.hour == 4 &&
+    // Primary check: exact 4AM-3:59AM pattern (DST-safe with new component storage)
+    final hasCorrectTimes = (s.start.hour == 4 &&
         s.start.minute == 0 &&
         s.end.hour == 3 &&
         s.end.minute == 59);
+    // Defensive fallback: show as label if times are within 2 hours (handles legacy DST-shifted data)
+    final seemsLikeOffShift = (s.start.hour >= 2 && s.start.hour <= 6) &&
+        (s.end.hour >= 2 && s.end.hour <= 6) &&
+        s.start.minute == 0 &&
+        s.end.minute == 59;
+    return hasCorrectTimes || seemsLikeOffShift;
   }
   return false;
 }
