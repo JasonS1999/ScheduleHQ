@@ -23,6 +23,7 @@ import '../../models/shift_runner.dart';
 import '../../models/shift_type.dart';
 import '../../models/store_hours.dart';
 import '../../services/app_colors.dart';
+import '../../utils/color_helpers.dart';
 import '../../services/schedule_pdf_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/notification_sender_service.dart';
@@ -35,8 +36,6 @@ class CopyIntent extends Intent {
 class PasteIntent extends Intent {
   const PasteIntent();
 }
-
-
 
 bool _isLabelOnly(String text) {
   final t = text.toLowerCase();
@@ -52,12 +51,14 @@ bool _shouldShowAsLabel(ShiftPlaceholder s) {
   final t = s.text.toLowerCase();
   if (t == 'off') {
     // Primary check: exact 4AM-3:59AM pattern (DST-safe with new component storage)
-    final hasCorrectTimes = (s.start.hour == 4 &&
+    final hasCorrectTimes =
+        (s.start.hour == 4 &&
         s.start.minute == 0 &&
         s.end.hour == 3 &&
         s.end.minute == 59);
     // Defensive fallback: show as label if times are within 2 hours (handles legacy DST-shifted data)
-    final seemsLikeOffShift = (s.start.hour >= 2 && s.start.hour <= 6) &&
+    final seemsLikeOffShift =
+        (s.start.hour >= 2 && s.start.hour <= 6) &&
         (s.end.hour >= 2 && s.end.hour <= 6) &&
         s.start.minute == 0 &&
         s.end.minute == 59;
@@ -78,10 +79,8 @@ String _labelText(String text) {
 class ScheduleView extends StatefulWidget {
   final DateTime initialDate;
 
-  ScheduleView({
-    super.key,
-    DateTime? date,
-  }) : initialDate = date ?? DateTime.now();
+  ScheduleView({super.key, DateTime? date})
+    : initialDate = date ?? DateTime.now();
 
   @override
   State<ScheduleView> createState() => _ScheduleViewState();
@@ -337,110 +336,106 @@ class _ScheduleViewState extends State<ScheduleView> {
       final firstDay = DateTime(_date.year, _date.month, 1);
       final lastDay = DateTime(_date.year, _date.month + 1, 0);
 
-        // Check if this month results in only 4 weeks (need to extend range for 5-week export)
-        // Find Sunday before or on first day
-        final startDate = firstDay.subtract(
-          Duration(days: firstDay.weekday % 7),
+      // Check if this month results in only 4 weeks (need to extend range for 5-week export)
+      // Find Sunday before or on first day
+      final startDate = firstDay.subtract(Duration(days: firstDay.weekday % 7));
+      // Count weeks
+      var weekCount = 0;
+      var currentDate = startDate;
+      while (currentDate.isBefore(lastDay) ||
+          currentDate.month == _date.month) {
+        weekCount++;
+        currentDate = currentDate.add(const Duration(days: 7));
+        if (weekCount >= 6) break;
+      }
+
+      // Determine the actual start date for data loading
+      final dataStartDate = weekCount == 4
+          ? startDate.subtract(const Duration(days: 7)) // Include previous week
+          : startDate;
+
+      // Load shift runners for extended range if needed
+      final shiftRunners = await _shiftRunnerDao.getForDateRange(
+        dataStartDate,
+        lastDay,
+      );
+
+      // Load shifts for the extended range if this is a 4-week month
+      List<ShiftPlaceholder> shiftsForPdf = _shifts;
+      if (weekCount == 4) {
+        // Load additional shifts from previous week
+        final previousWeekEnd = startDate; // Exclusive end date
+        final previousWeekStart = startDate.subtract(const Duration(days: 7));
+        final previousWeekShifts = await _shiftDao.getByDateRange(
+          previousWeekStart,
+          previousWeekEnd,
         );
-        // Count weeks
-        var weekCount = 0;
-        var currentDate = startDate;
-        while (currentDate.isBefore(lastDay) ||
-            currentDate.month == _date.month) {
-          weekCount++;
-          currentDate = currentDate.add(const Duration(days: 7));
-          if (weekCount >= 6) break;
-        }
-
-        // Determine the actual start date for data loading
-        final dataStartDate = weekCount == 4
-            ? startDate.subtract(
-                const Duration(days: 7),
-              ) // Include previous week
-            : startDate;
-
-        // Load shift runners for extended range if needed
-        final shiftRunners = await _shiftRunnerDao.getForDateRange(
-          dataStartDate,
-          lastDay,
-        );
-
-        // Load shifts for the extended range if this is a 4-week month
-        List<ShiftPlaceholder> shiftsForPdf = _shifts;
-        if (weekCount == 4) {
-          // Load additional shifts from previous week
-          final previousWeekEnd = startDate; // Exclusive end date
-          final previousWeekStart = startDate.subtract(const Duration(days: 7));
-          final previousWeekShifts = await _shiftDao.getByDateRange(
-            previousWeekStart,
-            previousWeekEnd,
-          );
-          final previousWeekPlaceholders = _shiftsToPlaceholders(
-            previousWeekShifts,
-          );
-
-          // Combine previous week shifts with current shifts
-          // Note: _shifts already contains all time-off entries, so don't add them again
-          shiftsForPdf = [...previousWeekPlaceholders, ..._shifts];
-        }
-
-        // Load tracked employees for stats table
-        final trackedEmployeeDao = TrackedEmployeeDao();
-        final trackedEmployees = await trackedEmployeeDao.getTrackedEmployees(
-          _employees,
+        final previousWeekPlaceholders = _shiftsToPlaceholders(
+          previousWeekShifts,
         );
 
-        if (action == 'pdf_manager') {
-          fileBytes = await SchedulePdfService.generateManagerMonthlyPdf(
-            year: _date.year,
-            month: _date.month,
-            employees: _employees,
-            shifts: shiftsForPdf,
-            jobCodeSettings: _jobCodeSettings,
-            shiftRunners: shiftRunners,
-            shiftTypes: shiftTypes,
-            notes: _notes,
-            storeName: StoreHours.cached.storeName,
-            storeNsn: StoreHours.cached.storeNsn,
-          );
-          fileType = 'Manager PDF';
-          filename = 'manager_schedule_${_date.year}_${_date.month}.pdf';
-        } else {
-          // Load time off entries for stats calculation
-          final timeOffEntries = await _timeOffDao.getAllTimeOff();
+        // Combine previous week shifts with current shifts
+        // Note: _shifts already contains all time-off entries, so don't add them again
+        shiftsForPdf = [...previousWeekPlaceholders, ..._shifts];
+      }
 
-          fileBytes = await SchedulePdfService.generateMonthlyPdf(
-            year: _date.year,
-            month: _date.month,
-            employees: _employees,
-            shifts: shiftsForPdf,
-            jobCodeSettings: _jobCodeSettings,
-            shiftRunners: shiftRunners,
-            shiftTypes: shiftTypes,
-            storeHours: StoreHours.cached,
-            storeName: StoreHours.cached.storeName,
-            storeNsn: StoreHours.cached.storeNsn,
-            trackedEmployees: trackedEmployees,
-            timeOffEntries: timeOffEntries,
-          );
-          fileType = 'PDF';
-          filename = 'schedule_${_date.year}_${_date.month}.pdf';
-        }
-        final monthNames = [
-          'Jan',
-          'Feb',
-          'Mar',
-          'Apr',
-          'May',
-          'Jun',
-          'Jul',
-          'Aug',
-          'Sep',
-          'Oct',
-          'Nov',
-          'Dec',
-        ];
-        title = 'Schedule - ${monthNames[_date.month - 1]} ${_date.year}';
+      // Load tracked employees for stats table
+      final trackedEmployeeDao = TrackedEmployeeDao();
+      final trackedEmployees = await trackedEmployeeDao.getTrackedEmployees(
+        _employees,
+      );
+
+      if (action == 'pdf_manager') {
+        fileBytes = await SchedulePdfService.generateManagerMonthlyPdf(
+          year: _date.year,
+          month: _date.month,
+          employees: _employees,
+          shifts: shiftsForPdf,
+          jobCodeSettings: _jobCodeSettings,
+          shiftRunners: shiftRunners,
+          shiftTypes: shiftTypes,
+          notes: _notes,
+          storeName: StoreHours.cached.storeName,
+          storeNsn: StoreHours.cached.storeNsn,
+        );
+        fileType = 'Manager PDF';
+        filename = 'manager_schedule_${_date.year}_${_date.month}.pdf';
+      } else {
+        // Load time off entries for stats calculation
+        final timeOffEntries = await _timeOffDao.getAllTimeOff();
+
+        fileBytes = await SchedulePdfService.generateMonthlyPdf(
+          year: _date.year,
+          month: _date.month,
+          employees: _employees,
+          shifts: shiftsForPdf,
+          jobCodeSettings: _jobCodeSettings,
+          shiftRunners: shiftRunners,
+          shiftTypes: shiftTypes,
+          storeHours: StoreHours.cached,
+          storeName: StoreHours.cached.storeName,
+          storeNsn: StoreHours.cached.storeNsn,
+          trackedEmployees: trackedEmployees,
+          timeOffEntries: timeOffEntries,
+        );
+        fileType = 'PDF';
+        filename = 'schedule_${_date.year}_${_date.month}.pdf';
+      }
+      final monthNames = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      title = 'Schedule - ${monthNames[_date.month - 1]} ${_date.year}';
 
       if (action == 'print') {
         await SchedulePdfService.printSchedule(fileBytes, title);
@@ -497,9 +492,9 @@ class _ScheduleViewState extends State<ScheduleView> {
 
     if (result == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Schedule published to employees'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: const Text('Schedule published to employees'),
+          backgroundColor: context.appColors.successBackground,
         ),
       );
     }
@@ -509,8 +504,16 @@ class _ScheduleViewState extends State<ScheduleView> {
     DateTime sourceMonthStart,
     DateTime targetMonthStart,
   ) async {
-    final sourceMonthEnd = DateTime(sourceMonthStart.year, sourceMonthStart.month + 1, 0);
-    final targetMonthEnd = DateTime(targetMonthStart.year, targetMonthStart.month + 1, 0);
+    final sourceMonthEnd = DateTime(
+      sourceMonthStart.year,
+      sourceMonthStart.month + 1,
+      0,
+    );
+    final targetMonthEnd = DateTime(
+      targetMonthStart.year,
+      targetMonthStart.month + 1,
+      0,
+    );
 
     // Get all shifts from source month
     final sourceShifts = await _shiftDao.getByDateRange(
@@ -527,10 +530,24 @@ class _ScheduleViewState extends State<ScheduleView> {
       return;
     }
 
-    final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final sourceName = '${monthNames[sourceMonthStart.month - 1]} ${sourceMonthStart.year}';
-    final targetName = '${monthNames[targetMonthStart.month - 1]} ${targetMonthStart.year}';
+    final monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final sourceName =
+        '${monthNames[sourceMonthStart.month - 1]} ${sourceMonthStart.year}';
+    final targetName =
+        '${monthNames[targetMonthStart.month - 1]} ${targetMonthStart.year}';
 
     // Confirm the copy
     if (!mounted) return;
@@ -564,17 +581,26 @@ class _ScheduleViewState extends State<ScheduleView> {
       // Skip if the target month doesn't have this day
       if (sourceDay > targetMonthEnd.day) continue;
 
-      final dayOffset = DateTime(targetMonthStart.year, targetMonthStart.month, sourceDay)
-          .difference(DateTime(sourceMonthStart.year, sourceMonthStart.month, sourceDay))
-          .inDays;
+      final dayOffset =
+          DateTime(targetMonthStart.year, targetMonthStart.month, sourceDay)
+              .difference(
+                DateTime(
+                  sourceMonthStart.year,
+                  sourceMonthStart.month,
+                  sourceDay,
+                ),
+              )
+              .inDays;
 
-      newShifts.add(Shift(
-        employeeId: s.employeeId,
-        startTime: s.startTime.add(Duration(days: dayOffset)),
-        endTime: s.endTime.add(Duration(days: dayOffset)),
-        label: s.label,
-        notes: s.notes,
-      ));
+      newShifts.add(
+        Shift(
+          employeeId: s.employeeId,
+          startTime: s.startTime.add(Duration(days: dayOffset)),
+          endTime: s.endTime.add(Duration(days: dayOffset)),
+          label: s.label,
+          notes: s.notes,
+        ),
+      );
     }
 
     // Insert all new shifts
@@ -600,7 +626,10 @@ class _ScheduleViewState extends State<ScheduleView> {
     final monthEndExclusive = monthEnd.add(const Duration(days: 1));
 
     // Count shifts to clear
-    final shifts = await _shiftDao.getByDateRange(monthStart, monthEndExclusive);
+    final shifts = await _shiftDao.getByDateRange(
+      monthStart,
+      monthEndExclusive,
+    );
 
     if (shifts.isEmpty) {
       if (mounted) {
@@ -618,7 +647,10 @@ class _ScheduleViewState extends State<ScheduleView> {
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.warning, color: Colors.red),
+            Icon(
+              Icons.warning,
+              color: Theme.of(ctx).extension<AppColors>()!.errorIcon,
+            ),
             SizedBox(width: 8),
             Text('Clear Month'),
           ],
@@ -634,7 +666,11 @@ class _ScheduleViewState extends State<ScheduleView> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(
+                ctx,
+              ).extension<AppColors>()!.destructive,
+            ),
             child: const Text('Clear All'),
           ),
         ],
@@ -660,8 +696,20 @@ class _ScheduleViewState extends State<ScheduleView> {
     BuildContext context,
     DateTime currentMonth,
   ) async {
-    final monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-                         'July', 'August', 'September', 'October', 'November', 'December'];
+    final monthNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
     int selectedYear = currentMonth.year;
     int selectedMonth = currentMonth.month;
 
@@ -689,7 +737,13 @@ class _ScheduleViewState extends State<ScheduleView> {
                         icon: const Icon(Icons.chevron_left),
                         onPressed: () => setDialogState(() => selectedYear--),
                       ),
-                      Text('$selectedYear', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                        '$selectedYear',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.chevron_right),
                         onPressed: () => setDialogState(() => selectedYear++),
@@ -706,7 +760,8 @@ class _ScheduleViewState extends State<ScheduleView> {
                       return ChoiceChip(
                         label: Text(monthNames[i].substring(0, 3)),
                         selected: isSelected,
-                        onSelected: (_) => setDialogState(() => selectedMonth = month),
+                        onSelected: (_) =>
+                            setDialogState(() => selectedMonth = month),
                       );
                     }),
                   ),
@@ -718,7 +773,10 @@ class _ScheduleViewState extends State<ScheduleView> {
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, DateTime(selectedYear, selectedMonth, 1)),
+                  onPressed: () => Navigator.pop(
+                    ctx,
+                    DateTime(selectedYear, selectedMonth, 1),
+                  ),
                   child: const Text('Select'),
                 ),
               ],
@@ -812,14 +870,15 @@ class _ScheduleViewState extends State<ScheduleView> {
       final employeeTemplates = templates[employeeId] ?? [];
 
       // Iterate every day in the month and apply the matching template entry
-      for (var day = monthStart;
-           !day.isAfter(monthEnd);
-           day = day.add(const Duration(days: 1))) {
+      for (
+        var day = monthStart;
+        !day.isAfter(monthEnd);
+        day = day.add(const Duration(days: 1))
+      ) {
         final dayOfWeek = day.weekday % 7; // 0=Sun, 1=Mon, ..., 6=Sat
-        final template = employeeTemplates.cast<WeeklyTemplateEntry?>().firstWhere(
-          (t) => t!.dayOfWeek == dayOfWeek,
-          orElse: () => null,
-        );
+        final template = employeeTemplates
+            .cast<WeeklyTemplateEntry?>()
+            .firstWhere((t) => t!.dayOfWeek == dayOfWeek, orElse: () => null);
         if (template == null || template.isBlank) continue;
 
         // Check if employee already has a shift this day
@@ -1010,8 +1069,10 @@ class _ScheduleViewState extends State<ScheduleView> {
               underline: const SizedBox(),
               items: _employees
                   .map(
-                    (emp) =>
-                        DropdownMenuItem(value: emp.id, child: Text(emp.displayName)),
+                    (emp) => DropdownMenuItem(
+                      value: emp.id,
+                      child: Text(emp.displayName),
+                    ),
                   )
                   .toList(),
               onChanged: (value) {
@@ -1125,62 +1186,68 @@ class _ScheduleViewState extends State<ScheduleView> {
           child: IconButton(
             icon: Icon(
               _showRunners ? Icons.groups : Icons.groups_outlined,
-              color: _showRunners ? Theme.of(context).colorScheme.primary : null,
+              color: _showRunners
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
             ),
             onPressed: () => setState(() => _showRunners = !_showRunners),
           ),
         ),
         PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            tooltip: 'More Options',
-            onSelected: (value) => _handleMonthAction(value),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'autoFillFromTemplates',
-                child: Row(
-                  children: [
-                    Icon(Icons.auto_fix_high, size: 20, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('Auto-Fill from Templates'),
-                  ],
-                ),
+          icon: const Icon(Icons.more_vert),
+          tooltip: 'More Options',
+          onSelected: (value) => _handleMonthAction(value),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'autoFillFromTemplates',
+              child: Row(
+                children: [
+                  Icon(Icons.auto_fix_high, size: 20, color: Colors.green),
+                  SizedBox(width: 8),
+                  Text('Auto-Fill from Templates'),
+                ],
               ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'copyMonthToNext',
-                child: Row(
-                  children: [
-                    Icon(Icons.content_copy, size: 20),
-                    SizedBox(width: 8),
-                    Text('Copy Month to Next Month'),
-                  ],
-                ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'copyMonthToNext',
+              child: Row(
+                children: [
+                  Icon(Icons.content_copy, size: 20),
+                  SizedBox(width: 8),
+                  Text('Copy Month to Next Month'),
+                ],
               ),
-              const PopupMenuItem(
-                value: 'copyMonthToDate',
-                child: Row(
-                  children: [
-                    Icon(Icons.date_range, size: 20),
-                    SizedBox(width: 8),
-                    Text('Copy Month to Date...'),
-                  ],
-                ),
+            ),
+            const PopupMenuItem(
+              value: 'copyMonthToDate',
+              child: Row(
+                children: [
+                  Icon(Icons.date_range, size: 20),
+                  SizedBox(width: 8),
+                  Text('Copy Month to Date...'),
+                ],
               ),
-              const PopupMenuItem(
-                value: 'clearMonth',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_sweep, size: 20, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text(
-                      'Clear This Month',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ],
-                ),
+            ),
+            PopupMenuItem(
+              value: 'clearMonth',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_sweep,
+                    size: 20,
+                    color: context.appColors.destructive,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Clear This Month',
+                    style: TextStyle(color: context.appColors.destructive),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -1450,7 +1517,10 @@ class _ScheduleViewState extends State<ScheduleView> {
         return AlertDialog(
           title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Theme.of(ctx).extension<AppColors>()!.warningIcon,
+              ),
               const SizedBox(width: 8),
               const Text('Scheduling Conflict'),
             ],
@@ -1511,7 +1581,9 @@ class _ScheduleViewState extends State<ScheduleView> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
+                backgroundColor: Theme.of(
+                  ctx,
+                ).extension<AppColors>()!.warningForeground,
                 foregroundColor: Theme.of(ctx).colorScheme.onPrimary,
               ),
               child: const Text('Proceed Anyway'),
@@ -1535,7 +1607,6 @@ class _ScheduleViewState extends State<ScheduleView> {
     return '$dateStr ${formatTime(start)} - ${formatTime(end)}';
   }
 }
-
 
 // ====================
 // MONTHLY SCHEDULE VIEW
@@ -1609,9 +1680,15 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
   List<ShiftRunner> _shiftRunners = [];
 
   /// Return a cached availability future keyed on employeeId + date.
-  Future<Map<String, dynamic>> _cachedCheckAvailability(int employeeId, DateTime date) {
+  Future<Map<String, dynamic>> _cachedCheckAvailability(
+    int employeeId,
+    DateTime date,
+  ) {
     final key = '$employeeId-${date.year}-${date.month}-${date.day}';
-    return _availabilityCache.putIfAbsent(key, () => _checkAvailability(employeeId, date));
+    return _availabilityCache.putIfAbsent(
+      key,
+      () => _checkAvailability(employeeId, date),
+    );
   }
 
   /// Invalidate the availability cache.
@@ -1912,12 +1989,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     }
 
     // Priority 2: Check availability patterns
-    return await _availabilityDao.isAvailable(
-      employeeId,
-      date,
-      null,
-      null,
-    );
+    return await _availabilityDao.isAvailable(employeeId, date, null, null);
   }
 
   bool _hasNoteForDay(DateTime day) {
@@ -1955,7 +2027,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                 widget.onDeleteNote?.call(normalizedDay);
                 Navigator.pop(ctx);
               },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              child: Text(
+                'Delete',
+                style: TextStyle(color: context.appColors.destructive),
+              ),
             ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -2151,12 +2226,14 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     final type = availability['type'] as String;
     final timeOffEntry = availability['timeOffEntry'] as TimeOffEntry?;
 
-    Color bannerColor = Colors.green;
+    Color bannerColor = context.appColors.successForeground;
     if (type == 'time-off') {
       final isAllDay = availability['isAllDay'] as bool? ?? true;
-      bannerColor = isAllDay ? Colors.red : Colors.orange;
+      bannerColor = isAllDay
+          ? context.appColors.errorForeground
+          : context.appColors.warningForeground;
     } else if (!isAvailable) {
-      bannerColor = Colors.orange;
+      bannerColor = context.appColors.warningForeground;
     }
 
     if (!context.mounted) return;
@@ -2224,12 +2301,16 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                               child: OutlinedButton(
                                 style: OutlinedButton.styleFrom(
                                   backgroundColor: selectedTemplate == template
-                                      ? Colors.blue.withOpacity(0.1)
+                                      ? Theme.of(
+                                          context,
+                                        ).colorScheme.primary.softBg
                                       : null,
                                   side: BorderSide(
                                     color: selectedTemplate == template
-                                        ? Colors.blue
-                                        : Colors.grey,
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Theme.of(context)
+                                              .extension<AppColors>()!
+                                              .borderMedium,
                                     width: selectedTemplate == template ? 2 : 1,
                                   ),
                                 ),
@@ -2263,9 +2344,11 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                     const SizedBox(height: 2),
                                     Text(
                                       '${template.startTime}-${template.endTime}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
-                                        color: Colors.grey,
+                                        color: Theme.of(
+                                          context,
+                                        ).extension<AppColors>()!.textSecondary,
                                       ),
                                     ),
                                   ],
@@ -2283,7 +2366,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: bannerColor.withOpacity(0.2),
+                            color: bannerColor.softBg,
                             border: Border.all(color: bannerColor),
                             borderRadius: BorderRadius.circular(4),
                           ),
@@ -2303,7 +2386,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                 child: Text(
                                   reason,
                                   style: TextStyle(
-                                    color: bannerColor.withOpacity(0.9),
+                                    color: bannerColor,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -2429,12 +2512,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? _getShiftTypeColor(
-                                          shiftType,
-                                        ).withOpacity(0.3)
-                                      : _getShiftTypeColor(
-                                          shiftType,
-                                        ).withOpacity(0.1),
+                                      ? _getShiftTypeColor(shiftType).softBorder
+                                      : _getShiftTypeColor(shiftType).subtle,
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
                                     color: _getShiftTypeColor(shiftType),
@@ -2468,7 +2547,11 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.pop(context, {'off': true}),
-                  style: TextButton.styleFrom(foregroundColor: Colors.grey),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Theme.of(
+                      context,
+                    ).extension<AppColors>()!.disabledForeground,
+                  ),
                   child: const Text('OFF'),
                 ),
                 TextButton(
@@ -2617,10 +2700,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     return Container(
       decoration: BoxDecoration(
         color: isSelected
-            ? Colors.blue.withAlpha(128)
-            : runnerColor?.withOpacity(0.25),
+            ? Theme.of(context).colorScheme.primary.softBg
+            : runnerColor?.softBg,
         border: isSelected
-            ? Border.all(color: Colors.blue, width: 2)
+            ? Border.all(color: Theme.of(context).colorScheme.primary, width: 2)
             : runnerColor != null
             ? Border.all(color: runnerColor, width: 2)
             : null,
@@ -2635,7 +2718,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
-                color: Colors.red[700],
+                color: context.appColors.errorForeground,
               ),
               textAlign: TextAlign.center,
             )
@@ -2745,7 +2828,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                 left: BorderSide(color: Theme.of(context).dividerColor),
               ),
               color: isDragHover
-                  ? Colors.blue.withAlpha(50)
+                  ? Theme.of(context).colorScheme.primary.subtle
                   : !isCurrentMonth
                   ? Theme.of(
                       context,
@@ -2777,14 +2860,23 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
                       if (isDragHover) {
                         return const Center(
-                          child: Icon(Icons.add, color: Colors.blue, size: 20),
+                          child: Icon(
+                            Icons.add,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20,
+                          ),
                         );
                       }
                       if (showDash) {
                         return const Center(
                           child: Text(
                             '-',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Theme.of(
+                                context,
+                              ).extension<AppColors>()!.disabledForeground,
+                            ),
                           ),
                         );
                       }
@@ -2865,7 +2957,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.blue.withAlpha(200),
+                                color: Theme.of(context).colorScheme.primary,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -2956,11 +3048,18 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
     int getEmployeeCountForDay(DateTime day) {
       final employeeIds = widget.shifts
-          .where((s) =>
-              s.start.year == day.year &&
-              s.start.month == day.month &&
-              s.start.day == day.day &&
-              !['VAC', 'PTO', 'REQ OFF', 'OFF'].contains(s.text.toUpperCase()))
+          .where(
+            (s) =>
+                s.start.year == day.year &&
+                s.start.month == day.month &&
+                s.start.day == day.day &&
+                ![
+                  'VAC',
+                  'PTO',
+                  'REQ OFF',
+                  'OFF',
+                ].contains(s.text.toUpperCase()),
+          )
           .map((s) => s.employeeId)
           .toSet();
       return employeeIds.length;
@@ -2980,13 +3079,20 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
           position.dy,
         ),
         items: [
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             value: 'clear',
             child: Row(
               children: [
-                Icon(Icons.clear, size: 18, color: Colors.red),
-                SizedBox(width: 8),
-                Text('Clear Runner', style: TextStyle(color: Colors.red)),
+                Icon(
+                  Icons.clear,
+                  size: 18,
+                  color: context.appColors.destructive,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Clear Runner',
+                  style: TextStyle(color: context.appColors.destructive),
+                ),
               ],
             ),
           ),
@@ -3001,453 +3107,506 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     }
 
     return LayoutBuilder(
-            builder: (context, constraints) {
-              final dayColumnWidth = 120.0;
-              const mgrColumnWidth = 40.0;
-              const runnerColumnWidth = 55.0;
-              final runnerColumnsTotal = widget.showRunners ? runnerColumnWidth * _shiftTypes.length : 0.0;
-              const tablePadding =
-                  40.0; // Extra padding to prevent edge overhang
+      builder: (context, constraints) {
+        final dayColumnWidth = 120.0;
+        const mgrColumnWidth = 40.0;
+        const runnerColumnWidth = 55.0;
+        final runnerColumnsTotal = widget.showRunners
+            ? runnerColumnWidth * _shiftTypes.length
+            : 0.0;
+        const tablePadding = 40.0; // Extra padding to prevent edge overhang
 
-              final availableWidth =
-                  constraints.maxWidth - dayColumnWidth - mgrColumnWidth - runnerColumnsTotal - tablePadding;
-              final cellWidth = widget.employees.isNotEmpty
-                  ? (availableWidth / widget.employees.length).clamp(
-                      80.0,
-                      200.0,
-                    )
-                  : 100.0;
+        final availableWidth =
+            constraints.maxWidth -
+            dayColumnWidth -
+            mgrColumnWidth -
+            runnerColumnsTotal -
+            tablePadding;
+        final cellWidth = widget.employees.isNotEmpty
+            ? (availableWidth / widget.employees.length).clamp(80.0, 200.0)
+            : 100.0;
 
-              // Account for borders (2px on each side = 4px total)
-              final totalWidth =
-                  dayColumnWidth + mgrColumnWidth + (cellWidth * widget.employees.length) + runnerColumnsTotal + 4;
+        // Account for borders (2px on each side = 4px total)
+        final totalWidth =
+            dayColumnWidth +
+            mgrColumnWidth +
+            (cellWidth * widget.employees.length) +
+            runnerColumnsTotal +
+            4;
 
-              List<Widget> buildEmployeeHeaderCells() {
-                final cells = <Widget>[];
-                for (int i = 0; i < widget.employees.length; i++) {
-                  final employee = widget.employees[i];
+        List<Widget> buildEmployeeHeaderCells() {
+          final cells = <Widget>[];
+          for (int i = 0; i < widget.employees.length; i++) {
+            final employee = widget.employees[i];
 
-                  final bg = jobCodeColorFor(employee.jobCode);
-                  final fg =
-                      ThemeData.estimateBrightnessForColor(bg) ==
-                          Brightness.dark
-                      ? Theme.of(context).colorScheme.surface
-                      : Theme.of(context).colorScheme.onSurface;
+            final bg = jobCodeColorFor(employee.jobCode);
+            final fg =
+                ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
+                ? Theme.of(context).colorScheme.surface
+                : Theme.of(context).colorScheme.onSurface;
 
-                  cells.add(
+            cells.add(
+              Container(
+                width: cellWidth,
+                height: 60,
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: bg,
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    employee.displayName,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: fg,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          }
+          return cells;
+        }
+
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Scrollbar(
+            controller: _horizontalScrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _horizontalScrollController,
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: totalWidth,
+                child: Column(
+                  children: [
                     Container(
-                      width: cellWidth,
-                      height: 60,
-                      padding: const EdgeInsets.all(5),
+                      width: totalWidth,
                       decoration: BoxDecoration(
-                        color: bg,
+                        color: Theme.of(context).colorScheme.primaryContainer,
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.onSurface,
+                          color: Theme.of(context).dividerColor,
                           width: 2,
                         ),
                       ),
-                      child: Center(
-                        child: Text(
-                          employee.displayName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: fg,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: dayColumnWidth,
+                            height: 60,
+                            child: const Center(
+                              child: Text(
+                                'Day',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                        ),
+                          // Mgr # header
+                          Container(
+                            width: mgrColumnWidth,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: Theme.of(context).dividerColor,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Mgr\n#',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ),
+                          ...buildEmployeeHeaderCells(),
+                          // Shift runner headers
+                          if (widget.showRunners)
+                            ..._shiftTypes.map((shiftType) {
+                              return Container(
+                                width: runnerColumnWidth,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  color: getShiftColor(
+                                    shiftType.key,
+                                  ).softBorder,
+                                  border: Border.all(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    ShiftRunner.getLabelForType(shiftType.key),
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
+                                      color: context.appColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                        ],
                       ),
                     ),
-                  );
-                }
-                return cells;
-              }
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: EdgeInsets.zero,
+                        itemCount: weeks.length,
+                        itemBuilder: (context, weekIndex) {
+                          final week = weeks[weekIndex];
 
-              return Padding(
-                padding: const EdgeInsets.all(12),
-                child: Scrollbar(
-                  controller: _horizontalScrollController,
-                  thumbVisibility: true,
-                  child: SingleChildScrollView(
-                    controller: _horizontalScrollController,
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: totalWidth,
-                      child: Column(
-                        children: [
-                          Container(
+                          return Container(
                             width: totalWidth,
+                            margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.primaryContainer,
                               border: Border.all(
                                 color: Theme.of(context).dividerColor,
                                 width: 2,
                               ),
+                              borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: dayColumnWidth,
-                                  height: 60,
-                                  child: const Center(
-                                    child: Text(
-                                      'Day',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Mgr # header
-                                Container(
-                                  width: mgrColumnWidth,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      left: BorderSide(
-                                        color: Theme.of(context).dividerColor,
-                                        width: 2,
-                                      ),
-                                    ),
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      'Mgr\n#',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                ...buildEmployeeHeaderCells(),
-                                // Shift runner headers
-                                if (widget.showRunners)
-                                  ..._shiftTypes.map((shiftType) {
-                                    final isDark = Theme.of(context).brightness == Brightness.dark;
-                                    return Container(
-                                      width: runnerColumnWidth,
-                                      height: 60,
-                                      decoration: BoxDecoration(
-                                        color: getShiftColor(shiftType.key).withAlpha(77),
-                                        border: Border.all(
-                                          color: Theme.of(context).colorScheme.primary,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          ShiftRunner.getLabelForType(shiftType.key),
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 11,
-                                            color: isDark ? Colors.white : Colors.black,
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              itemCount: weeks.length,
-                              itemBuilder: (context, weekIndex) {
-                                final week = weeks[weekIndex];
+                            child: Column(
+                              children: week.asMap().entries.map((entry) {
+                                final dayIndex = entry.key;
+                                final day = entry.value;
+
+                                if (day == null) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                final isCurrentMonth =
+                                    day.month == widget.date.month;
+                                final isWeekend =
+                                    day.weekday == DateTime.saturday ||
+                                    day.weekday == DateTime.sunday;
+                                final dayName = dayNames[day.weekday % 7];
 
                                 return Container(
-                                  width: totalWidth,
-                                  margin: const EdgeInsets.only(bottom: 12),
                                   decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: Theme.of(context).dividerColor,
-                                      width: 2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
+                                    border: dayIndex < 6
+                                        ? Border(
+                                            bottom: BorderSide(
+                                              color: Theme.of(
+                                                context,
+                                              ).dividerColor,
+                                            ),
+                                          )
+                                        : null,
                                   ),
-                                  child: Column(
-                                    children: week.asMap().entries.map((entry) {
-                                      final dayIndex = entry.key;
-                                      final day = entry.value;
-
-                                      if (day == null) {
-                                        return const SizedBox.shrink();
-                                      }
-
-                                      final isCurrentMonth =
-                                          day.month == widget.date.month;
-                                      final isWeekend =
-                                          day.weekday == DateTime.saturday ||
-                                          day.weekday == DateTime.sunday;
-                                      final dayName = dayNames[day.weekday % 7];
-
-                                      return Container(
-                                        decoration: BoxDecoration(
-                                          border: dayIndex < 6
-                                              ? Border(
-                                                  bottom: BorderSide(
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).dividerColor,
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        // Day label column with notes
+                                        GestureDetector(
+                                          onTap: () =>
+                                              _showNoteDialog(context, day),
+                                          child: Container(
+                                            width: dayColumnWidth,
+                                            constraints: const BoxConstraints(
+                                              minHeight: 50,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              border: Border(
+                                                right: BorderSide(
+                                                  color: Theme.of(
+                                                    context,
+                                                  ).dividerColor,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              color: isWeekend
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .primaryContainer
+                                                        .softBg
+                                                  : !isCurrentMonth
+                                                  ? Theme.of(context)
+                                                        .colorScheme
+                                                        .surfaceContainerHighest
+                                                        .subtle
+                                                  : null,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
+                                              children: [
+                                                // Day name and date
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      dayName,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 14,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '${day.month}/${day.day}',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: !isCurrentMonth
+                                                            ? context
+                                                                  .appColors
+                                                                  .textTertiary
+                                                            : day.day ==
+                                                                      DateTime.now()
+                                                                          .day &&
+                                                                  day.month ==
+                                                                      DateTime.now()
+                                                                          .month &&
+                                                                  day.year ==
+                                                                      DateTime.now()
+                                                                          .year
+                                                            ? Theme.of(context)
+                                                                  .colorScheme
+                                                                  .primary
+                                                            : null,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                                if (_hasNoteForDay(day)) ...[
+                                                  const SizedBox(width: 4),
+                                                  Expanded(
+                                                    child: Text(
+                                                      _getNoteForDay(day),
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: context
+                                                            .appColors
+                                                            .warningIcon,
+                                                      ),
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
                                                   ),
-                                                )
-                                              : null,
+                                                  Icon(
+                                                    Icons.note,
+                                                    size: 14,
+                                                    color: context
+                                                        .appColors
+                                                        .warningIcon,
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
                                         ),
-                                        child: IntrinsicHeight(
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              // Day label column with notes
-                                              GestureDetector(
-                                                onTap: () => _showNoteDialog(
+
+                                        // Mgr # cell
+                                        Container(
+                                          width: mgrColumnWidth,
+                                          constraints: const BoxConstraints(
+                                            minHeight: 50,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            border: Border(
+                                              right: BorderSide(
+                                                color: Theme.of(
                                                   context,
+                                                ).dividerColor,
+                                                width: 2,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              getEmployeeCountForDay(
+                                                day,
+                                              ).toString(),
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+
+                                        // Employee cells for this day
+                                        ...widget.employees.map((employee) {
+                                          return _buildMonthlyEmployeeCell(
+                                            context: context,
+                                            day: day,
+                                            isCurrentMonth: isCurrentMonth,
+                                            isWeekend: isWeekend,
+                                            employee: employee,
+                                            cellWidth: cellWidth,
+                                          );
+                                        }).toList(),
+
+                                        // Shift runner cells
+                                        if (widget.showRunners)
+                                          ..._shiftTypes.map((shiftType) {
+                                            final runner = getRunnerForCell(
+                                              day,
+                                              shiftType.key,
+                                            );
+                                            final hasRunner =
+                                                runner != null &&
+                                                runner.isNotEmpty;
+                                            return GestureDetector(
+                                              onSecondaryTapDown: hasRunner
+                                                  ? (
+                                                      details,
+                                                    ) => showRunnerContextMenu(
+                                                      details.globalPosition,
+                                                      day,
+                                                      shiftType.key,
+                                                    )
+                                                  : null,
+                                              child: InkWell(
+                                                onTap: () => _editMonthlyRunner(
                                                   day,
+                                                  shiftType.key,
+                                                  runner,
                                                 ),
                                                 child: Container(
-                                                  width: dayColumnWidth,
+                                                  width: runnerColumnWidth,
                                                   constraints:
                                                       const BoxConstraints(
                                                         minHeight: 50,
                                                       ),
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4,
-                                                      ),
                                                   decoration: BoxDecoration(
+                                                    color: hasRunner
+                                                        ? getShiftColor(
+                                                            shiftType.key,
+                                                          ).subtle
+                                                        : null,
                                                     border: Border(
-                                                      right: BorderSide(
+                                                      left: BorderSide(
                                                         color: Theme.of(
                                                           context,
-                                                        ).dividerColor,
-                                                        width: 2,
+                                                        ).colorScheme.primary,
+                                                        width:
+                                                            shiftType ==
+                                                                _shiftTypes
+                                                                    .first
+                                                            ? 2
+                                                            : 1,
                                                       ),
-                                                    ),
-                                                    color: isWeekend
-                                                        ? Theme.of(context)
-                                                              .colorScheme
-                                                              .primaryContainer
-                                                              .withAlpha(51)
-                                                        : !isCurrentMonth
-                                                        ? Theme.of(context)
-                                                              .colorScheme
-                                                              .surfaceContainerHighest
-                                                              .withAlpha(25)
-                                                        : null,
-                                                  ),
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      // Day name and date
-                                                      Column(
-                                                        crossAxisAlignment:
-                                                            CrossAxisAlignment
-                                                                .start,
-                                                        mainAxisAlignment:
-                                                            MainAxisAlignment
-                                                                .center,
-                                                        mainAxisSize:
-                                                            MainAxisSize.min,
-                                                        children: [
-                                                          Text(
-                                                            dayName,
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 14,
-                                                                ),
-                                                          ),
-                                                          Text(
-                                                            '${day.month}/${day.day}',
-                                                            style: TextStyle(
-                                                              fontSize: 12,
+                                                      right:
+                                                          shiftType ==
+                                                              _shiftTypes.last
+                                                          ? BorderSide(
                                                               color:
-                                                                  !isCurrentMonth
-                                                                  ? Colors.grey
-                                                                  : day.day ==
-                                                                            DateTime.now().day &&
-                                                                        day.month ==
-                                                                            DateTime.now().month &&
-                                                                        day.year ==
-                                                                            DateTime.now().year
-                                                                  ? Theme.of(
-                                                                          context,
-                                                                        )
-                                                                        .colorScheme
-                                                                        .primary
-                                                                  : null,
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      if (_hasNoteForDay(
-                                                        day,
-                                                      )) ...[
-                                                        const SizedBox(
-                                                          width: 4,
-                                                        ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            _getNoteForDay(day),
-                                                            style:
-                                                                const TextStyle(
-                                                                  fontSize: 9,
-                                                                  color: Colors
-                                                                      .amber,
-                                                                ),
-                                                            maxLines: 2,
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                          ),
-                                                        ),
-                                                        const Icon(
-                                                          Icons.note,
-                                                          size: 14,
-                                                          color: Colors.amber,
-                                                        ),
-                                                      ],
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-
-                                              // Mgr # cell
-                                              Container(
-                                                width: mgrColumnWidth,
-                                                constraints: const BoxConstraints(minHeight: 50),
-                                                decoration: BoxDecoration(
-                                                  border: Border(
-                                                    right: BorderSide(
-                                                      color: Theme.of(context).dividerColor,
-                                                      width: 2,
+                                                                  Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .primary,
+                                                              width: 2,
+                                                            )
+                                                          : BorderSide.none,
+                                                      top: dayIndex == 0
+                                                          ? BorderSide(
+                                                              color:
+                                                                  Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .primary,
+                                                              width: 2,
+                                                            )
+                                                          : BorderSide.none,
+                                                      bottom:
+                                                          dayIndex ==
+                                                              week
+                                                                      .where(
+                                                                        (d) =>
+                                                                            d !=
+                                                                            null,
+                                                                      )
+                                                                      .length -
+                                                                  1
+                                                          ? BorderSide(
+                                                              color:
+                                                                  Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .primary,
+                                                              width: 2,
+                                                            )
+                                                          : BorderSide.none,
                                                     ),
                                                   ),
-                                                ),
-                                                child: Center(
-                                                  child: Text(
-                                                    getEmployeeCountForDay(day).toString(),
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 13,
+                                                  child: Center(
+                                                    child: Text(
+                                                      runner ?? '',
+                                                      textAlign:
+                                                          TextAlign.center,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: hasRunner
+                                                            ? context
+                                                                  .appColors
+                                                                  .textPrimary
+                                                            : context
+                                                                  .appColors
+                                                                  .disabledForeground,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
                                                     ),
                                                   ),
                                                 ),
                                               ),
-
-                                              // Employee cells for this day
-                                              ...widget.employees.map((
-                                                employee,
-                                              ) {
-                                                return _buildMonthlyEmployeeCell(
-                                                  context: context,
-                                                  day: day,
-                                                  isCurrentMonth:
-                                                      isCurrentMonth,
-                                                  isWeekend: isWeekend,
-                                                  employee: employee,
-                                                  cellWidth: cellWidth,
-                                                );
-                                              }).toList(),
-
-                                              // Shift runner cells
-                                              if (widget.showRunners)
-                                                ..._shiftTypes.map((shiftType) {
-                                                  final runner = getRunnerForCell(day, shiftType.key);
-                                                  final hasRunner = runner != null && runner.isNotEmpty;
-                                                  final isDark = Theme.of(context).brightness == Brightness.dark;
-                                                  return GestureDetector(
-                                                    onSecondaryTapDown: hasRunner
-                                                        ? (details) => showRunnerContextMenu(
-                                                            details.globalPosition,
-                                                            day,
-                                                            shiftType.key,
-                                                          )
-                                                        : null,
-                                                    child: InkWell(
-                                                      onTap: () => _editMonthlyRunner(day, shiftType.key, runner),
-                                                      child: Container(
-                                                        width: runnerColumnWidth,
-                                                        constraints: const BoxConstraints(minHeight: 50),
-                                                        decoration: BoxDecoration(
-                                                          color: hasRunner
-                                                              ? getShiftColor(shiftType.key).withAlpha(38)
-                                                              : null,
-                                                          border: Border(
-                                                            left: BorderSide(
-                                                              color: Theme.of(context).colorScheme.primary,
-                                                              width: shiftType == _shiftTypes.first ? 2 : 1,
-                                                            ),
-                                                            right: shiftType == _shiftTypes.last
-                                                                ? BorderSide(
-                                                                    color: Theme.of(context).colorScheme.primary,
-                                                                    width: 2,
-                                                                  )
-                                                                : BorderSide.none,
-                                                            top: dayIndex == 0
-                                                                ? BorderSide(
-                                                                    color: Theme.of(context).colorScheme.primary,
-                                                                    width: 2,
-                                                                  )
-                                                                : BorderSide.none,
-                                                            bottom: dayIndex == week.where((d) => d != null).length - 1
-                                                                ? BorderSide(
-                                                                    color: Theme.of(context).colorScheme.primary,
-                                                                    width: 2,
-                                                                  )
-                                                                : BorderSide.none,
-                                                          ),
-                                                        ),
-                                                        child: Center(
-                                                          child: Text(
-                                                            runner ?? '',
-                                                            textAlign: TextAlign.center,
-                                                            style: TextStyle(
-                                                              fontSize: 10,
-                                                              color: hasRunner
-                                                                  ? (isDark ? Colors.white : Colors.black)
-                                                                  : Colors.grey,
-                                                            ),
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  );
-                                                }),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }).toList(),
+                                            );
+                                          }),
+                                      ],
+                                    ),
                                   ),
                                 );
-                              },
+                              }).toList(),
                             ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              );
-            },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -3535,7 +3694,8 @@ class _MonthlyRunnerSearchDialogState
       } else {
         _filteredEmployees = widget.availableEmployees
             .where(
-              (emp) => emp.displayName.toLowerCase().contains(query.toLowerCase()),
+              (emp) =>
+                  emp.displayName.toLowerCase().contains(query.toLowerCase()),
             )
             .toList();
       }
@@ -3656,11 +3816,11 @@ class _MonthlyRunnerSearchDialogState
                             borderRadius: BorderRadius.circular(6),
                           ),
                           tileColor: isCurrentRunner
-                              ? widget.shiftColor.withOpacity(0.1)
+                              ? widget.shiftColor.subtle
                               : null,
                           leading: CircleAvatar(
                             radius: 14,
-                            backgroundColor: widget.shiftColor.withOpacity(0.2),
+                            backgroundColor: widget.shiftColor.softBg,
                             child: Text(
                               emp.displayName.isNotEmpty
                                   ? emp.displayName[0].toUpperCase()
@@ -3708,7 +3868,10 @@ class _MonthlyRunnerSearchDialogState
         if (widget.currentName != null && widget.currentName!.isNotEmpty)
           TextButton(
             onPressed: () => Navigator.pop(context, ''),
-            child: const Text('Clear', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Clear',
+              style: TextStyle(color: context.appColors.destructive),
+            ),
           ),
       ],
     );
@@ -3925,7 +4088,9 @@ class _AutoFillFromWeeklyTemplatesDialogState
                                     Text(
                                       templatePreview,
                                       style: TextStyle(
-                                        color: Colors.blue[700],
+                                        color: Theme.of(context)
+                                            .extension<AppColors>()!
+                                            .infoForeground,
                                         fontSize: 11,
                                         fontStyle: FontStyle.italic,
                                       ),
@@ -4072,25 +4237,32 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
           // Send push notifications to employees
           if (result.publishedEmployeeUids.isNotEmpty) {
             final weekOf = '${_startDate.month}/${_startDate.day}';
-            NotificationSenderService.instance.notifySchedulePublished(
-              employeeUids: result.publishedEmployeeUids,
-              weekOf: weekOf,
-            ).then((notifyResult) {
-              if (notifyResult.success) {
-                debugPrint('Sent ${notifyResult.sent} schedule notifications');
-              } else {
-                debugPrint('Failed to send notifications: ${notifyResult.reason ?? notifyResult.error}');
-              }
-            }).catchError((e) {
-              debugPrint('Error sending notifications: $e');
-            });
+            NotificationSenderService.instance
+                .notifySchedulePublished(
+                  employeeUids: result.publishedEmployeeUids,
+                  weekOf: weekOf,
+                )
+                .then((notifyResult) {
+                  if (notifyResult.success) {
+                    debugPrint(
+                      'Sent ${notifyResult.sent} schedule notifications',
+                    );
+                  } else {
+                    debugPrint(
+                      'Failed to send notifications: ${notifyResult.reason ?? notifyResult.error}',
+                    );
+                  }
+                })
+                .catchError((e) {
+                  debugPrint('Error sending notifications: $e');
+                });
           }
           Navigator.pop(context, true);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result.message),
-              backgroundColor: Colors.red,
+              backgroundColor: context.appColors.errorBackground,
             ),
           );
           setState(() => _publishing = false);
@@ -4101,7 +4273,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error publishing: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: context.appColors.errorBackground,
           ),
         );
         setState(() => _publishing = false);
@@ -4126,8 +4298,12 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
+              backgroundColor: Theme.of(
+                ctx,
+              ).extension<AppColors>()!.warningForeground,
+              foregroundColor: Theme.of(
+                ctx,
+              ).extension<AppColors>()!.textOnError,
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Unpublish'),
@@ -4152,7 +4328,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result.message),
-              backgroundColor: Colors.green,
+              backgroundColor: context.appColors.successBackground,
             ),
           );
           Navigator.pop(context, true);
@@ -4160,7 +4336,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(result.message),
-              backgroundColor: Colors.red,
+              backgroundColor: context.appColors.errorBackground,
             ),
           );
           setState(() => _unpublishing = false);
@@ -4171,7 +4347,7 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error unpublishing: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: context.appColors.errorBackground,
           ),
         );
         setState(() => _unpublishing = false);
@@ -4207,11 +4383,11 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.cloud_upload, color: Colors.blue),
-          SizedBox(width: 8),
-          Text('Publish Schedule'),
+          Icon(Icons.cloud_upload, color: context.appColors.infoIcon),
+          const SizedBox(width: 8),
+          const Text('Publish Schedule'),
         ],
       ),
       content: SizedBox(
@@ -4220,9 +4396,9 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Publish the schedule to make it visible in the employee app.',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: context.appColors.textSecondary),
             ),
             const SizedBox(height: 16),
 
@@ -4315,7 +4491,10 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
               const Divider(),
               Text(
                 _lastPublishInfo!,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.appColors.textSecondary,
+                ),
               ),
             ],
           ],
@@ -4323,16 +4502,20 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _publishing || _unpublishing ? null : () => Navigator.pop(context, false),
+          onPressed: _publishing || _unpublishing
+              ? null
+              : () => Navigator.pop(context, false),
           child: const Text('Cancel'),
         ),
         OutlinedButton.icon(
           onPressed:
-              _publishing || _unpublishing || (!_publishAll && _selectedEmployeeIds.isEmpty)
+              _publishing ||
+                  _unpublishing ||
+                  (!_publishAll && _selectedEmployeeIds.isEmpty)
               ? null
               : _unpublish,
           style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.orange,
+            foregroundColor: context.appColors.warningForeground,
           ),
           icon: _unpublishing
               ? const SizedBox(
@@ -4345,7 +4528,9 @@ class _PublishScheduleDialogState extends State<_PublishScheduleDialog> {
         ),
         ElevatedButton.icon(
           onPressed:
-              _publishing || _unpublishing || (!_publishAll && _selectedEmployeeIds.isEmpty)
+              _publishing ||
+                  _unpublishing ||
+                  (!_publishAll && _selectedEmployeeIds.isEmpty)
               ? null
               : _publish,
           icon: _publishing
