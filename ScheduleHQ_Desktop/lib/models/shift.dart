@@ -43,11 +43,20 @@ class Shift {
   }
 
   Map<String, dynamic> toMap() {
+    // Store in both formats: new component format (DST-safe) and legacy ISO8601
     return {
       'id': id,
       'employeeId': employeeId,
+      // Legacy format (still needed for backward compatibility)
       'startTime': startTime.toIso8601String(),
       'endTime': endTime.toIso8601String(),
+      // New component format (DST-safe)
+      'startDate': '${startTime.year}-${startTime.month.toString().padLeft(2, '0')}-${startTime.day.toString().padLeft(2, '0')}',
+      'startHour': startTime.hour,
+      'startMinute': startTime.minute,
+      'endDate': '${endTime.year}-${endTime.month.toString().padLeft(2, '0')}-${endTime.day.toString().padLeft(2, '0')}',
+      'endHour': endTime.hour,
+      'endMinute': endTime.minute,
       'label': label,
       'notes': notes,
       'createdAt': createdAt.toIso8601String(),
@@ -56,11 +65,40 @@ class Shift {
   }
 
   factory Shift.fromMap(Map<String, dynamic> map) {
+    // Try to read date components first (new DST-safe format)
+    DateTime? startTime;
+    DateTime? endTime;
+    
+    if (map['startDate'] != null && map['startHour'] != null && map['startMinute'] != null) {
+      // Parse date components (DST-safe)
+      final startDateParts = (map['startDate'] as String).split('-');
+      startTime = DateTime(
+        int.parse(startDateParts[0]), // year
+        int.parse(startDateParts[1]), // month
+        int.parse(startDateParts[2]), // day
+        map['startHour'] as int,
+        map['startMinute'] as int,
+      );
+      
+      final endDateParts = (map['endDate'] as String).split('-');
+      endTime = DateTime(
+        int.parse(endDateParts[0]), // year
+        int.parse(endDateParts[1]), // month
+        int.parse(endDateParts[2]), // day
+        map['endHour'] as int,
+        map['endMinute'] as int,
+      );
+    } else {
+      // Fall back to legacy ISO8601 format
+      startTime = DateTime.parse(map['startTime'] as String);
+      endTime = DateTime.parse(map['endTime'] as String);
+    }
+    
     return Shift(
       id: map['id'] as int?,
       employeeId: map['employeeId'] as int,
-      startTime: DateTime.parse(map['startTime'] as String),
-      endTime: DateTime.parse(map['endTime'] as String),
+      startTime: startTime,
+      endTime: endTime,
       label: map['label'] as String?,
       notes: map['notes'] as String?,
       createdAt: DateTime.parse(map['createdAt'] as String),
