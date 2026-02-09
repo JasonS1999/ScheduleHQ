@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'pages/schedule_page.dart';
 import 'pages/roster_page.dart';
 import 'package:schedulehq_desktop/pages/settings_page.dart';
@@ -7,9 +7,11 @@ import 'pages/pto_vac_tracker_page.dart';
 import 'pages/analytics_page.dart';
 import 'pages/approval_queue_page.dart';
 import 'pages/pnl_page.dart';
+import 'providers/auth_provider.dart' as app_auth;
 import 'services/app_colors.dart';
-import 'services/auth_service.dart';
 import 'services/store_update_service.dart';
+import 'utils/snackbar_helper.dart';
+import 'utils/dialog_helper.dart';
 
 class NavigationShell extends StatefulWidget {
   const NavigationShell({super.key});
@@ -58,26 +60,17 @@ class _NavigationShellState extends State<NavigationShell> {
 
             if (error != null) {
               // API failed - offer to open Store
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'Could not check for updates. Open Microsoft Store?',
-                  ),
-                  duration: const Duration(seconds: 6),
-                  action: SnackBarAction(
-                    label: 'Open Store',
-                    onPressed: () => StoreUpdateService.openStorePage(),
-                  ),
-                ),
+              SnackBarHelper.showError(
+                context,
+                'Could not check for updates. Open Microsoft Store?',
+                duration: const Duration(seconds: 6),
               );
+              // TODO: Add action button to open store
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'You\'re up to date! (v${StoreUpdateService.currentVersion})',
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
+              SnackBarHelper.showSuccess(
+                context,
+                'You\'re up to date! (v${StoreUpdateService.currentVersion})',
+                duration: const Duration(seconds: 2),
               );
             }
           }
@@ -87,12 +80,10 @@ class _NavigationShellState extends State<NavigationShell> {
       if (mounted) {
         setState(() => _checkingUpdate = false);
         if (showDialogIfAvailable) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error checking for updates: $e'),
-              duration: const Duration(seconds: 4),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
+          SnackBarHelper.showError(
+            context,
+            'Error checking for updates: $e',
+            duration: const Duration(seconds: 4),
           );
         }
       }
@@ -102,9 +93,8 @@ class _NavigationShellState extends State<NavigationShell> {
   void _showUpdateDialog() {
     showDialog(
       context: context,
-      builder: (context) => _StoreUpdateDialog(
-        currentVersion: StoreUpdateService.currentVersion,
-      ),
+      builder: (context) =>
+          _StoreUpdateDialog(currentVersion: StoreUpdateService.currentVersion),
     );
   }
 
@@ -116,50 +106,98 @@ class _NavigationShellState extends State<NavigationShell> {
       body: Row(
         children: [
           if (isWide)
-            Column(
-              children: [
-                Expanded(
-                  child: NavigationRail(
-                    selectedIndex: _index,
-                    onDestinationSelected: (i) => setState(() => _index = i),
-                    labelType: NavigationRailLabelType.all,
-                    destinations: const [
-                      NavigationRailDestination(
-                        icon: Icon(Icons.calendar_month),
-                        label: Text("Schedule"),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.people),
-                        label: Text("Roster"),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.track_changes),
-                        label: Text("PTO / VAC"),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.approval),
-                        label: Text("Time Off"),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.analytics),
-                        label: Text("Analytics"),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.account_balance),
-                        label: Text("P&L"),
-                      ),
-                      NavigationRailDestination(
-                        icon: Icon(Icons.settings),
-                        label: Text("Settings"),
-                      ),
-                    ],
+            SizedBox(
+              width: 220,
+              child: Column(
+                children: [
+                  // User info section at the top
+                  Consumer<app_auth.AuthProvider>(
+                    builder: (context, authProvider, child) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              authProvider.userDisplayName ?? 'Manager',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            if (authProvider.userEmail != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                authProvider.userEmail!,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.color
+                                          ?.withOpacity(0.7),
+                                    ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                ),
-                // Update button at the bottom of navigation rail
-                _buildUpdateButton(),
-                // Logout button
-                _buildLogoutButton(),
-              ],
+                  const Divider(height: 1),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height - 200,
+                            child: NavigationRail(
+                              selectedIndex: _index,
+                              onDestinationSelected: (i) => setState(() => _index = i),
+                              labelType: NavigationRailLabelType.all,
+                              destinations: const [
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.calendar_month),
+                                  label: Text("Schedule"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.people),
+                                  label: Text("Roster"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.track_changes),
+                                  label: Text("PTO / VAC"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.approval),
+                                  label: Text("Time Off"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.analytics),
+                                  label: Text("Analytics"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.account_balance),
+                                  label: Text("P&L"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.settings),
+                                  label: Text("Settings"),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Update button at the bottom of navigation rail
+                          _buildUpdateButton(),
+                          // Logout button
+                          _buildLogoutButton(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
 
           Expanded(child: _pageBuilders[_index]()),
@@ -216,31 +254,41 @@ class _NavigationShellState extends State<NavigationShell> {
   Widget _buildLogoutButton() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: TextButton.icon(
-        onPressed: () async {
-          final confirmed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Sign Out'),
-              content: const Text('Are you sure you want to sign out?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Sign Out'),
-                ),
-              ],
-            ),
+      child: Consumer<app_auth.AuthProvider>(
+        builder: (context, authProvider, child) {
+          return TextButton.icon(
+            onPressed: authProvider.isLoading
+                ? null
+                : () async {
+                    final confirmed = await DialogHelper.showConfirmDialog(
+                      context,
+                      title: 'Sign Out',
+                      message: 'Are you sure you want to sign out?',
+                      confirmText: 'Sign Out',
+                      cancelText: 'Cancel',
+                      icon: Icons.logout,
+                    );
+
+                    if (confirmed) {
+                      final success = await authProvider.signOut();
+                      if (!success && mounted) {
+                        SnackBarHelper.showError(
+                          context,
+                          'Failed to sign out. Please try again.',
+                        );
+                      }
+                    }
+                  },
+            icon: authProvider.isLoading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.logout),
+            label: Text(authProvider.isLoading ? 'Signing out...' : 'Sign Out'),
           );
-          if (confirmed == true) {
-            await AuthService.instance.signOut();
-          }
         },
-        icon: const Icon(Icons.logout, size: 16),
-        label: const Text('Sign Out', style: TextStyle(fontSize: 12)),
       ),
     );
   }
@@ -335,9 +383,7 @@ class _NavigationShellState extends State<NavigationShell> {
 class _StoreUpdateDialog extends StatelessWidget {
   final String currentVersion;
 
-  const _StoreUpdateDialog({
-    required this.currentVersion,
-  });
+  const _StoreUpdateDialog({required this.currentVersion});
 
   @override
   Widget build(BuildContext context) {

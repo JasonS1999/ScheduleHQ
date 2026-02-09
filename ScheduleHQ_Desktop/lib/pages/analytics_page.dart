@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import '../database/shift_dao.dart';
-import '../database/shift_runner_dao.dart';
-import '../database/employee_dao.dart';
-import '../database/shift_type_dao.dart';
-import '../database/store_hours_dao.dart';
-import '../database/job_code_settings_dao.dart';
-import '../models/shift.dart';
-import '../models/shift_runner.dart';
-import '../models/employee.dart';
-import '../models/store_hours.dart';
-import '../models/job_code_settings.dart';
+import 'package:provider/provider.dart';
+import '../providers/employee_provider.dart';
+import '../providers/schedule_provider.dart';
+import '../providers/time_off_provider.dart';
+import '../providers/analytics_provider.dart';
+import '../utils/loading_state_mixin.dart';
+import '../widgets/common/loading_indicator.dart';
+import '../widgets/common/error_message.dart';
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -18,472 +15,276 @@ class AnalyticsPage extends StatefulWidget {
   State<AnalyticsPage> createState() => _AnalyticsPageState();
 }
 
-class _AnalyticsPageState extends State<AnalyticsPage> {
-  final ShiftDao _shiftDao = ShiftDao();
-  final ShiftRunnerDao _shiftRunnerDao = ShiftRunnerDao();
-  final EmployeeDao _employeeDao = EmployeeDao();
-  final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
-  final StoreHoursDao _storeHoursDao = StoreHoursDao();
-  final JobCodeSettingsDao _jobCodeSettingsDao = JobCodeSettingsDao();
-
-  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
-  List<Employee> _employees = [];
-  List<Shift> _shifts = [];
-  List<ShiftRunner> _shiftRunners = [];
-  List<JobCodeSettings> _jobCodeSettings = [];
-  StoreHours _storeHours = StoreHours.defaults();
-  bool _isLoading = true;
+class _AnalyticsPageState extends State<AnalyticsPage> 
+    with LoadingStateMixin<AnalyticsPage> {
   
-  // Filters
-  String _searchQuery = '';
-  String? _selectedJobCode;
-
-  // Mid shift definitions: (startHour, startMinute, endHour, endMinute)
-  static const List<(int, int, int, int)> midShiftPatterns = [
-    (11, 0, 19, 0),  // 11-7
-    (12, 0, 20, 0),  // 12-8
-    (10, 0, 19, 0),  // 10-7
-    (11, 0, 20, 0),  // 11-8
-  ];
-
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    setState(() => _isLoading = true);
-
-    // Load shift types for shift runner display
-    final shiftTypes = await _shiftTypeDao.getAll();
-    ShiftRunner.setShiftTypes(shiftTypes);
-
-    // Load employees
-    final employees = await _employeeDao.getEmployees();
-
-    // Load job code settings for ordering
-    final jobCodeSettings = await _jobCodeSettingsDao.getAll();
-
-    // Load store hours
-    final storeHours = await _storeHoursDao.getStoreHours();
-
-    // Get month date range
-    final monthStart = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
-    final monthEnd = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
-
-    // Load shifts for the month
-    final shifts = await _shiftDao.getByDateRange(monthStart, monthEnd);
-
-    // Load shift runners for the month
-    final shiftRunners = await _shiftRunnerDao.getForDateRange(
-      monthStart,
-      monthEnd.subtract(const Duration(days: 1)),
-    );
-
-    setState(() {
-      _employees = employees;
-      _jobCodeSettings = jobCodeSettings;
-      _shifts = shifts;
-      _shiftRunners = shiftRunners;
-      _storeHours = storeHours;
-      _isLoading = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllData();
     });
   }
 
-  // Sort employees by job code order then by name
-  List<Employee> _getSortedEmployees() {
-    final jobCodeOrder = <String, int>{};
-    for (int i = 0; i < _jobCodeSettings.length; i++) {
-      jobCodeOrder[_jobCodeSettings[i].code.toLowerCase()] = i;
-    }
+  Future<void> _loadAllData() async {
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final scheduleProvider = Provider.of<ScheduleProvider>(context, listen: false);
+    final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
+    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
     
-    final sorted = List<Employee>.from(_employees);
-    sorted.sort((a, b) {
-      final aOrder = jobCodeOrder[a.jobCode.toLowerCase()] ?? 999;
-      final bOrder = jobCodeOrder[b.jobCode.toLowerCase()] ?? 999;
-      if (aOrder != bOrder) return aOrder.compareTo(bOrder);
-      return a.name.compareTo(b.name);
-    });
-    return sorted;
+    // Load all required data - each provider handles its own loading state
+    await Future.wait([
+      employeeProvider.loadEmployees(),
+      scheduleProvider.loadSchedule(),
+      timeOffProvider.loadData(),
+      analyticsProvider.loadData(),
+    ]);
   }
 
-  // Get filtered employees based on search and job code filter
-  List<Employee> _getFilteredEmployees() {
-    var employees = _getSortedEmployees();
-    
-    // Apply job code filter
-    if (_selectedJobCode != null && _selectedJobCode!.isNotEmpty) {
-      employees = employees.where((e) => 
-        e.jobCode.toLowerCase() == _selectedJobCode!.toLowerCase()
-      ).toList();
-    }
-    
-    // Apply search filter
-    if (_searchQuery.isNotEmpty) {
-      employees = employees.where((e) =>
-        e.name.toLowerCase().contains(_searchQuery.toLowerCase())
-      ).toList();
-    }
-    
-    return employees;
+  void _onSearchChanged(String query) {
+    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
+    analyticsProvider.setSearchQuery(query);
   }
 
-  // Get unique job codes from employees
-  List<String> _getUniqueJobCodes() {
-    final jobCodes = _employees.map((e) => e.jobCode).toSet().toList();
-    
-    // Sort by job code settings order
-    final jobCodeOrder = <String, int>{};
-    for (int i = 0; i < _jobCodeSettings.length; i++) {
-      jobCodeOrder[_jobCodeSettings[i].code.toLowerCase()] = i;
-    }
-    
-    jobCodes.sort((a, b) {
-      final aOrder = jobCodeOrder[a.toLowerCase()] ?? 999;
-      final bOrder = jobCodeOrder[b.toLowerCase()] ?? 999;
-      return aOrder.compareTo(bOrder);
-    });
-    
-    return jobCodes;
+  void _onJobCodeChanged(String? jobCode) {
+    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
+    analyticsProvider.setSelectedJobCode(jobCode);
   }
 
-  void _previousMonth() {
-    setState(() {
-      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
-    });
-    _loadData();
-  }
-
-  void _nextMonth() {
-    setState(() {
-      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
-    });
-    _loadData();
-  }
-
-  String _monthName(int month) {
-    const names = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return names[month - 1];
-  }
-
-  // Check if a shift is an opening shift
-  bool _isOpenShift(Shift shift) {
-    final dayOfWeek = shift.startTime.weekday % 7; // Convert to 0=Sunday
-    final openTime = _storeHours.getOpenTimeForDay(dayOfWeek == 0 ? DateTime.sunday : dayOfWeek);
-    final (openHour, openMinute) = StoreHours.parseTime(openTime);
-    return shift.startTime.hour == openHour && shift.startTime.minute == openMinute;
-  }
-
-  // Check if a shift is a closing shift
-  bool _isCloseShift(Shift shift) {
-    final dayOfWeek = shift.startTime.weekday % 7;
-    final closeTime = _storeHours.getCloseTimeForDay(dayOfWeek == 0 ? DateTime.sunday : dayOfWeek);
-    final (closeHour, closeMinute) = StoreHours.parseTime(closeTime);
-    return shift.endTime.hour == closeHour && shift.endTime.minute == closeMinute;
-  }
-
-  // Check if a shift matches a mid shift pattern
-  bool _isMidShift(Shift shift) {
-    for (final (startH, startM, endH, endM) in midShiftPatterns) {
-      if (shift.startTime.hour == startH &&
-          shift.startTime.minute == startM &&
-          shift.endTime.hour == endH &&
-          shift.endTime.minute == endM) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Get shift stats for an employee
-  Map<String, int> _getEmployeeShiftStats(int employeeId) {
-    final employeeShifts = _shifts.where((s) => s.employeeId == employeeId).toList();
-    
-    int opens = 0;
-    int closes = 0;
-    int mids = 0;
-    int total = 0;
-
-    for (final shift in employeeShifts) {
-      // Skip non-shift entries (OFF, PTO, VAC, etc.)
-      if (shift.label != null && 
-          ['off', 'pto', 'vac', 'eto', 'req off'].contains(shift.label!.toLowerCase())) {
-        continue;
-      }
-      
-      total++;
-      
-      if (_isOpenShift(shift)) {
-        opens++;
-      } else if (_isCloseShift(shift)) {
-        closes++;
-      } else if (_isMidShift(shift)) {
-        mids++;
-      }
-    }
-
-    return {
-      'total': total,
-      'opens': opens,
-      'closes': closes,
-      'mids': mids,
-    };
-  }
-
-  // Get shift runner counts by shift type for an employee
-  Map<String, int> _getEmployeeRunnerStats(String employeeName) {
-    final runnerCounts = <String, int>{};
-    
-    for (final runner in _shiftRunners) {
-      if (runner.runnerName.toLowerCase() == employeeName.toLowerCase()) {
-        runnerCounts[runner.shiftType] = (runnerCounts[runner.shiftType] ?? 0) + 1;
-      }
-    }
-    
-    return runnerCounts;
+  void _onMonthChanged(DateTime month) {
+    final analyticsProvider = Provider.of<AnalyticsProvider>(context, listen: false);
+    analyticsProvider.setSelectedMonth(month);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Schedule Analytics'),
+      appBar: AppBar(title: const Text("Analytics")),
+      body: Consumer4<EmployeeProvider, ScheduleProvider, TimeOffProvider, AnalyticsProvider>(
+        builder: (context, employeeProvider, scheduleProvider, timeOffProvider, analyticsProvider, child) {
+          if (employeeProvider.isLoading || scheduleProvider.isLoading || 
+              timeOffProvider.isLoading || analyticsProvider.isLoading) {
+            return const LoadingIndicator();
+          }
+
+          if (employeeProvider.errorMessage != null || 
+              scheduleProvider.errorMessage != null || timeOffProvider.errorMessage != null ||
+              analyticsProvider.errorMessage != null) {
+            return ErrorMessage(
+              message: employeeProvider.errorMessage ?? 
+                       scheduleProvider.errorMessage ?? 
+                       timeOffProvider.errorMessage ??
+                       analyticsProvider.errorMessage!,
+              onRetry: _loadAllData,
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: _loadAllData,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFiltersSection(analyticsProvider, employeeProvider),
+                  const SizedBox(height: 24),
+                  _buildAnalyticsTable(
+                    employeeProvider, 
+                    scheduleProvider, 
+                    timeOffProvider, 
+                    analyticsProvider
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
-      body: Column(
-        children: [
-          // Month selector and filters
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
+    );
+  }
+
+  Widget _buildFiltersSection(AnalyticsProvider analyticsProvider, EmployeeProvider employeeProvider) {
+    final jobCodes = analyticsProvider.getAvailableJobCodes(employeeProvider.employees);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Filters",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
               children: [
-                // Month selector row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: _previousMonth,
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      '${_monthName(_selectedMonth.month)} ${_selectedMonth.year}',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: _nextMonth,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Search and filter row
-                Row(
-                  children: [
-                    // Search bar
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: 'Search employees...',
-                          prefixIcon: const Icon(Icons.search),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          isDense: true,
-                        ),
-                        onChanged: (value) {
-                          setState(() => _searchQuery = value);
+                // Month Selection
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Month:", style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final selectedMonth = await showDatePicker(
+                            context: context,
+                            initialDate: analyticsProvider.selectedMonth,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (selectedMonth != null) {
+                            _onMonthChanged(selectedMonth);
+                          }
                         },
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    // Job code filter
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedJobCode,
-                        decoration: InputDecoration(
-                          labelText: 'Job Code',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          isDense: true,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "${analyticsProvider.selectedMonth.month}/${analyticsProvider.selectedMonth.year}",
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const Icon(Icons.calendar_today),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Job Code Filter
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Job Code:", style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String?>(
+                        value: analyticsProvider.selectedJobCode,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         items: [
-                          const DropdownMenuItem<String>(
+                          const DropdownMenuItem<String?>(
                             value: null,
-                            child: Text('All'),
+                            child: Text("All Job Codes"),
                           ),
-                          ..._getUniqueJobCodes().map((code) => DropdownMenuItem<String>(
+                          ...jobCodes.map((code) => DropdownMenuItem<String>(
                             value: code,
-                            child: Text(code.toUpperCase()),
+                            child: Text(code),
                           )),
                         ],
-                        onChanged: (value) {
-                          setState(() => _selectedJobCode = value);
-                        },
+                        onChanged: _onJobCodeChanged,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-          const Divider(),
-          // Content
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildAnalyticsContent(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsContent() {
-    final filteredEmployees = _getFilteredEmployees();
-    
-    if (filteredEmployees.isEmpty) {
-      return const Center(child: Text('No employees found'));
-    }
-
-    // Get shift types for rows
-    final shiftTypes = ShiftRunner.shiftTypes;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Shift Statistics Table (transposed - employees as columns)
-          Text(
-            'Shift Statistics',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: _buildShiftStatsTable(filteredEmployees),
-            ),
-          ),
-          const SizedBox(height: 24),
-          // Shift Runner Statistics Table (transposed - employees as columns)
-          if (shiftTypes.isNotEmpty) ...[
-            Text(
-              'Shifts Run (by Shift Type)',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: _buildRunnerStatsTable(filteredEmployees, shiftTypes),
+            const SizedBox(height: 16),
+            // Search Filter
+            TextField(
+              decoration: const InputDecoration(
+                labelText: "Search employees",
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
               ),
+              onChanged: _onSearchChanged,
             ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildShiftStatsTable(List<Employee> employees) {
-    // Pre-calculate stats for all employees
-    final allStats = <int, Map<String, int>>{};
-    for (final emp in employees) {
-      allStats[emp.id!] = _getEmployeeShiftStats(emp.id!);
-    }
-
-    const rowLabels = ['Total Shifts', 'Opens', 'Closes', 'Mids'];
-    const statKeys = ['total', 'opens', 'closes', 'mids'];
-
-    return DataTable(
-      columnSpacing: 16,
-      columns: [
-        const DataColumn(label: Text('Stat', style: TextStyle(fontWeight: FontWeight.bold))),
-        ...employees.map((emp) => DataColumn(
-          label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 80),
-            child: Text(
-              emp.name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
+  Widget _buildAnalyticsTable(
+    EmployeeProvider employeeProvider,
+    ScheduleProvider scheduleProvider,
+    TimeOffProvider timeOffProvider,
+    AnalyticsProvider analyticsProvider,
+  ) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Employee Analytics - ${analyticsProvider.selectedMonth.month}/${analyticsProvider.selectedMonth.year}",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-          ),
-        )),
-      ],
-      rows: List.generate(rowLabels.length, (idx) {
-        return DataRow(cells: [
-          DataCell(Text(rowLabels[idx], style: const TextStyle(fontWeight: FontWeight.bold))),
-          ...employees.map((emp) {
-            final stats = allStats[emp.id!]!;
-            return DataCell(
-              Center(child: Text('${stats[statKeys[idx]]}')),
-            );
-          }),
-        ]);
-      }),
-    );
-  }
+            const SizedBox(height: 16),
+            FutureBuilder<List<EmployeeAnalytics>>(
+              future: analyticsProvider.getEmployeeAnalytics(
+                employeeProvider.employees,
+                scheduleProvider.shifts,
+                scheduleProvider.shiftRunners,
+                timeOffProvider.jobCodeSettings,
+              ),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const LoadingIndicator();
+                }
 
-  Widget _buildRunnerStatsTable(List<Employee> employees, List shiftTypes) {
-    // Pre-calculate runner stats for all employees
-    final allRunnerStats = <String, Map<String, int>>{};
-    for (final emp in employees) {
-      allRunnerStats[emp.name] = _getEmployeeRunnerStats(emp.name);
-    }
+                if (snapshot.hasError) {
+                  return ErrorMessage(
+                    message: 'Failed to load analytics: ${snapshot.error}',
+                  );
+                }
 
-    return DataTable(
-      columnSpacing: 16,
-      columns: [
-        const DataColumn(label: Text('Shift Type', style: TextStyle(fontWeight: FontWeight.bold))),
-        ...employees.map((emp) => DataColumn(
-          label: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 80),
-            child: Text(
-              emp.name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
+                final analytics = snapshot.data ?? [];
+
+                if (analytics.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text(
+                        "No employees found matching the current filters.",
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ),
+                  );
+                }
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text("Employee")),
+                      DataColumn(label: Text("Job Code")),
+                      DataColumn(label: Text("Total Hours")),
+                      DataColumn(label: Text("Shift Count")),
+                      DataColumn(label: Text("Avg Hours/Shift")),
+                      DataColumn(label: Text("Mid Shift %")),
+                    ],
+                    rows: analytics.map((data) {
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(data.employee.displayName)),
+                          DataCell(Text(data.employee.jobCode)),
+                          DataCell(Text(data.totalHours.toStringAsFixed(1))),
+                          DataCell(Text(data.shiftCount.toString())),
+                          DataCell(Text(data.averageHoursPerShift.toStringAsFixed(1))),
+                          DataCell(Text("${data.midShiftPercentage.toStringAsFixed(0)}%")),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
             ),
-          ),
-        )),
-      ],
-      rows: [
-        // Rows for each shift type
-        ...shiftTypes.map((st) {
-          return DataRow(cells: [
-            DataCell(Text(st.label, style: const TextStyle(fontWeight: FontWeight.bold))),
-            ...employees.map((emp) {
-              final stats = allRunnerStats[emp.name]!;
-              final count = stats[st.key] ?? 0;
-              return DataCell(Center(child: Text('$count')));
-            }),
-          ]);
-        }),
-        // Total row
-        DataRow(cells: [
-          const DataCell(Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
-          ...employees.map((emp) {
-            final stats = allRunnerStats[emp.name]!;
-            int total = 0;
-            for (final count in stats.values) {
-              total += count;
-            }
-            return DataCell(
-              Center(child: Text('$total', style: const TextStyle(fontWeight: FontWeight.bold))),
-            );
-          }),
-        ]),
-      ],
+          ],
+        ),
+      ),
     );
   }
 }

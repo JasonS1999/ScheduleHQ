@@ -1,38 +1,13 @@
 import 'package:flutter/material.dart';
-import '../database/employee_dao.dart';
-import '../database/settings_dao.dart';
-import '../database/pto_history_dao.dart';
-import '../database/time_off_dao.dart';
-import '../database/job_code_settings_dao.dart';
+import 'package:provider/provider.dart';
 import '../models/employee.dart';
 import '../models/settings.dart';
-import '../models/time_off_entry.dart';
-import '../models/job_code_settings.dart';
-
-class TrimesterSummary {
-  final String label;
-  final DateTime start;
-  final DateTime end;
-
-  final int earned; // typically 30
-  final int carryoverIn; // from previous trimester
-  final int available; // earned + carryoverIn, capped at 40
-  final int used; // PTO used in this trimester (hours)
-  final int remaining; // available - used
-  final int carryoverOut; // min(remaining, maxCarryover)
-
-  TrimesterSummary({
-    required this.label,
-    required this.start,
-    required this.end,
-    required this.earned,
-    required this.carryoverIn,
-    required this.available,
-    required this.used,
-    required this.remaining,
-    required this.carryoverOut,
-  });
-}
+import '../providers/employee_provider.dart';
+import '../providers/settings_provider.dart';
+import '../providers/time_off_provider.dart';
+import '../utils/loading_state_mixin.dart';
+import '../widgets/common/loading_indicator.dart';
+import '../widgets/common/error_message.dart';
 
 class PtoVacTrackerPage extends StatefulWidget {
   const PtoVacTrackerPage({super.key});
@@ -41,343 +16,149 @@ class PtoVacTrackerPage extends StatefulWidget {
   State<PtoVacTrackerPage> createState() => _PtoVacTrackerPageState();
 }
 
-class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> {
-  final EmployeeDao _employeeDao = EmployeeDao();
-  final SettingsDao _settingsDao = SettingsDao();
-  final PtoHistoryDao _ptoHistoryDao = PtoHistoryDao();
-  final TimeOffDao _timeOffDao = TimeOffDao();
-  final JobCodeSettingsDao _jobCodeSettingsDao = JobCodeSettingsDao();
-
-  List<Employee> _employees = [];
-  List<JobCodeSettings> _jobCodeSettings = [];
-  Settings? _settings;
-  List<TimeOffEntry> _allEntries = []; // Expanded entries for PTO hours
-  List<TimeOffEntry> _rawEntries = []; // Raw entries for vacation weeks
+class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> 
+    with LoadingStateMixin<PtoVacTrackerPage> {
   int _selectedTrimesterYear = DateTime.now().year;
   int? _selectedEmployeeId;
 
   @override
   void initState() {
     super.initState();
-    _loadAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllData();
+    });
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadAll();
+  Future<void> _loadAllData() async {
+    await _loadProvidersData();
+    _setDefaultSelectedEmployee();
   }
 
-  Future<void> _loadAll() async {
-    try {
-      final employees = await _employeeDao.getEmployees();
-      final settings = await _settingsDao.getSettings();
-      final entries = await _timeOffDao.getAllTimeOff();
-      final rawEntries = await _timeOffDao.getAllTimeOffRaw();
-      final jobCodeSettings = await _jobCodeSettingsDao.getAll();
+  Future<void> _loadProvidersData() async {
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
+    
+    // Load all required data
+    await Future.wait([
+      employeeProvider.loadEmployees(),
+      settingsProvider.loadSettings(),
+      timeOffProvider.loadData(),
+    ]);
+  }
 
-      // Find employees with PTO enabled for the dropdown
-      final ptoEnabledCodes = jobCodeSettings
-          .where((jc) => jc.hasPTO)
-          .map((jc) => jc.code.toLowerCase())
-          .toSet();
-      final ptoEmployees = employees
-          .where((e) => ptoEnabledCodes.contains(e.jobCode.toLowerCase()))
-          .toList();
-
+  void _setDefaultSelectedEmployee() {
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
+    
+    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(employeeProvider.employees);
+    
+    if (ptoEmployees.isNotEmpty && _selectedEmployeeId == null) {
       setState(() {
-        _employees = employees;
-        _jobCodeSettings = jobCodeSettings;
-        _settings = settings;
-
-        // All entries (model enforces non-nullable fields)
-        _allEntries = entries;
-        _rawEntries = rawEntries;
-
-        // Default selected employee to first PTO-enabled employee
-        _selectedEmployeeId = ptoEmployees.isNotEmpty
-            ? ptoEmployees.first.id
-            : null;
-      });
-    } catch (e) {
-      debugPrint("Tracker load error: $e");
-      setState(() {
-        _employees = [];
-        _jobCodeSettings = [];
-        _settings = null;
-        _allEntries = [];
-        _rawEntries = [];
+        _selectedEmployeeId = ptoEmployees.first.id;
       });
     }
   }
-
-  /// Check if an employee's job code has PTO enabled
-  bool _hasPtoEnabled(Employee employee) {
-    final jobCodeLower = employee.jobCode.toLowerCase();
-    final setting = _jobCodeSettings.firstWhere(
-      (jc) => jc.code.toLowerCase() == jobCodeLower,
-      orElse: () => JobCodeSettings(
-        code: employee.jobCode,
-        hasPTO: false,
-        colorHex: '#808080',
-      ),
-    );
-    return setting.hasPTO;
-  }
-
-  // ---------------------------------------------------------------------------
-  // TRIMESTER LOGIC
-  // ---------------------------------------------------------------------------
-
-  DateTime _trimesterStart(DateTime date) {
-    final y = date.year;
-    final m = date.month;
-
-    if (m >= 1 && m <= 4) return DateTime(y, 1, 1);
-    if (m >= 5 && m <= 8) return DateTime(y, 5, 1);
-    return DateTime(y, 9, 1);
-  }
-
-  List<Map<String, dynamic>> _getTrimesterRanges(int year) {
-    return [
-      {
-        "label": "Trimester 1",
-        "start": DateTime(year, 1, 1),
-        "end": DateTime(year, 4, 30),
-      },
-      {
-        "label": "Trimester 2",
-        "start": DateTime(year, 5, 1),
-        "end": DateTime(year, 8, 31),
-      },
-      {
-        "label": "Trimester 3",
-        "start": DateTime(year, 9, 1),
-        "end": DateTime(year, 12, 31),
-      },
-    ];
-  }
-
-  // ---------------------------------------------------------------------------
-  // PTO CALCULATION (SUMMARY CARD, CRASH-PROOF)
-  // ---------------------------------------------------------------------------
-
-  Future<Map<String, dynamic>> _calculatePto(Employee e) async {
-    try {
-      if (_settings == null) {
-        return {'allowance': 0, 'carryover': 0, 'used': 0, 'remaining': 0};
-      }
-
-      final settings = _settings!;
-      final now = DateTime.now();
-      final trimesterStart = _trimesterStart(now);
-
-      final history = await _ptoHistoryDao.ensureHistoryRecord(
-        employeeId: e.id ?? 0,
-        trimesterStart: trimesterStart,
-      );
-
-      // PTO entries using new schema - sum actual hours
-      final usedHours = _allEntries
-          .where((entry) {
-            if (entry.employeeId != e.id) return false;
-            if (entry.timeOffType != "pto") return false;
-            return _trimesterStart(entry.date) == trimesterStart;
-          })
-          .fold(0, (sum, entry) => sum + entry.hours);
-
-      final isFirstTrimester =
-          trimesterStart.month == 1 && trimesterStart.day == 1;
-
-      int carryover;
-      if (isFirstTrimester) {
-        carryover = 0;
-      } else {
-        final unused =
-            (settings.ptoHoursPerTrimester + history.carryoverHours) -
-            usedHours;
-
-        carryover = unused > 0
-            ? unused.clamp(0, settings.maxCarryoverHours)
-            : 0;
-      }
-
-      final remaining = (settings.ptoHoursPerTrimester + carryover) - usedHours;
-
-      return {
-        'allowance': settings.ptoHoursPerTrimester,
-        'carryover': carryover,
-        'used': usedHours,
-        'remaining': remaining,
-      };
-    } catch (e) {
-      debugPrint("PTO calc error: $e");
-      return {'allowance': 0, 'carryover': 0, 'used': 0, 'remaining': 0};
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // PTO TRIMESTER BREAKDOWN (30 / 40 / 10 LOGIC)
-  // ---------------------------------------------------------------------------
-
-  List<TrimesterSummary> _calculateTrimesterSummaries(Employee e, {int? year}) {
-    final settings = _settings;
-    if (settings == null || e.id == null) {
-      return [];
-    }
-
-    final int earnedPerTrimester =
-        settings.ptoHoursPerTrimester; // should be 30
-    const int maxCap = 40; // hard cap per your rule
-    final int maxCarryover = settings.maxCarryoverHours; // should be 10
-
-    final yr = year ?? DateTime.now().year;
-    final trimesters = _getTrimesterRanges(yr);
-
-    int carryover = 0;
-    final List<TrimesterSummary> summaries = [];
-
-    for (final t in trimesters) {
-      final label = t['label'] as String;
-      final start = t['start'] as DateTime;
-      final end = t['end'] as DateTime;
-
-      // Sum actual PTO hours in this trimester
-      final usedHours = _allEntries
-          .where((entry) {
-            if (entry.employeeId != e.id) return false;
-            if (entry.timeOffType != "pto") return false;
-            final d = entry.date;
-            return !d.isBefore(start) && !d.isAfter(end);
-          })
-          .fold(0, (sum, entry) => sum + entry.hours);
-
-      // Available = earned + carryover, capped at 40
-      int available = earnedPerTrimester + carryover;
-      if (available > maxCap) available = maxCap;
-
-      final remaining = available - usedHours;
-
-      int carryoverOut = 0;
-      if (remaining > 0) {
-        carryoverOut = remaining;
-        if (carryoverOut > maxCarryover) {
-          carryoverOut = maxCarryover;
-        }
-      }
-
-      summaries.add(
-        TrimesterSummary(
-          label: label,
-          start: start,
-          end: end,
-          earned: earnedPerTrimester,
-          carryoverIn: carryover,
-          available: available,
-          used: usedHours,
-          remaining: remaining,
-          carryoverOut: carryoverOut,
-        ),
-      );
-
-      carryover = carryoverOut;
-    }
-
-    return summaries;
-  }
-
-  // ---------------------------------------------------------------------------
-  // VACATION WEEKS (CRASH-PROOF)
-  // ---------------------------------------------------------------------------
-
-  int _vacationWeeksUsed(Employee e) {
-    try {
-      // Use raw entries to count vacation weeks (not expanded)
-      // Each vacation entry with endDate represents one week
-      int vacationWeeks = 0;
-
-      for (final entry in _rawEntries) {
-        if (entry.employeeId != e.id) continue;
-        if (entry.timeOffType != "vac") continue;
-        // Each raw vacation entry counts as 1 week
-        vacationWeeks++;
-      }
-
-      return vacationWeeks;
-    } catch (e) {
-      debugPrint("Vacation calc error: $e");
-      return 0;
-    }
-  }
-
-  int _vacationWeeksAllowed(Employee e) {
-    try {
-      return e.vacationWeeksAllowed;
-    } catch (e) {
-      debugPrint("Vacation allowed calc error: $e");
-      return 0;
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // UI
-  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    if (_settings == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
     return Scaffold(
       appBar: AppBar(title: const Text("PTO / VAC Tracker")),
-      body: RefreshIndicator(
-        onRefresh: _loadAll,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _buildPtoSummaryTable(),
-              const SizedBox(height: 24),
-              _buildPtoTrimesterBreakdownSection(),
-              const SizedBox(height: 32),
-              _buildVacationSection(),
-            ],
-          ),
-        ),
+      body: Consumer3<EmployeeProvider, SettingsProvider, TimeOffProvider>(
+        builder: (context, employeeProvider, settingsProvider, timeOffProvider, child) {
+          if (isLoading || employeeProvider.isLoading || settingsProvider.isLoading || timeOffProvider.isLoading) {
+            return const LoadingIndicator();
+          }
+
+          if (employeeProvider.errorMessage != null || settingsProvider.errorMessage != null || timeOffProvider.errorMessage != null) {
+            return ErrorMessage(
+              message: employeeProvider.errorMessage ??
+                       settingsProvider.errorMessage ?? 
+                       timeOffProvider.errorMessage!,
+              onRetry: _loadAllData,
+            );
+          }
+
+          final settings = settingsProvider.settings;
+          if (settings == null) {
+            return const ErrorMessage(
+              message: 'Settings not available',
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: _loadAllData,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildPtoSummaryTable(employeeProvider, settingsProvider, timeOffProvider),
+                  const SizedBox(height: 24),
+                  _buildPtoTrimesterBreakdownSection(employeeProvider, settingsProvider, timeOffProvider),
+                  const SizedBox(height: 24),
+                  _buildVacationSection(employeeProvider, timeOffProvider),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // PTO SUMMARY TABLE (TOP)
-  // ---------------------------------------------------------------------------
+  Widget _buildPtoSummaryTable(EmployeeProvider employeeProvider, SettingsProvider settingsProvider, TimeOffProvider timeOffProvider) {
+    final settings = settingsProvider.settings!;
+    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(employeeProvider.employees);
 
-  Widget _buildPtoSummaryTable() {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _loadAllPtoSummaries(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    if (ptoEmployees.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "PTO Summary",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const Divider(),
+              const Text("No employees with PTO enabled found."),
+            ],
+          ),
+        ),
+      );
+    }
 
-        final rows = snapshot.data!;
-
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "PTO summary",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const Divider(),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "PTO Summary",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const Divider(),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _loadAllPtoSummaries(ptoEmployees, settings, timeOffProvider),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const LoadingIndicator();
+                  }
+                  
+                  if (snapshot.hasError) {
+                    return ErrorMessage(
+                      message: 'Failed to load PTO summaries: ${snapshot.error}',
+                    );
+                  }
+                  
+                  final rows = snapshot.data ?? [];
+                  
+                  return DataTable(
                     columns: const [
                       DataColumn(label: Text("Employee")),
                       DataColumn(label: Text("Allowance")),
@@ -396,55 +177,59 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> {
                         ],
                       );
                     }).toList(),
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 
-  Future<List<Map<String, dynamic>>> _loadAllPtoSummaries() async {
-    try {
-      List<Map<String, dynamic>> list = [];
+  Future<List<Map<String, dynamic>>> _loadAllPtoSummaries(List<Employee> ptoEmployees, Settings settings, TimeOffProvider timeOffProvider) async {
+    final List<Map<String, dynamic>> summaries = [];
 
-      for (final e in _employees) {
-        if (e.id == null) continue;
-
-        // Only include employees with PTO-enabled job codes
-        if (!_hasPtoEnabled(e)) continue;
-
-        final pto = await _calculatePto(e);
-
-        list.add({
-          'name': e.name,
+    for (final employee in ptoEmployees) {
+      try {
+        final pto = await timeOffProvider.calculatePto(employee, settings);
+        summaries.add({
+          'name': employee.displayName,
           'allowance': pto['allowance'] ?? 0,
           'carryover': pto['carryover'] ?? 0,
           'used': pto['used'] ?? 0,
           'remaining': pto['remaining'] ?? 0,
         });
+      } catch (e) {
+        debugPrint('Error calculating PTO for ${employee.displayName}: $e');
       }
-
-      return list;
-    } catch (e) {
-      debugPrint("PTO summary load error: $e");
-      return [];
     }
+
+    return summaries;
   }
 
-  // ---------------------------------------------------------------------------
-  // PTO TRIMESTER BREAKDOWN SECTION
-  // ---------------------------------------------------------------------------
+  Widget _buildPtoTrimesterBreakdownSection(EmployeeProvider employeeProvider, SettingsProvider settingsProvider, TimeOffProvider timeOffProvider) {
+    final settings = settingsProvider.settings!;
+    final ptoEmployees = timeOffProvider.getPtoEnabledEmployees(employeeProvider.employees);
 
-  Widget _buildPtoTrimesterBreakdownSection() {
-    if (_employees.isEmpty || _settings == null) {
-      return const SizedBox.shrink();
+    if (ptoEmployees.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "PTO Trimester Breakdown",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const Divider(),
+              const Text("No employees with PTO enabled found."),
+            ],
+          ),
+        ),
+      );
     }
-
-    final currentYear = DateTime.now().year;
-    final previousYear = currentYear - 1;
 
     return Card(
       child: Padding(
@@ -452,147 +237,90 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              "PTO trimester breakdown",
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const Divider(),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  "PTO History",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
+                const Text("Year: "),
                 DropdownButton<int>(
                   value: _selectedTrimesterYear,
-                  items: [previousYear, currentYear]
-                      .map(
-                        (y) => DropdownMenuItem<int>(
-                          value: y,
-                          child: Text(y.toString()),
-                        ),
-                      )
+                  items: List.generate(5, (i) => DateTime.now().year - 2 + i)
+                      .map((year) => DropdownMenuItem(
+                            value: year,
+                            child: Text(year.toString()),
+                          ))
                       .toList(),
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => _selectedTrimesterYear = v);
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _selectedTrimesterYear = value);
+                    }
+                  },
+                ),
+                const SizedBox(width: 24),
+                const Text("Employee: "),
+                DropdownButton<int?>(
+                  value: _selectedEmployeeId,
+                  items: ptoEmployees
+                      .map((e) => DropdownMenuItem(
+                            value: e.id,
+                            child: Text(e.displayName),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() => _selectedEmployeeId = value);
                   },
                 ),
               ],
             ),
-            const Divider(),
-
-            // Employee selector dropdown (single employee view) - only PTO-enabled employees
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: DropdownButton<int?>(
-                      value: _selectedEmployeeId,
-                      hint: const Text('Select employee'),
-                      isExpanded: true,
-                      items: _employees
-                          .where((ev) => ev.id != null && _hasPtoEnabled(ev))
-                          .map(
-                            (ev) => DropdownMenuItem<int?>(
-                              value: ev.id,
-                              child: Text(ev.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        setState(() => _selectedEmployeeId = v);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
+            const SizedBox(height: 16),
             Builder(
               builder: (_) {
-                final selected = _employees.firstWhere(
-                  (ev) => ev.id == _selectedEmployeeId,
-                  orElse: () => _employees.first,
-                );
-                final summaries = _calculateTrimesterSummaries(
-                  selected,
+                final selectedEmployee = ptoEmployees
+                    .where((e) => e.id == _selectedEmployeeId)
+                    .firstOrNull;
+
+                if (selectedEmployee == null) {
+                  return const Text("Please select an employee.");
+                }
+
+                final summaries = timeOffProvider.calculateTrimesterSummaries(
+                  selectedEmployee, 
+                  settings,
                   year: _selectedTrimesterYear,
                 );
-                if (summaries.isEmpty) return const SizedBox.shrink();
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 640),
-                          child: DefaultTabController(
-                            length: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                TabBar(
-                                  labelColor: Theme.of(
-                                    context,
-                                  ).colorScheme.primary,
-                                  unselectedLabelColor: Colors.grey,
-                                  tabs: const [
-                                    Tab(text: 'T1'),
-                                    Tab(text: 'T2'),
-                                    Tab(text: 'T3'),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 140,
-                                  child: TabBarView(
-                                    children: [
-                                      for (final t in summaries)
-                                        SingleChildScrollView(
-                                          child: Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 12,
-                                              left: 8,
-                                              right: 8,
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.center,
-                                              children: [
-                                                Text(
-                                                  "${_formatDate(t.start)} – ${_formatDate(t.end)}",
-                                                  style: const TextStyle(
-                                                    fontSize: 13,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Text("Earned: ${t.earned} hrs"),
-                                                Text(
-                                                  "Carryover In: ${t.carryoverIn} hrs",
-                                                ),
-                                                Text(
-                                                  "Available: ${t.available} hrs",
-                                                ),
-                                                Text("Used: ${t.used} hrs"),
-                                                Text(
-                                                  "Remaining: ${t.remaining} hrs",
-                                                ),
-                                                Text(
-                                                  "Carryover Out: ${t.carryoverOut} hrs",
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+                if (summaries.isEmpty) {
+                  return const Text("No data available for selected year.");
+                }
+
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text("Trimester")),
+                      DataColumn(label: Text("Earned")),
+                      DataColumn(label: Text("Carryover In")),
+                      DataColumn(label: Text("Available")),
+                      DataColumn(label: Text("Used")),
+                      DataColumn(label: Text("Remaining")),
+                      DataColumn(label: Text("Carryover Out")),
                     ],
+                    rows: summaries.map((summary) {
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(summary.label)),
+                          DataCell(Text("${summary.earned}h")),
+                          DataCell(Text("${summary.carryoverIn}h")),
+                          DataCell(Text("${summary.available}h")),
+                          DataCell(Text("${summary.used}h")),
+                          DataCell(Text("${summary.remaining}h")),
+                          DataCell(Text("${summary.carryoverOut}h")),
+                        ],
+                      );
+                    }).toList(),
                   ),
                 );
               },
@@ -603,19 +331,30 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> {
     );
   }
 
-  String _formatDate(DateTime d) {
-    return "${d.month}/${d.day}/${d.year}";
-  }
-
-  // ---------------------------------------------------------------------------
-  // VACATION SECTION
-  // ---------------------------------------------------------------------------
-
-  Widget _buildVacationSection() {
-    // Only show employees with 1 or more vacation weeks allowed
-    final vacationEmployees = _employees
-        .where((e) => e.vacationWeeksAllowed >= 1)
+  Widget _buildVacationSection(EmployeeProvider employeeProvider, TimeOffProvider timeOffProvider) {
+    // Filter employees who have vacation weeks allocated
+    final vacationEmployees = employeeProvider.employees
+        .where((e) => e.vacationWeeksAllowed > 0)
         .toList();
+
+    if (vacationEmployees.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Vacation Weeks",
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const Divider(),
+              const Text("No employees with vacation weeks allocated."),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Card(
       child: Padding(
@@ -624,28 +363,49 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Vacation Tracking",
+              "Vacation weeks",
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const Divider(),
-            ...vacationEmployees.map((e) => _buildVacationRow(e)),
+            ...vacationEmployees.map((e) => _buildVacationRow(e, timeOffProvider)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildVacationRow(Employee e) {
-    final used = _vacationWeeksUsed(e);
-    final allowed = _vacationWeeksAllowed(e);
-    final remaining = allowed - used;
+  Widget _buildVacationRow(Employee employee, TimeOffProvider timeOffProvider) {
+    final used = timeOffProvider.getVacationWeeksUsed(employee);
+    final remaining = timeOffProvider.getVacationWeeksRemaining(employee);
+    final allowed = employee.vacationWeeksAllowed;
 
-    return ListTile(
-      title: Text(e.displayName),
-      subtitle: Text("Used: $used / $allowed weeks"),
-      trailing: Text(
-        "Remaining: $remaining",
-        style: const TextStyle(fontWeight: FontWeight.bold),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              employee.displayName,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+          ),
+          Expanded(
+            child: Text("Allowed: $allowed"),
+          ),
+          Expanded(
+            child: Text("Used: $used"),
+          ),
+          Expanded(
+            child: Text(
+              "Remaining: $remaining",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: remaining > 0 ? Colors.green : Colors.red,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

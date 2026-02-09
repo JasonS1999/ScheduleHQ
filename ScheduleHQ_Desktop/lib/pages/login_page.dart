@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart' as app_auth;
 import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
@@ -34,11 +36,18 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await AuthService.instance.signInWithEmailAndPassword(
+      final authProvider = context.read<app_auth.AuthProvider>();
+      final success = await authProvider.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      widget.onLoginSuccess();
+      if (success) {
+        widget.onLoginSuccess();
+      } else {
+        setState(() {
+          _errorMessage = authProvider.lastSignInError ?? 'Login failed. Please try again.';
+        });
+      }
     } catch (e) {
       setState(() {
         _errorMessage = getAuthErrorMessage(e);

@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import '../models/shift.dart';
 import '../models/schedule_note.dart';
 import '../models/shift_runner.dart';
@@ -231,9 +232,26 @@ class ScheduleUndoManager {
     _listeners.remove(listener);
   }
   
+  bool _notifyScheduled = false;
+
   void _notifyListeners() {
-    for (final listener in _listeners) {
-      listener();
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      for (final listener in _listeners) {
+        listener();
+      }
+      return;
+    }
+    // Mid-frame: defer to post-frame callback to avoid parentDataDirty.
+    if (!_notifyScheduled) {
+      _notifyScheduled = true;
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _notifyScheduled = false;
+        for (final listener in _listeners) {
+          listener();
+        }
+      });
     }
   }
   

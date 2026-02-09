@@ -2013,9 +2013,18 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
   final ShiftTemplateDao _shiftTemplateDao = ShiftTemplateDao();
   final ShiftRunnerDao _shiftRunnerDao = ShiftRunnerDao();
   final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
-  final Map<String, Map<String, dynamic>> _availabilityCache = {};
+  final Map<String, Future<Map<String, dynamic>>> _availabilityCache = {};
   List<ShiftType> _shiftTypes = [];
   List<ShiftRunner> _shiftRunners = [];
+
+  /// Return a cached availability future keyed on employeeId + date.
+  Future<Map<String, dynamic>> _cachedCheckAvailability(int employeeId, DateTime date) {
+    final key = '$employeeId-${date.year}-${date.month}-${date.day}';
+    return _availabilityCache.putIfAbsent(key, () => _checkAvailability(employeeId, date));
+  }
+
+  /// Invalidate the availability cache.
+  void _invalidateAvailabilityCache() => _availabilityCache.clear();
 
   @override
   void initState() {
@@ -2030,6 +2039,9 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     if (oldWidget.date != widget.date ||
         oldWidget.shiftRunnerRefreshKey != widget.shiftRunnerRefreshKey) {
       _loadShiftRunnerData();
+      _invalidateAvailabilityCache();
+    } else if (oldWidget.shifts != widget.shifts) {
+      _invalidateAvailabilityCache();
     }
   }
 
@@ -2786,7 +2798,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
                                             );
                                           },
                                           child: FutureBuilder<Map<String, dynamic>>(
-                                            future: _checkAvailability(
+                                            future: _cachedCheckAvailability(
                                               e.id!,
                                               d,
                                             ),
@@ -3347,11 +3359,6 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
     int employeeId,
     DateTime date,
   ) async {
-    final cacheKey = '$employeeId-${date.year}-${date.month}-${date.day}';
-    if (_availabilityCache.containsKey(cacheKey)) {
-      return _availabilityCache[cacheKey]!;
-    }
-
     // Priority 1: Check time-off first
     final timeOffList = await _timeOffDao.getAllTimeOff();
     final dateStr =
@@ -3369,7 +3376,7 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
       final timeRange = timeOffEntry.isAllDay
           ? 'All Day'
           : '${timeOffEntry.startTime ?? ''} - ${timeOffEntry.endTime ?? ''}';
-      final result = {
+      return {
         'available': false,
         'reason': 'Time off scheduled ($timeRange)',
         'type': 'time-off',
@@ -3378,19 +3385,15 @@ class _WeeklyScheduleViewState extends State<WeeklyScheduleView> {
         'endTime': timeOffEntry.endTime,
         'timeOffEntry': timeOffEntry,
       };
-      _availabilityCache[cacheKey] = result;
-      return result;
     }
 
     // Priority 2: Check availability patterns
-    final result = await _availabilityDao.isAvailable(
+    return await _availabilityDao.isAvailable(
       employeeId,
       date,
       null,
       null,
     );
-    _availabilityCache[cacheKey] = result;
-    return result;
   }
 
   Future<void> _showAddShiftDialogWithAvailability(
@@ -3818,10 +3821,19 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
   final ShiftRunnerDao _shiftRunnerDao = ShiftRunnerDao();
   final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
   final ShiftDao _shiftDao = ShiftDao();
-  final Map<String, Map<String, dynamic>> _availabilityCache = {};
+  final Map<String, Future<Map<String, dynamic>>> _availabilityCache = {};
   List<ShiftType> _shiftTypes = [];
   List<ShiftRunner> _shiftRunners = [];
   bool _isRunnerPanelExpanded = false; // Start collapsed
+
+  /// Return a cached availability future keyed on employeeId + date.
+  Future<Map<String, dynamic>> _cachedCheckAvailability(int employeeId, DateTime date) {
+    final key = '$employeeId-${date.year}-${date.month}-${date.day}';
+    return _availabilityCache.putIfAbsent(key, () => _checkAvailability(employeeId, date));
+  }
+
+  /// Invalidate the availability cache.
+  void _invalidateAvailabilityCache() => _availabilityCache.clear();
 
   @override
   void initState() {
@@ -3846,6 +3858,9 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
         oldWidget.date.year != widget.date.year ||
         oldWidget.shiftRunnerRefreshKey != widget.shiftRunnerRefreshKey) {
       _loadShiftRunnerData();
+      _invalidateAvailabilityCache();
+    } else if (oldWidget.shifts != widget.shifts) {
+      _invalidateAvailabilityCache();
     }
   }
 
@@ -4086,11 +4101,6 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     int employeeId,
     DateTime date,
   ) async {
-    final cacheKey = '$employeeId-${date.year}-${date.month}-${date.day}';
-    if (_availabilityCache.containsKey(cacheKey)) {
-      return _availabilityCache[cacheKey]!;
-    }
-
     // Priority 1: Check time-off first
     final timeOffList = await _timeOffDao.getAllTimeOff();
     final dateStr =
@@ -4108,7 +4118,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       final timeRange = timeOffEntry.isAllDay
           ? 'All Day'
           : '${timeOffEntry.startTime ?? ''} - ${timeOffEntry.endTime ?? ''}';
-      final result = {
+      return {
         'available': false,
         'reason': 'Time off scheduled ($timeRange)',
         'type': 'time-off',
@@ -4117,19 +4127,15 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
         'endTime': timeOffEntry.endTime,
         'timeOffEntry': timeOffEntry,
       };
-      _availabilityCache[cacheKey] = result;
-      return result;
     }
 
     // Priority 2: Check availability patterns
-    final result = await _availabilityDao.isAvailable(
+    return await _availabilityDao.isAvailable(
       employeeId,
       date,
       null,
       null,
     );
-    _availabilityCache[cacheKey] = result;
-    return result;
   }
 
   bool _hasNoteForDay(DateTime day) {
@@ -4970,7 +4976,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
             ),
             child: shiftsForCell.isEmpty
                 ? FutureBuilder<Map<String, dynamic>>(
-                    future: _checkAvailability(employee.id!, day),
+                    future: _cachedCheckAvailability(employee.id!, day),
                     builder: (context, snapshot) {
                       bool showDash = false;
                       if (snapshot.hasData) {

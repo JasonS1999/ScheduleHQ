@@ -1,14 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../database/shift_runner_dao.dart';
-import '../../database/shift_type_dao.dart';
-import '../../database/shift_dao.dart';
-import '../../database/employee_dao.dart';
-import '../../database/time_off_dao.dart';
-import '../../database/employee_availability_dao.dart';
+import 'package:provider/provider.dart';
 import '../../models/shift_runner.dart';
-import '../../models/shift_type.dart';
-import '../../models/shift.dart';
 import '../../models/employee.dart';
+import '../../providers/schedule_provider.dart';
 import '../../services/app_colors.dart';
 
 class ShiftRunnerTable extends StatefulWidget {
@@ -28,22 +22,14 @@ class ShiftRunnerTable extends StatefulWidget {
 }
 
 class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
-  final ShiftRunnerDao _dao = ShiftRunnerDao();
-  final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
-  final ShiftDao _shiftDao = ShiftDao();
-  final EmployeeDao _employeeDao = EmployeeDao();
-  final TimeOffDao _timeOffDao = TimeOffDao();
-  final EmployeeAvailabilityDao _availabilityDao = EmployeeAvailabilityDao();
-
-  List<ShiftRunner> _runners = [];
-  List<Employee> _employees = [];
-  List<ShiftType> _shiftTypes = [];
   bool _isExpanded = true;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ScheduleProvider>().initialize();
+    });
   }
 
   @override
@@ -51,285 +37,124 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.weekStart != widget.weekStart || 
         oldWidget.refreshKey != widget.refreshKey) {
-      _loadData();
-    }
-  }
-
-  Future<void> _loadData() async {
-    final weekEnd = widget.weekStart.add(const Duration(days: 6));
-    final runners = await _dao.getForDateRange(widget.weekStart, weekEnd);
-    final employees = await _employeeDao.getEmployees();
-    
-    // Load shift types and set them in ShiftRunner
-    await _shiftTypeDao.insertDefaultsIfEmpty();
-    final shiftTypes = await _shiftTypeDao.getAll();
-    ShiftRunner.setShiftTypes(shiftTypes);
-
-    if (mounted) {
-      setState(() {
-        _runners = runners;
-        _employees = employees;
-        _shiftTypes = shiftTypes;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final provider = context.read<ScheduleProvider>();
+        provider.setDateRange(widget.weekStart, widget.weekStart.add(const Duration(days: 6)));
+        provider.refresh();
       });
     }
   }
 
-  String? _getRunnerForCell(DateTime day, String shiftType) {
-    final runner = _runners.cast<ShiftRunner?>().firstWhere(
-      (r) =>
-          r != null &&
-          r.date.year == day.year &&
-          r.date.month == day.month &&
-          r.date.day == day.day &&
-          r.shiftType == shiftType,
-      orElse: () => null,
-    );
-    return runner?.runnerName;
-  }
-
-  Future<void> _editRunner(
-    DateTime day,
-    String shiftType,
-    String? currentName,
-  ) async {
-    // Get the shift type info for availability check
-    final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
-      (st) => st?.key == shiftType,
-      orElse: () => null,
-    );
-    final startTime = shiftTypeObj?.defaultShiftStart ?? '09:00';
-    final endTime = shiftTypeObj?.defaultShiftEnd ?? '17:00';
-
-    // Load available employees for this shift
-    final availableEmployees = await _getAvailableEmployees(
-      day,
-      startTime,
-      endTime,
-      shiftType,
-    );
-
-    if (!mounted) return;
-
-    final result = await showDialog<String?>(
-      context: context,
-      builder: (ctx) {
-        return _ShiftRunnerSearchDialog(
-          day: day,
-          shiftType: shiftType,
-          currentName: currentName,
-          availableEmployees: availableEmployees,
-          shiftColor: _getShiftColor(shiftType),
-          startTime: startTime,
-          endTime: endTime,
-        );
-      },
-    );
-
-    if (result != null) {
-      if (result.isEmpty) {
-        await _dao.clear(day, shiftType);
-      } else {
-        // Find the employee by name
-        final employee = _employees.cast<Employee?>().firstWhere(
-          (e) => e?.name == result,
-          orElse: () => null,
-        );
-        
-        // Create shift with default times if employee doesn't have a shift for this day
-        if (employee != null) {
-          final existingShifts = await _shiftDao.getByEmployeeAndDateRange(
-            employee.id!,
-            day,
-            day.add(const Duration(days: 1)),
-          );
-          
-          if (existingShifts.isEmpty) {
-            // Parse the default shift times
-            final startParts = startTime.split(':');
-            final endParts = endTime.split(':');
-            final shiftStart = DateTime(
-              day.year, day.month, day.day,
-              int.parse(startParts[0]), int.parse(startParts[1]),
-            );
-            var shiftEnd = DateTime(
-              day.year, day.month, day.day,
-              int.parse(endParts[0]), int.parse(endParts[1]),
-            );
-            // Handle overnight shifts (end time before start time)
-            if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart)) {
-              shiftEnd = shiftEnd.add(const Duration(days: 1));
-            }
-            
-            await _shiftDao.insert(Shift(
-              employeeId: employee.id!,
-              startTime: shiftStart,
-              endTime: shiftEnd,
-            ));
-          }
-        }
-        
-        await _dao.upsert(
-          ShiftRunner(
-            date: day,
-            shiftType: shiftType,
-            runnerName: result,
-            employeeId: employee?.id,
-          ),
-        );
-      }
-      await _loadData();
-      widget.onChanged?.call();
-    }
-  }
-
-  Future<List<Employee>> _getAvailableEmployees(
-    DateTime day,
-    String startTime,
-    String endTime,
-    String currentShiftType, // The shift type being edited
-  ) async {
-    final availableList = <Employee>[];
-    final timeOffList = await _timeOffDao.getAllTimeOff();
-    final dateStr =
-        '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-
-    // Get all runners for this day to filter out people already running a different shift
-    final runnersForDay = _runners.where(
-      (r) =>
-          r.date.year == day.year &&
-          r.date.month == day.month &&
-          r.date.day == day.day,
-    ).toList();
-
-    for (final employee in _employees) {
-      // Check if this employee is already running a different shift on this day
-      final alreadyRunning = runnersForDay.any(
-        (r) => r.runnerName == employee.name && r.shiftType != currentShiftType,
-      );
-      if (alreadyRunning) continue;
-
-      // Check time-off
-      final hasTimeOff = timeOffList.any(
-        (t) =>
-            t.employeeId == employee.id &&
-            '${t.date.year}-${t.date.month.toString().padLeft(2, '0')}-${t.date.day.toString().padLeft(2, '0')}' ==
-                dateStr &&
-            t.isAllDay, // Only exclude if it's all-day time off
-      );
-
-      if (hasTimeOff) continue;
-
-      // Check availability pattern
-      final availability = await _availabilityDao.isAvailable(
-        employee.id!,
-        day,
-        startTime,
-        endTime,
-      );
-      if (availability['available'] == true) {
-        availableList.add(employee);
-      }
-    }
-
-    return availableList;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final days = List.generate(
-      7,
-      (i) => widget.weekStart.add(Duration(days: i)),
-    );
-    final shiftTypeKeys = _shiftTypes.map((t) => t.key).toList();
+    return Consumer<ScheduleProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    return Card(
-      margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header with expand/collapse
-          InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primaryContainer.withOpacity(0.3),
-                borderRadius: BorderRadius.vertical(
-                  top: const Radius.circular(12),
-                  bottom: _isExpanded ? Radius.zero : const Radius.circular(12),
+        if (provider.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Error: ${provider.errorMessage ?? 'Unknown error'}'),
+                ElevatedButton(
+                  onPressed: () => provider.refresh(),
+                  child: const Text('Retry'),
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _isExpanded ? Icons.chevron_right : Icons.chevron_left,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Runners',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ],
-              ),
+              ],
             ),
-          ),
+          );
+        }
 
-          // Table content - rotated: days as rows, shifts as columns
-          if (_isExpanded)
-            Padding(
-              padding: const EdgeInsets.all(6),
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Theme.of(context).brightness == Brightness.dark 
-                        ? Colors.white 
-                        : Colors.black,
-                    width: 2,
+        final days = List.generate(7, (i) => widget.weekStart.add(Duration(days: i)));
+        final shiftTypeKeys = provider.shiftTypes.map((t) => t.key).toList();
+
+        return Card(
+          margin: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header with expand/collapse
+              InkWell(
+                onTap: () => setState(() => _isExpanded = !_isExpanded),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.vertical(
+                      top: const Radius.circular(12),
+                      bottom: _isExpanded ? Radius.zero : const Radius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isExpanded ? Icons.chevron_right : Icons.chevron_left,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Runners',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ],
                   ),
                 ),
-                child: Table(
-                  defaultColumnWidth: const FixedColumnWidth(75),
-                  columnWidths: const {
-                    0: FixedColumnWidth(60), // Day column
-                  },
-                  border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-                  children: [
-                    // Header row with shift types (rotated text)
-                    TableRow(
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primaryContainer.withOpacity(0.5),
+              ),
+
+              // Table content - rotated: days as rows, shifts as columns
+              if (_isExpanded)
+                Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.dark 
+                            ? Colors.white 
+                            : Colors.black,
+                        width: 2,
                       ),
+                    ),
+                    child: Table(
+                      defaultColumnWidth: const FixedColumnWidth(75),
+                      columnWidths: const {
+                        0: FixedColumnWidth(60), // Day column
+                      },
+                      border: TableBorder.all(color: Colors.grey.shade300, width: 1),
                       children: [
-                        _buildHeaderCell(''),
-                        ...shiftTypeKeys.map(
-                          (shiftType) => _buildRotatedShiftHeader(shiftType),
+                        // Header row with shift types (rotated text)
+                        TableRow(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+                          ),
+                          children: [
+                            _buildHeaderCell(''),
+                            ...shiftTypeKeys.map((shiftType) => _buildRotatedShiftHeader(shiftType)),
+                          ],
                         ),
+                        // Rows for each day
+                        ...days.map((day) {
+                          return TableRow(
+                            children: [
+                              _buildDayCell(day),
+                              ...shiftTypeKeys.map((shiftType) {
+                                final runner = _getRunnerForCell(day, shiftType);
+                                return _buildRunnerCell(day, shiftType, runner);
+                              }),
+                            ],
+                          );
+                        }),
                       ],
                     ),
-                    // Rows for each day
-                    ...days.map((day) {
-                      return TableRow(
-                        children: [
-                          _buildDayCell(day),
-                          ...shiftTypeKeys.map((shiftType) {
-                            final runner = _getRunnerForCell(day, shiftType);
-                            return _buildRunnerCell(day, shiftType, runner);
-                          }),
-                        ],
-                      );
-                    }),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -434,17 +259,137 @@ class _ShiftRunnerTableState extends State<ShiftRunnerTable> {
     );
 
     if (result == 'clear') {
-      await _dao.clear(day, shiftType);
-      await _loadData();
+      final provider = context.read<ScheduleProvider>();
+      await provider.clearShiftRunner(day, shiftType);
       widget.onChanged?.call();
     }
   }
 
-  Color _getShiftColor(String shiftType) {
-    final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
-      (t) => t?.key == shiftType,
-      orElse: () => null,
+  Future<void> _editRunner(
+    DateTime day,
+    String shiftType,
+    String? currentName,
+  ) async {
+    final provider = context.read<ScheduleProvider>();
+    
+    // Get the shift type info for availability check
+    final shiftTypeObj = provider.getShiftType(shiftType);
+    final startTime = shiftTypeObj?.defaultShiftStart ?? '09:00';
+    final endTime = shiftTypeObj?.defaultShiftEnd ?? '17:00';
+
+    // Load available employees for this shift
+    final availableEmployees = await _getAvailableEmployees(
+      day,
+      startTime,
+      endTime,
+      shiftType,
     );
+
+    if (!mounted) return;
+
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) {
+        return _ShiftRunnerSearchDialog(
+          day: day,
+          shiftType: shiftType,
+          currentName: currentName,
+          availableEmployees: availableEmployees,
+          shiftColor: _getShiftColor(shiftType),
+          startTime: startTime,
+          endTime: endTime,
+        );
+      },
+    );
+
+    if (result != null) {
+      if (result.isEmpty) {
+        await provider.clearShiftRunner(day, shiftType);
+      } else {
+        // Find the employee by name
+        final employee = provider.getEmployeeByName(result);
+        
+        // Create shift with default times if employee doesn't have a shift for this day
+        if (employee != null) {
+          final existingShifts = await provider.getEmployeeShiftsForDateRange(
+            employee.id!,
+            day,
+            day.add(const Duration(days: 1)),
+          );
+          
+          if (existingShifts.isEmpty) {
+            // Parse the default shift times
+            final startParts = startTime.split(':');
+            final endParts = endTime.split(':');
+            final shiftStart = DateTime(
+              day.year, day.month, day.day,
+              int.parse(startParts[0]), int.parse(startParts[1]),
+            );
+            var shiftEnd = DateTime(
+              day.year, day.month, day.day,
+              int.parse(endParts[0]), int.parse(endParts[1]),
+            );
+            // Handle overnight shifts (end time before start time)
+            if (shiftEnd.isBefore(shiftStart) || shiftEnd.isAtSameMomentAs(shiftStart)) {
+              shiftEnd = shiftEnd.add(const Duration(days: 1));
+            }
+            
+            await provider.createShift(
+              employeeId: employee.id!,
+              startTime: shiftStart,
+              endTime: shiftEnd,
+            );
+          }
+        }
+        
+        await provider.upsertShiftRunner(
+          ShiftRunner(
+            date: day,
+            shiftType: shiftType,
+            runnerName: result,
+            employeeId: employee?.id,
+          ),
+        );
+      }
+      widget.onChanged?.call();
+    }
+  }
+
+  Future<List<Employee>> _getAvailableEmployees(
+    DateTime date,
+    String startTime,
+    String endTime,
+    String shiftType,
+  ) async {
+    final provider = context.read<ScheduleProvider>();
+    final allEmployees = provider.employees;
+    final availableEmployees = <Employee>[];
+
+    for (final employee in allEmployees) {
+      // Check if employee is available for this shift
+      final availability = await provider.checkEmployeeAvailability(
+        employee.id!,
+        date,
+        startTime,
+        endTime,
+      );
+      
+      if (availability['available'] == true) {
+        availableEmployees.add(employee);
+      }
+    }
+    
+    return availableEmployees;
+  }
+
+  String? _getRunnerForCell(DateTime day, String shiftType) {
+    final provider = context.read<ScheduleProvider>();
+    return provider.getRunnerForCell(day, shiftType);  
+  }
+
+  Color _getShiftColor(String shiftType) {
+    final provider = context.read<ScheduleProvider>();
+    final shiftTypeObj = provider.getShiftType(shiftType);
     final hex = shiftTypeObj?.colorHex ?? '#808080';
     final cleanHex = hex.replaceFirst('#', '');
     return Color(int.parse('FF$cleanHex', radix: 16));

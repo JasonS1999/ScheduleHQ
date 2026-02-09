@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../../database/shift_type_dao.dart';
 import '../../models/shift_type.dart';
-import '../../models/shift_runner.dart';
 
 class ShiftRunnerColorsTab extends StatefulWidget {
   const ShiftRunnerColorsTab({super.key});
@@ -19,19 +18,17 @@ class _ShiftRunnerColorsTabState extends State<ShiftRunnerColorsTab> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
-    await _dao.insertDefaultsIfEmpty();
-    final shiftTypes = await _dao.getAll();
-    
-    // Update ShiftRunner with shift types
-    ShiftRunner.setShiftTypes(shiftTypes);
-    
+    setState(() => _loading = true);
+    final types = await _dao.getAll();
     if (mounted) {
       setState(() {
-        _shiftTypes = shiftTypes;
+        _shiftTypes = types;
         _loading = false;
       });
     }

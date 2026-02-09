@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
-import '../database/employee_dao.dart';
+import 'package:provider/provider.dart';
+import '../providers/employee_provider.dart';
+import '../widgets/common/loading_indicator.dart';
+import '../widgets/common/error_message.dart';
+import '../widgets/common/confirmation_dialog.dart';
+import '../utils/snackbar_helper.dart';
+import '../utils/loading_state_mixin.dart';
 import '../models/employee.dart';
-import '../database/job_code_settings_dao.dart';
-import '../models/job_code_settings.dart';
 import '../services/firestore_sync_service.dart';
 import 'employee_availability_page.dart';
 import 'weekly_template_dialog.dart';
 import '../widgets/csv_import_dialog.dart';
-
-final JobCodeSettingsDao _jobCodeDao = JobCodeSettingsDao();
-List<JobCodeSettings> _jobCodes = [];
 
 class RosterPage extends StatefulWidget {
   const RosterPage({super.key});
@@ -18,394 +19,22 @@ class RosterPage extends StatefulWidget {
   State<RosterPage> createState() => _RosterPageState();
 }
 
-class _RosterPageState extends State<RosterPage> {
-  final EmployeeDao _employeeDao = EmployeeDao();
-  List<Employee> _employees = [];
-  bool _isSyncingAccounts = false;
-
-  void _sortEmployeesInRosterOrder(List<Employee> list) {
-    if (list.isEmpty) return;
-
-    final orderByJobCodeLower = <String, int>{
-      for (final jc in _jobCodes) jc.code.toLowerCase(): jc.sortOrder,
-    };
-
-    int orderFor(String jobCode) => orderByJobCodeLower[jobCode.toLowerCase()] ?? 999999;
-
-    list.sort((a, b) {
-      final aOrder = orderFor(a.jobCode);
-      final bOrder = orderFor(b.jobCode);
-      if (aOrder != bOrder) return aOrder.compareTo(bOrder);
-
-      final jobCodeCmp = a.jobCode.toLowerCase().compareTo(b.jobCode.toLowerCase());
-      if (jobCodeCmp != 0) return jobCodeCmp;
-
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
-  }
-
-  void _resortIfPossible() {
-    if (!mounted) return;
-    if (_employees.isEmpty) return;
-    final sorted = List<Employee>.from(_employees);
-    _sortEmployeesInRosterOrder(sorted);
-    setState(() => _employees = sorted);
-  }
+class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
+  Employee? _selectedEmployee;
 
   @override
   void initState() {
     super.initState();
-    _loadJobCodes();
-    _loadEmployees();
+    // Initialize providers if needed
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeData();
+    });
   }
 
-  Future<void> _loadJobCodes() async {
-    // Ensure defaults exist, then load them
-    await _jobCodeDao.insertDefaultsIfMissing();
-    final codes = await _jobCodeDao.getAll();
-    setState(() => _jobCodes = codes);
-    _resortIfPossible();
-  }
-
-  Future<void> _loadEmployees() async {
-    // Adjust this to match your actual DAO method
-    final list = await _employeeDao.getEmployees();
-    final sorted = List<Employee>.from(list);
-    _sortEmployeesInRosterOrder(sorted);
-    setState(() => _employees = sorted);
-  }
-
-  Future<void> _addEmployee() async {
-    String name = "";
-    String jobCode = _jobCodes.isNotEmpty ? _jobCodes.first.code : "Assistant";
-    String? email;
-    int vacationAllowed = 0;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Add Employee"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Name *",
-                    hintText: "Required",
-                  ),
-                  onChanged: (v) => name = v,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Email (for employee app login)",
-                    hintText: "employee@example.com",
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  onChanged: (v) => email = v.trim().isEmpty ? null : v.trim(),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: jobCode,
-                  decoration: const InputDecoration(labelText: "Job Code"),
-                  items: _jobCodes
-                      .map(
-                        (jc) => DropdownMenuItem(
-                          value: jc.code,
-                          child: Text(jc.code),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) {
-                      jobCode = v;
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Vacation Weeks Allowed",
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    vacationAllowed = int.tryParse(v) ?? 0;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (name.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Name is required')),
-                  );
-                  return;
-                }
-
-                final newEmployee = Employee(
-                  firstName: name.trim(),
-                  jobCode: jobCode,
-                  email: email,
-                  vacationWeeksAllowed: vacationAllowed,
-                  vacationWeeksUsed: 0,
-                );
-                final id = await _employeeDao.insertEmployee(newEmployee);
-                
-                // Sync to Firestore
-                try {
-                  await FirestoreSyncService.instance.syncEmployee(
-                    newEmployee.copyWith(id: id),
-                  );
-                } catch (e) {
-                  // Log error but don't block - sync can happen later
-                  debugPrint('Failed to sync employee to Firestore: $e');
-                }
-                
-                if (!mounted) return;
-                Navigator.of(this.context).pop();
-                await _loadEmployees();
-              },
-              child: const Text("Add"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _editEmployee(Employee e) async {
-    String name = e.firstName ?? '';
-    String jobCode = e.jobCode;
-    String? email = e.email;
-    int vacationAllowed = e.vacationWeeksAllowed;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Edit Employee"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Name *",
-                    hintText: "Required",
-                  ),
-                  controller: TextEditingController(text: name),
-                  onChanged: (v) => name = v,
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: InputDecoration(
-                    labelText: "Email (for employee app login)",
-                    hintText: "employee@example.com",
-                    helperText: e.uid != null 
-                        ? "Account created ✓" 
-                        : "Add email to enable employee app access",
-                    helperStyle: TextStyle(
-                      color: e.uid != null ? Colors.green : null,
-                    ),
-                  ),
-                  controller: TextEditingController(text: email ?? ''),
-                  keyboardType: TextInputType.emailAddress,
-                  onChanged: (v) => email = v.trim().isEmpty ? null : v.trim(),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: jobCode,
-                  decoration: const InputDecoration(labelText: "Job Code"),
-                  items: _jobCodes
-                      .map(
-                        (jc) => DropdownMenuItem(
-                          value: jc.code,
-                          child: Text(jc.code),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      jobCode = value;
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: const InputDecoration(
-                    labelText: "Vacation Weeks Allowed",
-                  ),
-                  controller: TextEditingController(
-                    text: vacationAllowed.toString(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (v) {
-                    vacationAllowed = int.tryParse(v) ?? e.vacationWeeksAllowed;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (name.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Name is required')),
-                  );
-                  return;
-                }
-                
-                final updatedEmployee = e.copyWith(
-                  firstName: name.trim(),
-                  jobCode: jobCode,
-                  email: email,
-                  vacationWeeksAllowed: vacationAllowed,
-                );
-                await _employeeDao.updateEmployee(updatedEmployee);
-                
-                // Sync to Firestore
-                try {
-                  await FirestoreSyncService.instance.syncEmployee(updatedEmployee);
-                } catch (err) {
-                  debugPrint('Failed to sync employee to Firestore: $err');
-                }
-                
-                if (!mounted) return;
-                Navigator.of(this.context).pop();
-                await _loadEmployees();
-              },
-              child: const Text("Save"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _deleteEmployee(Employee e) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Delete Employee"),
-          content: Text("Remove ${e.displayName}?"),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text("Delete"),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirm == true && e.id != null) {
-      await _employeeDao.deleteEmployee(e.id!);
-      
-      // Sync deletion to Firestore
-      try {
-        await FirestoreSyncService.instance.deleteEmployee(e.id!);
-      } catch (err) {
-        debugPrint('Failed to delete employee from Firestore: $err');
-      }
-      
-      await _loadEmployees();
-    }
-  }
-
-  Future<void> _showImportDialog() async {
-    final importedCount = await showDialog<int>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const CsvImportDialog(),
-    );
-
-    if (importedCount != null && importedCount > 0) {
-      await _loadEmployees();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Successfully imported $importedCount employee${importedCount == 1 ? '' : 's'}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    }
-  }
-
-  /// Sync employee accounts with Firebase Auth via Cloud Function.
-  /// Creates Firebase Auth accounts for employees and updates local UIDs.
-  Future<void> _syncEmployeeAccounts() async {
-    setState(() => _isSyncingAccounts = true);
-    
-    try {
-      // First sync all employee data to Firestore
-      await FirestoreSyncService.instance.syncAllEmployees();
-      
-      // Then sync accounts (create Firebase Auth accounts for employees)
-      final result = await FirestoreSyncService.instance.syncAllEmployeeAccounts();
-      
-      if (!mounted) return;
-      
-      final processed = result['processed'] ?? 0;
-      final created = result['created'] ?? 0;
-      final updated = result['updated'] ?? 0;
-      final skipped = result['skipped'] ?? 0;
-      final errors = result['errors'] ?? 0;
-      
-      String message;
-      if (created > 0 || updated > 0) {
-        message = 'Synced $processed employees: $created created, $updated updated';
-        if (skipped > 0) message += ', $skipped skipped';
-        if (errors > 0) message += ', $errors errors';
-      } else if (processed == 0) {
-        message = 'No employees found to sync';
-      } else {
-        message = 'All $processed employees already synced';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: errors > 0 ? Colors.orange : Colors.green,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      
-      // Reload employees to show any changes
-      await _loadEmployees();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to sync accounts: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isSyncingAccounts = false);
-      }
+  Future<void> _initializeData() async {
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    if (employeeProvider.isIdle) {
+      await employeeProvider.initialize();
     }
   }
 
@@ -413,80 +42,568 @@ class _RosterPageState extends State<RosterPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Roster"),
+        title: const Text('Employee Roster'),
         actions: [
-          IconButton(
-            icon: _isSyncingAccounts 
-                ? const SizedBox(
-                    width: 20, 
-                    height: 20, 
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.cloud_sync),
-            tooltip: 'Sync Employee Accounts',
-            onPressed: _isSyncingAccounts ? null : _syncEmployeeAccounts,
+          // Sync accounts button
+          Consumer<EmployeeProvider>(
+            builder: (context, employeeProvider, child) {
+              return IconButton(
+                onPressed: employeeProvider.isLoading ? null : _syncAccounts,
+                icon: const Icon(Icons.sync),
+                tooltip: 'Sync Employee Accounts',
+              );
+            },
           ),
+          
+          // Add employee button
           IconButton(
-            icon: const Icon(Icons.upload_file),
-            tooltip: 'Import from CSV',
-            onPressed: _showImportDialog,
+            onPressed: _showAddEmployeeDialog,
+            icon: const Icon(Icons.person_add),
+            tooltip: 'Add Employee',
+          ),
+          
+          PopupMenuButton<String>(
+            onSelected: _handleMenuAction,
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'import_csv',
+                child: ListTile(
+                  leading: Icon(Icons.upload_file),
+                  title: Text('Import from CSV'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'weekly_template',
+                child: ListTile(
+                  leading: Icon(Icons.calendar_view_week),
+                  title: Text('Weekly Template'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addEmployee,
-        child: const Icon(Icons.add),
+      body: Consumer<EmployeeProvider>(
+        builder: (context, employeeProvider, child) {
+          if (employeeProvider.isLoading && employeeProvider.items.isEmpty) {
+            return const LoadingIndicator(
+              message: 'Loading employee roster...',
+              showCard: true,
+            );
+          }
+
+          if (employeeProvider.hasError && employeeProvider.items.isEmpty) {
+            return ErrorMessage.generic(
+              message: employeeProvider.errorMessage ?? 'Failed to load employees',
+              onRetry: () => employeeProvider.refresh(),
+            );
+          }
+
+          return Column(
+            children: [
+              // Search bar
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  decoration: const InputDecoration(
+                    labelText: 'Search employees...',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (query) => employeeProvider.setSearchQuery(query),
+                ),
+              ),
+
+              // Employee stats
+              if (employeeProvider.items.isNotEmpty)
+                _buildEmployeeStats(employeeProvider),
+
+              // Employee table
+              Expanded(
+                child: _buildEmployeeTable(employeeProvider),
+              ),
+            ],
+          );
+        },
       ),
-      body: _employees.isEmpty
-          ? const Center(child: Text("No employees yet"))
-          : ListView.builder(
-              itemCount: _employees.length,
-              itemBuilder: (context, index) {
-                final e = _employees[index];
-                return ListTile(
-                  title: Text(e.displayName),
-                  subtitle: Text(
-                    "${e.jobCode} • Vacation Weeks: ${e.vacationWeeksAllowed}",
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_view_week, size: 16),
-                        label: const Text('Weekly Template'),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => WeeklyTemplateDialog(employee: e),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_today, size: 16),
-                        label: const Text('Availability'),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => EmployeeAvailabilityPage(employee: e),
-                            ),
-                          ).then((_) => _loadEmployees());
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _editEmployee(e),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteEmployee(e),
-                      ),
-                    ],
-                  ),
-                );
-              },
+    );
+  }
+
+  Widget _buildEmployeeStats(EmployeeProvider employeeProvider) {
+    final stats = employeeProvider.getEmployeeStats();
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatItem('Total', stats['total'].toString()),
+          _buildStatItem('With Email', stats['withEmail'].toString()),
+          _buildStatItem('With Vacation', stats['withVacation'].toString()),
+          if (employeeProvider.isSearching)
+            _buildStatItem('Filtered', stats['filtered'].toString()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmployeeTable(EmployeeProvider employeeProvider) {
+    if (employeeProvider.items.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'No employees found',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
+            SizedBox(height: 8),
+            Text(
+              'Add your first employee to get started',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: DataTable(
+        showCheckboxColumn: false,
+        columns: const [
+          DataColumn(label: Text('Name')),
+          DataColumn(label: Text('Job Code')),
+          DataColumn(label: Text('Email')),
+          DataColumn(label: Text('Vacation')),
+          DataColumn(label: Text('Actions')),
+        ],
+        rows: employeeProvider.items.map((employee) {
+          return DataRow(
+            selected: _selectedEmployee?.id == employee.id,
+            onSelectChanged: (selected) {
+              setState(() {
+                _selectedEmployee = selected == true ? employee : null;
+              });
+            },
+            cells: [
+              DataCell(Text(employee.displayName)),
+              DataCell(
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    employee.jobCode,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              DataCell(Text(employee.email ?? 'No email')),
+              DataCell(Text(
+                '${employee.vacationWeeksUsed}/${employee.vacationWeeksAllowed} weeks',
+              )),
+              DataCell(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: () => _showEditEmployeeDialog(employee),
+                      icon: const Icon(Icons.edit),
+                      tooltip: 'Edit Employee',
+                    ),
+                    IconButton(
+                      onPressed: () => _showAvailabilityPage(employee),
+                      icon: const Icon(Icons.calendar_today),
+                      tooltip: 'View Availability',
+                    ),
+                    IconButton(
+                      onPressed: () => _deleteEmployee(employee),
+                      icon: const Icon(Icons.delete),
+                      tooltip: 'Delete Employee',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Future<void> _syncAccounts() async {
+    await withLoading(() async {
+      try {
+        await FirestoreSyncService.instance.syncAllEmployeeAccounts();
+        if (mounted) {
+          SnackBarHelper.showSuccess(context, 'Employee accounts synced successfully');
+        }
+      } catch (e) {
+        if (mounted) {
+          SnackBarHelper.showError(context, 'Failed to sync accounts: $e');
+        }
+      }
+    });
+  }
+
+  Future<void> _showAddEmployeeDialog() async {
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final jobCodesToSuggestions = employeeProvider.getJobCodeSuggestions();
+    
+    String firstName = '';
+    String jobCode = jobCodesToSuggestions.isNotEmpty ? jobCodesToSuggestions.first : 'Assistant';
+    String? email;
+    int vacationWeeksAllowed = 0;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _EmployeeFormDialog(
+        title: 'Add Employee',
+        initialFirstName: firstName,
+        initialJobCode: jobCode,
+        initialEmail: email,
+        initialVacationWeeks: vacationWeeksAllowed,
+        jobCodeSuggestions: jobCodesToSuggestions,
+        onSave: (data) {
+          firstName = data['firstName'];
+          jobCode = data['jobCode'];
+          email = data['email'];
+          vacationWeeksAllowed = data['vacationWeeks'];
+        },
+      ),
+    );
+
+    if (result == true) {
+      // Validate input
+      final validationErrors = employeeProvider.validateEmployee(
+        firstName: firstName,
+        jobCode: jobCode,
+        email: email,
+      );
+
+      if (validationErrors.isNotEmpty) {
+        SnackBarHelper.showError(context, validationErrors.first);
+        return;
+      }
+
+      // Check if name is unique
+      if (!employeeProvider.isNameUnique(firstName)) {
+        SnackBarHelper.showError(context, 'An employee with this name already exists');
+        return;
+      }
+
+      // Create employee
+      final success = await employeeProvider.createEmployee(
+        firstName: firstName,
+        jobCode: jobCode,
+        email: email,
+        vacationWeeksAllowed: vacationWeeksAllowed,
+      );
+
+      if (success) {
+        SnackBarHelper.showSuccess(context, 'Employee added successfully');
+      } else {
+        SnackBarHelper.showError(
+          context,
+          employeeProvider.errorMessage ?? 'Failed to add employee',
+        );
+      }
+    }
+  }
+
+  Future<void> _showEditEmployeeDialog(Employee employee) async {
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    final jobCodeSuggestions = employeeProvider.getJobCodeSuggestions();
+    
+    String firstName = employee.firstName ?? '';
+    String jobCode = employee.jobCode;
+    String? email = employee.email;
+    int vacationWeeksAllowed = employee.vacationWeeksAllowed;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => _EmployeeFormDialog(
+        title: 'Edit Employee',
+        initialFirstName: firstName,
+        initialJobCode: jobCode,
+        initialEmail: email,
+        initialVacationWeeks: vacationWeeksAllowed,
+        jobCodeSuggestions: jobCodeSuggestions,
+        onSave: (data) {
+          firstName = data['firstName'];
+          jobCode = data['jobCode'];
+          email = data['email'];
+          vacationWeeksAllowed = data['vacationWeeks'];
+        },
+      ),
+    );
+
+    if (result == true) {
+      // Validate input
+      final validationErrors = employeeProvider.validateEmployee(
+        firstName: firstName,
+        jobCode: jobCode,
+        email: email,
+      );
+
+      if (validationErrors.isNotEmpty) {
+        SnackBarHelper.showError(context, validationErrors.first);
+        return;
+      }
+
+      // Check if name is unique (excluding current employee)
+      if (!employeeProvider.isNameUnique(firstName, excludeId: employee.id)) {
+        SnackBarHelper.showError(context, 'An employee with this name already exists');
+        return;
+      }
+
+      // Update employee
+      final success = await employeeProvider.updateEmployee(
+        employee,
+        firstName: firstName,
+        jobCode: jobCode,
+        email: email,
+        vacationWeeksAllowed: vacationWeeksAllowed,
+      );
+
+      if (success) {
+        SnackBarHelper.showSuccess(context, 'Employee updated successfully');
+      } else {
+        SnackBarHelper.showError(
+          context,
+          employeeProvider.errorMessage ?? 'Failed to update employee',
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteEmployee(Employee employee) async {
+    final confirmed = await ConfirmationDialog.showDelete(
+      context: context,
+      title: 'Delete Employee',
+      message: 'Are you sure you want to delete ${employee.displayName}? This action cannot be undone.',
+    );
+
+    if (confirmed) {
+      final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+      final success = await employeeProvider.deleteEmployee(employee);
+
+      if (success) {
+        SnackBarHelper.showSuccess(context, 'Employee deleted successfully');
+        if (_selectedEmployee?.id == employee.id) {
+          setState(() => _selectedEmployee = null);
+        }
+      } else {
+        SnackBarHelper.showError(
+          context,
+          employeeProvider.errorMessage ?? 'Failed to delete employee',
+        );
+      }
+    }
+  }
+
+  void _showAvailabilityPage(Employee employee) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => EmployeeAvailabilityPage(employee: employee),
+      ),
+    );
+  }
+
+  void _handleMenuAction(String action) {
+    switch (action) {
+      case 'import_csv':
+        _showImportDialog();
+        break;
+      case 'weekly_template':
+        _showWeeklyTemplateDialog();
+        break;
+    }
+  }
+
+  Future<void> _showImportDialog() async {
+    await showDialog(
+      context: context,
+      builder: (context) => const CsvImportDialog(),
+    );
+    
+    // Refresh data after import
+    final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
+    await employeeProvider.refresh();
+  }
+
+  Future<void> _showWeeklyTemplateDialog() async {
+    if (_selectedEmployee == null) return;
+    
+    await showDialog(
+      context: context,
+      builder: (context) => WeeklyTemplateDialog(employee: _selectedEmployee!),
+    );
+  }
+}
+
+/// Dialog for adding/editing employee information
+class _EmployeeFormDialog extends StatefulWidget {
+  final String title;
+  final String initialFirstName;
+  final String initialJobCode;
+  final String? initialEmail;
+  final int initialVacationWeeks;
+  final List<String> jobCodeSuggestions;
+  final Function(Map<String, dynamic>) onSave;
+
+  const _EmployeeFormDialog({
+    required this.title,
+    required this.initialFirstName,
+    required this.initialJobCode,
+    required this.initialEmail,
+    required this.initialVacationWeeks,
+    required this.jobCodeSuggestions,
+    required this.onSave,
+  });
+
+  @override
+  State<_EmployeeFormDialog> createState() => _EmployeeFormDialogState();
+}
+
+class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
+  late final TextEditingController _firstNameController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _vacationController;
+  late String _jobCode;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstNameController = TextEditingController(text: widget.initialFirstName);
+    _emailController = TextEditingController(text: widget.initialEmail);
+    _vacationController = TextEditingController(text: widget.initialVacationWeeks.toString());
+    _jobCode = widget.initialJobCode;
+  }
+
+  @override
+  void dispose() {
+    _firstNameController.dispose();
+    _emailController.dispose();
+    _vacationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _firstNameController,
+                decoration: const InputDecoration(
+                  labelText: 'First Name *',
+                  hintText: 'Required',
+                ),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email (for employee app login)',
+                  hintText: 'employee@example.com',
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: widget.jobCodeSuggestions.contains(_jobCode) ? _jobCode : null,
+                decoration: const InputDecoration(labelText: 'Job Code'),
+                items: widget.jobCodeSuggestions
+                    .map((code) => DropdownMenuItem(
+                          value: code,
+                          child: Text(code),
+                        ))
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _jobCode = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _vacationController,
+                decoration: const InputDecoration(
+                  labelText: 'Vacation Weeks Allowed',
+                  hintText: '0',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            final firstName = _firstNameController.text.trim();
+            if (firstName.isEmpty) {
+              SnackBarHelper.showError(context, 'First name is required');
+              return;
+            }
+
+            widget.onSave({
+              'firstName': firstName,
+              'jobCode': _jobCode,
+              'email': _emailController.text.trim().isNotEmpty 
+                  ? _emailController.text.trim() 
+                  : null,
+              'vacationWeeks': int.tryParse(_vacationController.text) ?? 0,
+            });
+
+            Navigator.of(context).pop(true);
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

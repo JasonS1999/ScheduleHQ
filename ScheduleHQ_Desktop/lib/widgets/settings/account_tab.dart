@@ -23,16 +23,19 @@ class _AccountTabState extends State<AccountTab> {
   }
 
   Future<void> _loadCurrentAuthCode() async {
+    if (!mounted) return;
     setState(() => _isLoadingCode = true);
 
     try {
       final code = await AuthService.instance.getManagerAuthCode();
+      if (!mounted) return;
       setState(() {
         _currentAuthCode = code;
         _isLoadingCode = false;
         _statusMessage = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingCode = false;
         _statusMessage = 'Error loading authorization code: $e';
