@@ -1598,7 +1598,6 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
   final Map<String, Future<Map<String, dynamic>>> _availabilityCache = {};
   List<ShiftType> _shiftTypes = [];
   List<ShiftRunner> _shiftRunners = [];
-  bool _isRunnerPanelExpanded = false; // Start collapsed
 
   /// Return a cached availability future keyed on employeeId + date.
   Future<Map<String, dynamic>> _cachedCheckAvailability(int employeeId, DateTime date) {
@@ -2921,372 +2920,88 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       return colorFromHex(hex);
     }
 
-    // Build the runner panel for all weeks in the month (unified table)
-    Widget buildRunnerPanel() {
-      // Get all days visible in this month view, grouped by week
-      final allWeeks = <List<DateTime>>[];
-      for (final week in weeks) {
-        final weekDays = <DateTime>[];
-        for (final day in week) {
-          if (day != null) {
-            weekDays.add(day);
-          }
-        }
-        if (weekDays.isNotEmpty) {
-          allWeeks.add(weekDays);
-        }
-      }
+    // --- Helper functions for shift runners & Mgr # inline columns ---
 
-      final shiftTypeKeys = _shiftTypes.map((t) => t.key).toList();
-
-      String dayAbbr(int weekday) {
-        const abbrs = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        return abbrs[weekday % 7];
-      }
-
-      Color getShiftColor(String shiftType) {
-        final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
-          (t) => t?.key == shiftType,
-          orElse: () => null,
-        );
-        final hex = shiftTypeObj?.colorHex ?? '#808080';
-        final cleanHex = hex.replaceFirst('#', '');
-        return Color(int.parse('FF$cleanHex', radix: 16));
-      }
-
-      String? getRunnerForCell(DateTime day, String shiftType) {
-        final runner = _shiftRunners.cast<ShiftRunner?>().firstWhere(
-          (r) =>
-              r != null &&
-              r.date.year == day.year &&
-              r.date.month == day.month &&
-              r.date.day == day.day &&
-              r.shiftType == shiftType,
-          orElse: () => null,
-        );
-        return runner?.runnerName;
-      }
-
-      // Count unique employees working on a given day (excluding time-off labels)
-      int getEmployeeCountForDay(DateTime day) {
-        final employeeIds = widget.shifts
-            .where((s) =>
-                s.start.year == day.year &&
-                s.start.month == day.month &&
-                s.start.day == day.day &&
-                !['VAC', 'PTO', 'REQ OFF', 'OFF'].contains(s.text.toUpperCase()))
-            .map((s) => s.employeeId)
-            .toSet();
-        return employeeIds.length;
-      }
-
-      Widget buildHeaderCell(String text) {
-        return Container(
-          padding: const EdgeInsets.all(4),
-          alignment: Alignment.center,
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-        );
-      }
-
-      Widget buildShiftHeader(String shiftType) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-          alignment: Alignment.center,
-          color: getShiftColor(shiftType).withOpacity(0.3),
-          child: Text(
-            ShiftRunner.getLabelForType(shiftType),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 11,
-              color: isDark ? Colors.white : Colors.black,
-            ),
-          ),
-        );
-      }
-
-      Widget buildDayCell(DateTime day) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-          alignment: Alignment.center,
-          color: Theme.of(
-            context,
-          ).colorScheme.primaryContainer.withOpacity(0.3),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                dayAbbr(day.weekday),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 9,
-                  color: isDark ? Colors.white : Colors.black,
-                ),
-              ),
-              Text(
-                '${day.month}/${day.day}',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 9,
-                  color: isDark ? Colors.white : Colors.black,
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-
-      Future<void> showRunnerContextMenu(
-        Offset position,
-        DateTime day,
-        String shiftType,
-      ) async {
-        final result = await showMenu<String>(
-          context: context,
-          position: RelativeRect.fromLTRB(
-            position.dx,
-            position.dy,
-            position.dx,
-            position.dy,
-          ),
-          items: [
-            const PopupMenuItem<String>(
-              value: 'clear',
-              child: Row(
-                children: [
-                  Icon(Icons.clear, size: 18, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Clear Runner', style: TextStyle(color: Colors.red)),
-                ],
-              ),
-            ),
-          ],
-        );
-
-        if (result == 'clear') {
-          await _shiftRunnerDao.delete(day, shiftType);
-          await _loadShiftRunnerData();
-          widget.onShiftRunnerChanged?.call();
-        }
-      }
-
-      Widget buildRunnerCell(DateTime day, String shiftType, String? runner) {
-        final hasRunner = runner != null && runner.isNotEmpty;
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-
-        return GestureDetector(
-          onSecondaryTapDown: hasRunner
-              ? (details) => showRunnerContextMenu(
-                  details.globalPosition,
-                  day,
-                  shiftType,
-                )
-              : null,
-          child: InkWell(
-            onTap: () => _editMonthlyRunner(day, shiftType, runner),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              alignment: Alignment.center,
-              constraints: const BoxConstraints(minHeight: 28),
-              decoration: BoxDecoration(
-                color: hasRunner
-                    ? getShiftColor(shiftType).withOpacity(0.15)
-                    : null,
-              ),
-              child: Text(
-                runner ?? '',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: hasRunner
-                      ? (isDark ? Colors.white : Colors.black)
-                      : context.appColors.textTertiary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ),
-        );
-      }
-
-      // Build table rows for a single week with thick border
-      Widget buildWeekTable(List<DateTime> weekDays, bool isFirst) {
-        // Helper to build the Mgr # cell
-        Widget buildMgrCountCell(DateTime day) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-          final count = getEmployeeCountForDay(day);
-          return Container(
-            padding: const EdgeInsets.all(2),
-            alignment: Alignment.center,
-            constraints: const BoxConstraints(minHeight: 28),
-            child: Text(
-              count.toString(),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isDark ? Colors.white : Colors.black,
-              ),
-            ),
-          );
-        }
-
-        return Container(
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-              width: 2,
-            ),
-          ),
-          margin: EdgeInsets.only(top: isFirst ? 0 : 4),
-          child: Table(
-            defaultColumnWidth: const FixedColumnWidth(55),
-            columnWidths: {
-              0: const FixedColumnWidth(
-                45,
-              ), // Day column (narrower now with stacked layout)
-              1: const FixedColumnWidth(40), // Mgr # column
-            },
-            border: TableBorder.all(color: Colors.grey.shade300, width: 1),
-            children: weekDays.map((day) {
-              return TableRow(
-                children: [
-                  buildDayCell(day),
-                  buildMgrCountCell(day),
-                  ...shiftTypeKeys.map((shiftType) {
-                    final runner = getRunnerForCell(day, shiftType);
-                    return buildRunnerCell(day, shiftType, runner);
-                  }),
-                ],
-              );
-            }).toList(),
-          ),
-        );
-      }
-
-      return Container(
-        width: _isRunnerPanelExpanded ? 360 : 40,
-        decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(color: Theme.of(context).dividerColor),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Header with toggle button
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _isRunnerPanelExpanded = !_isRunnerPanelExpanded;
-                });
-              },
-              child: Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  border: Border(
-                    bottom: BorderSide(color: Theme.of(context).dividerColor),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: _isRunnerPanelExpanded
-                      ? MainAxisAlignment.spaceBetween
-                      : MainAxisAlignment.center,
-                  children: [
-                    if (_isRunnerPanelExpanded)
-                      const Text(
-                        'Shift Runners',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    Icon(
-                      _isRunnerPanelExpanded
-                          ? Icons.chevron_right
-                          : Icons.chevron_left,
-                      size: 20,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Column headers for shift types
-            if (_isRunnerPanelExpanded)
-              Padding(
-                padding: const EdgeInsets.only(left: 4, right: 4, top: 4),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer.withOpacity(0.5),
-                    border: Border.all(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.5),
-                      width: 2,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 45,
-                        child: buildHeaderCell(''),
-                      ), // Match day column width
-                      SizedBox(
-                        width: 40,
-                        child: buildHeaderCell('Mgr #'),
-                      ), // Mgr # column header
-                      ...shiftTypeKeys.map(
-                        (shiftType) => SizedBox(
-                          width: 55, // Match table column width
-                          child: buildShiftHeader(shiftType),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            // Weekly tables with thick borders
-            if (_isRunnerPanelExpanded)
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(4),
-                  child: Column(
-                    children: [
-                      for (int i = 0; i < allWeeks.length; i++)
-                        buildWeekTable(allWeeks[i], i == 0),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-        ),
+    Color getShiftColor(String shiftType) {
+      final shiftTypeObj = _shiftTypes.cast<ShiftType?>().firstWhere(
+        (t) => t?.key == shiftType,
+        orElse: () => null,
       );
+      final hex = shiftTypeObj?.colorHex ?? '#808080';
+      final cleanHex = hex.replaceFirst('#', '');
+      return Color(int.parse('FF$cleanHex', radix: 16));
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Main schedule
-        Expanded(
-          child: LayoutBuilder(
+    String? getRunnerForCell(DateTime day, String shiftType) {
+      final runner = _shiftRunners.cast<ShiftRunner?>().firstWhere(
+        (r) =>
+            r != null &&
+            r.date.year == day.year &&
+            r.date.month == day.month &&
+            r.date.day == day.day &&
+            r.shiftType == shiftType,
+        orElse: () => null,
+      );
+      return runner?.runnerName;
+    }
+
+    int getEmployeeCountForDay(DateTime day) {
+      final employeeIds = widget.shifts
+          .where((s) =>
+              s.start.year == day.year &&
+              s.start.month == day.month &&
+              s.start.day == day.day &&
+              !['VAC', 'PTO', 'REQ OFF', 'OFF'].contains(s.text.toUpperCase()))
+          .map((s) => s.employeeId)
+          .toSet();
+      return employeeIds.length;
+    }
+
+    Future<void> showRunnerContextMenu(
+      Offset position,
+      DateTime day,
+      String shiftType,
+    ) async {
+      final result = await showMenu<String>(
+        context: context,
+        position: RelativeRect.fromLTRB(
+          position.dx,
+          position.dy,
+          position.dx,
+          position.dy,
+        ),
+        items: [
+          const PopupMenuItem<String>(
+            value: 'clear',
+            child: Row(
+              children: [
+                Icon(Icons.clear, size: 18, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Clear Runner', style: TextStyle(color: Colors.red)),
+              ],
+            ),
+          ),
+        ],
+      );
+
+      if (result == 'clear') {
+        await _shiftRunnerDao.delete(day, shiftType);
+        await _loadShiftRunnerData();
+        widget.onShiftRunnerChanged?.call();
+      }
+    }
+
+    return LayoutBuilder(
             builder: (context, constraints) {
               final dayColumnWidth = 120.0;
+              const mgrColumnWidth = 40.0;
+              const runnerColumnWidth = 55.0;
+              final runnerColumnsTotal = runnerColumnWidth * _shiftTypes.length;
               const tablePadding =
                   40.0; // Extra padding to prevent edge overhang
 
               final availableWidth =
-                  constraints.maxWidth - dayColumnWidth - tablePadding;
+                  constraints.maxWidth - dayColumnWidth - mgrColumnWidth - runnerColumnsTotal - tablePadding;
               final cellWidth = widget.employees.isNotEmpty
                   ? (availableWidth / widget.employees.length).clamp(
                       80.0,
@@ -3296,7 +3011,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
               // Account for borders (2px on each side = 4px total)
               final totalWidth =
-                  dayColumnWidth + (cellWidth * widget.employees.length) + 4;
+                  dayColumnWidth + mgrColumnWidth + (cellWidth * widget.employees.length) + runnerColumnsTotal + 4;
 
               List<Widget> buildEmployeeHeaderCells() {
                 final cells = <Widget>[];
@@ -3379,7 +3094,56 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                     ),
                                   ),
                                 ),
+                                // Mgr # header
+                                Container(
+                                  width: mgrColumnWidth,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      left: BorderSide(
+                                        color: Theme.of(context).dividerColor,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Text(
+                                      'Mgr\n#',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                                 ...buildEmployeeHeaderCells(),
+                                // Shift runner headers
+                                ..._shiftTypes.map((shiftType) {
+                                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                                  return Container(
+                                    width: runnerColumnWidth,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: getShiftColor(shiftType.key).withAlpha(77),
+                                      border: Border.all(
+                                        color: Theme.of(context).dividerColor,
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        ShiftRunner.getLabelForType(shiftType.key),
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                          color: isDark ? Colors.white : Colors.black,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
                               ],
                             ),
                           ),
@@ -3553,6 +3317,29 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                                 ),
                                               ),
 
+                                              // Mgr # cell
+                                              Container(
+                                                width: mgrColumnWidth,
+                                                constraints: const BoxConstraints(minHeight: 50),
+                                                decoration: BoxDecoration(
+                                                  border: Border(
+                                                    right: BorderSide(
+                                                      color: Theme.of(context).dividerColor,
+                                                      width: 2,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    getEmployeeCountForDay(day).toString(),
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
                                               // Employee cells for this day
                                               ...widget.employees.map((
                                                 employee,
@@ -3567,6 +3354,54 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                                   cellWidth: cellWidth,
                                                 );
                                               }).toList(),
+
+                                              // Shift runner cells
+                                              ..._shiftTypes.map((shiftType) {
+                                                final runner = getRunnerForCell(day, shiftType.key);
+                                                final hasRunner = runner != null && runner.isNotEmpty;
+                                                final isDark = Theme.of(context).brightness == Brightness.dark;
+                                                return GestureDetector(
+                                                  onSecondaryTapDown: hasRunner
+                                                      ? (details) => showRunnerContextMenu(
+                                                          details.globalPosition,
+                                                          day,
+                                                          shiftType.key,
+                                                        )
+                                                      : null,
+                                                  child: InkWell(
+                                                    onTap: () => _editMonthlyRunner(day, shiftType.key, runner),
+                                                    child: Container(
+                                                      width: runnerColumnWidth,
+                                                      constraints: const BoxConstraints(minHeight: 50),
+                                                      decoration: BoxDecoration(
+                                                        color: hasRunner
+                                                            ? getShiftColor(shiftType.key).withAlpha(38)
+                                                            : null,
+                                                        border: Border(
+                                                          left: BorderSide(
+                                                            color: Theme.of(context).dividerColor,
+                                                            width: 1,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      child: Center(
+                                                        child: Text(
+                                                          runner ?? '',
+                                                          textAlign: TextAlign.center,
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            color: hasRunner
+                                                                ? (isDark ? Colors.white : Colors.black)
+                                                                : Colors.grey,
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              }),
                                             ],
                                           ),
                                         ),
@@ -3584,11 +3419,6 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                 ),
               );
             },
-          ),
-        ),
-        // Runner panel on the right
-        buildRunnerPanel(),
-      ],
     );
   }
 }
