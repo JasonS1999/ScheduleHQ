@@ -902,6 +902,36 @@ class FirestoreSyncService {
     }
   }
 
+  /// One-time migration: rename 'sick' timeOffType to 'requested' in Firestore.
+  /// Safe to call multiple times — returns 0 if no 'sick' docs remain.
+  Future<int> migrateSickToRequested() async {
+    final timeOffRef = _timeOffRef;
+    if (timeOffRef == null) return 0;
+
+    try {
+      final snapshot = await timeOffRef
+          .where('timeOffType', isEqualTo: 'sick')
+          .get();
+
+      if (snapshot.docs.isEmpty) return 0;
+
+      final batch = _firestore.batch();
+      for (final doc in snapshot.docs) {
+        batch.update(doc.reference, {'timeOffType': 'requested'});
+      }
+      await batch.commit();
+
+      log(
+        'Migration: Renamed ${snapshot.docs.length} sick entries to requested in Firestore',
+        name: 'FirestoreSyncService',
+      );
+      return snapshot.docs.length;
+    } catch (e) {
+      log('Error migrating sick to requested: $e', name: 'FirestoreSyncService');
+      return 0;
+    }
+  }
+
   /// Delete a time-off entry from Firestore.
   /// Deletes from the unified timeOff collection.
   Future<void> deleteTimeOffEntry(int employeeId, int entryId) async {

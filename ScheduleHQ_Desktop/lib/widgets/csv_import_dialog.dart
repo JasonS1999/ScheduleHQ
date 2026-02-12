@@ -5,6 +5,7 @@ import '../database/employee_dao.dart';
 import '../database/job_code_settings_dao.dart';
 import '../models/employee.dart';
 import '../models/job_code_settings.dart';
+import '../services/app_colors.dart';
 
 class CsvImportDialog extends StatefulWidget {
   const CsvImportDialog({super.key});
@@ -18,8 +19,8 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   final JobCodeSettingsDao _jobCodeDao = JobCodeSettingsDao();
 
   List<JobCodeSettings> _jobCodes = [];
-  List<String> _rawNames = [];        // Store raw names for parsing
-  List<String> _displayNames = [];    // Store formatted names for display
+  List<String> _rawNames = []; // Store raw names for parsing
+  List<String> _displayNames = []; // Store formatted names for display
   int _currentIndex = 0;
   bool _isDragging = false;
   bool _importing = false;
@@ -47,12 +48,14 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   String _formatName(String fullName) {
     final trimmed = fullName.trim();
     if (trimmed.isEmpty) return '';
-    
+
     // Split into words and proper case each
-    final parts = trimmed.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = trimmed
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     return parts.map(_toProperCase).join(' ');
   }
-
 
   /// Convert string to proper case (first letter uppercase, rest lowercase)
   String _toProperCase(String s) {
@@ -152,7 +155,10 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: context.appColors.errorForeground,
+      ),
     );
   }
 
@@ -209,7 +215,7 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
   /// Show dialog to create a new job code
   Future<void> _addNewJobCode() async {
     String code = '';
-    
+
     final created = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -312,14 +318,16 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
             height: 200,
             decoration: BoxDecoration(
               border: Border.all(
-                color: _isDragging ? Theme.of(context).primaryColor : Colors.grey,
+                color: _isDragging
+                    ? Theme.of(context).colorScheme.primary
+                    : context.appColors.borderMedium,
                 width: _isDragging ? 3 : 2,
                 style: BorderStyle.solid,
               ),
               borderRadius: BorderRadius.circular(12),
               color: _isDragging
-                  ? Theme.of(context).primaryColor.withOpacity(0.1)
-                  : Colors.grey.withOpacity(0.05),
+                  ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                  : context.appColors.surfaceVariant,
             ),
             child: Center(
               child: Column(
@@ -329,8 +337,8 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
                     Icons.cloud_upload_outlined,
                     size: 64,
                     color: _isDragging
-                        ? Theme.of(context).primaryColor
-                        : Colors.grey,
+                        ? Theme.of(context).colorScheme.primary
+                        : context.appColors.textTertiary,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -340,8 +348,8 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
                     style: TextStyle(
                       fontSize: 16,
                       color: _isDragging
-                          ? Theme.of(context).primaryColor
-                          : Colors.grey[600],
+                          ? Theme.of(context).colorScheme.primary
+                          : context.appColors.textSecondary,
                     ),
                   ),
                 ],
@@ -352,7 +360,10 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
         const SizedBox(height: 16),
         Text(
           'The importer will read employee names from the EMPLOYEE column',
-          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          style: TextStyle(
+            color: context.appColors.textSecondary,
+            fontSize: 12,
+          ),
         ),
       ],
     );
@@ -389,13 +400,13 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
         const SizedBox(height: 8),
         Text(
           'Employee ${_currentIndex + 1} of ${_rawNames.length}',
-          style: TextStyle(color: Colors.grey[600]),
+          style: TextStyle(color: context.appColors.textSecondary),
         ),
         const SizedBox(height: 24),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -425,7 +436,10 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
                 value: _selectedJobCode,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 items: _jobCodes
                     .map(
@@ -469,7 +483,10 @@ class _CsvImportDialogState extends State<CsvImportDialog> {
         const SizedBox(height: 16),
         Text(
           '$_importedCount employee${_importedCount == 1 ? '' : 's'} imported so far',
-          style: TextStyle(color: Colors.grey[600], fontSize: 12),
+          style: TextStyle(
+            color: context.appColors.textSecondary,
+            fontSize: 12,
+          ),
         ),
       ],
     );

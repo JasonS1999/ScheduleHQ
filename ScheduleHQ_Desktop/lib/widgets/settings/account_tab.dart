@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/app_colors.dart';
 import '../../services/auth_service.dart';
 
 class AccountTab extends StatefulWidget {
@@ -23,16 +24,19 @@ class _AccountTabState extends State<AccountTab> {
   }
 
   Future<void> _loadCurrentAuthCode() async {
+    if (!mounted) return;
     setState(() => _isLoadingCode = true);
 
     try {
       final code = await AuthService.instance.getManagerAuthCode();
+      if (!mounted) return;
       setState(() {
         _currentAuthCode = code;
         _isLoadingCode = false;
         _statusMessage = null;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoadingCode = false;
         _statusMessage = 'Error loading authorization code: $e';
@@ -200,7 +204,7 @@ class _AccountTabState extends State<AccountTab> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: _isSuccess
-                            ? Colors.green.withValues(alpha: 0.1)
+                            ? context.appColors.successBackground
                             : colorScheme.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -209,7 +213,7 @@ class _AccountTabState extends State<AccountTab> {
                           Icon(
                             _isSuccess ? Icons.check_circle : Icons.error,
                             color: _isSuccess
-                                ? Colors.green
+                                ? context.appColors.successIcon
                                 : colorScheme.onErrorContainer,
                           ),
                           const SizedBox(width: 8),
@@ -218,7 +222,7 @@ class _AccountTabState extends State<AccountTab> {
                               _statusMessage!,
                               style: TextStyle(
                                 color: _isSuccess
-                                    ? Colors.green
+                                    ? context.appColors.successForeground
                                     : colorScheme.onErrorContainer,
                               ),
                             ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../database/store_hours_dao.dart';
+import 'package:provider/provider.dart';
 import '../../models/store_hours.dart';
+import '../../providers/store_settings_provider.dart';
+import '../../services/app_colors.dart';
 
 class StoreHoursTab extends StatefulWidget {
   const StoreHoursTab({super.key});
@@ -10,35 +12,34 @@ class StoreHoursTab extends StatefulWidget {
 }
 
 class _StoreHoursTabState extends State<StoreHoursTab> {
-  final StoreHoursDao _dao = StoreHoursDao();
-  StoreHours? _storeHours;
-  bool _isLoading = true;
-
   // Day names for display
   static const List<String> _dayNames = [
-    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
   ];
-  
+
   // Map day names to DateTime weekday constants
   static const List<int> _dayValues = [
-    DateTime.sunday, DateTime.monday, DateTime.tuesday, DateTime.wednesday, 
-    DateTime.thursday, DateTime.friday, DateTime.saturday
+    DateTime.sunday,
+    DateTime.monday,
+    DateTime.tuesday,
+    DateTime.wednesday,
+    DateTime.thursday,
+    DateTime.friday,
+    DateTime.saturday,
   ];
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    final hours = await _dao.getStoreHours();
-    if (mounted) {
-      setState(() {
-        _storeHours = hours;
-        _isLoading = false;
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<StoreSettingsProvider>().loadStoreHours();
+    });
   }
 
   List<String> _generateTimeOptions() {
@@ -60,346 +61,296 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
     return '$h:$minute $suffix';
   }
 
-  String _getOpenTimeForDay(int dayIndex) {
-    if (_storeHours == null) return StoreHours.defaultOpenTime;
-    return _storeHours!.getOpenTimeForDay(_dayValues[dayIndex]);
+  String _getOpenTimeForDay(int dayIndex, StoreHours? storeHours) {
+    if (storeHours == null) return StoreHours.defaultOpenTime;
+    return storeHours.getOpenTimeForDay(_dayValues[dayIndex]);
   }
 
-  String _getCloseTimeForDay(int dayIndex) {
-    if (_storeHours == null) return StoreHours.defaultCloseTime;
-    return _storeHours!.getCloseTimeForDay(_dayValues[dayIndex]);
+  String _getCloseTimeForDay(int dayIndex, StoreHours? storeHours) {
+    if (storeHours == null) return StoreHours.defaultCloseTime;
+    return storeHours.getCloseTimeForDay(_dayValues[dayIndex]);
   }
 
-  Future<void> _updateTimeForDay(int dayIndex, bool isOpen, String? newTime) async {
-    if (newTime == null || _storeHours == null) return;
-    
-    StoreHours updated;
-    switch (dayIndex) {
-      case 0: // Sunday
-        updated = isOpen 
-            ? _storeHours!.copyWith(sundayOpen: newTime)
-            : _storeHours!.copyWith(sundayClose: newTime);
-        break;
-      case 1: // Monday
-        updated = isOpen 
-            ? _storeHours!.copyWith(mondayOpen: newTime)
-            : _storeHours!.copyWith(mondayClose: newTime);
-        break;
-      case 2: // Tuesday
-        updated = isOpen 
-            ? _storeHours!.copyWith(tuesdayOpen: newTime)
-            : _storeHours!.copyWith(tuesdayClose: newTime);
-        break;
-      case 3: // Wednesday
-        updated = isOpen 
-            ? _storeHours!.copyWith(wednesdayOpen: newTime)
-            : _storeHours!.copyWith(wednesdayClose: newTime);
-        break;
-      case 4: // Thursday
-        updated = isOpen 
-            ? _storeHours!.copyWith(thursdayOpen: newTime)
-            : _storeHours!.copyWith(thursdayClose: newTime);
-        break;
-      case 5: // Friday
-        updated = isOpen 
-            ? _storeHours!.copyWith(fridayOpen: newTime)
-            : _storeHours!.copyWith(fridayClose: newTime);
-        break;
-      case 6: // Saturday
-        updated = isOpen 
-            ? _storeHours!.copyWith(saturdayOpen: newTime)
-            : _storeHours!.copyWith(saturdayClose: newTime);
-        break;
-      default:
-        return;
-    }
-    
-    await _dao.updateStoreHours(updated);
-    StoreHours.setCache(updated); // Update cache immediately
-    setState(() => _storeHours = updated);
-  }
+  Future<void> _updateTimeForDay(
+    int dayIndex,
+    bool isOpen,
+    String? newTime,
+  ) async {
+    if (newTime == null) return;
 
-  Future<void> _applyToAllDays(String openTime, String closeTime) async {
-    if (_storeHours == null) return;
-    
-    final updated = _storeHours!.copyWith(
-      sundayOpen: openTime,
-      sundayClose: closeTime,
-      mondayOpen: openTime,
-      mondayClose: closeTime,
-      tuesdayOpen: openTime,
-      tuesdayClose: closeTime,
-      wednesdayOpen: openTime,
-      wednesdayClose: closeTime,
-      thursdayOpen: openTime,
-      thursdayClose: closeTime,
-      fridayOpen: openTime,
-      fridayClose: closeTime,
-      saturdayOpen: openTime,
-      saturdayClose: closeTime,
-    );
-    
-    await _dao.updateStoreHours(updated);
-    StoreHours.setCache(updated);
-    setState(() => _storeHours = updated);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Applied to all days'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
-  Future<void> _resetToDefaults() async {
-    final defaults = StoreHours.defaults();
-    await _dao.updateStoreHours(defaults);
-    StoreHours.setCache(defaults);
-    setState(() => _storeHours = defaults);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Store hours reset to defaults'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
+    final provider = context.read<StoreSettingsProvider>();
+    await provider.updateStoreHoursTime(dayIndex, isOpen, newTime);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    return Consumer<StoreSettingsProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-    final timeOptions = _generateTimeOptions();
+        if (provider.hasError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Error: ${provider.errorMessage ?? 'Unknown error'}'),
+                ElevatedButton(
+                  onPressed: () => provider.loadStoreHours(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Store Info Card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        final timeOptions = _generateTimeOptions();
+        final storeHours = provider.storeHours;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Store Info Card
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.business, size: 24),
-                      const SizedBox(width: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.business, size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Store Information',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        'Store Information',
-                        style: Theme.of(context).textTheme.titleLarge,
+                        'This information will appear on PDF exports.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: context.appColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              initialValue: storeHours?.storeName ?? '',
+                              decoration: const InputDecoration(
+                                labelText: 'Store Name',
+                                hintText: 'e.g., Downtown Store',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.store),
+                              ),
+                              onChanged: (value) async {
+                                await provider.updateStoreName(value);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: storeHours?.storeNsn ?? '',
+                              decoration: const InputDecoration(
+                                labelText: 'NSN (Store #)',
+                                hintText: 'e.g., 12345',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.tag),
+                              ),
+                              onChanged: (value) async {
+                                await provider.updateStoreNsn(value);
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'This information will appear on PDF exports.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: TextFormField(
-                          initialValue: _storeHours?.storeName ?? '',
-                          decoration: const InputDecoration(
-                            labelText: 'Store Name',
-                            hintText: 'e.g., Downtown Store',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.store),
-                          ),
-                          onChanged: (value) async {
-                            if (_storeHours != null) {
-                              final updated = _storeHours!.copyWith(storeName: value);
-                              await _dao.updateStoreHours(updated);
-                              StoreHours.setCache(updated);
-                              setState(() => _storeHours = updated);
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: _storeHours?.storeNsn ?? '',
-                          decoration: const InputDecoration(
-                            labelText: 'NSN (Store #)',
-                            hintText: 'e.g., 12345',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.tag),
-                          ),
-                          onChanged: (value) async {
-                            if (_storeHours != null) {
-                              final updated = _storeHours!.copyWith(storeNsn: value);
-                              await _dao.updateStoreHours(updated);
-                              StoreHours.setCache(updated);
-                              setState(() => _storeHours = updated);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Store Hours Card
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              const SizedBox(height: 16),
+              // Store Hours Card
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.schedule, size: 24),
-                      const SizedBox(width: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.schedule, size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Store Operating Hours',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        'Store Operating Hours',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Set different open/close times for each day. Times are displayed as "Op" (Open) and "CL" (Close) in the schedule.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Quick apply row
-                  Row(
-                    children: [
-                      const Icon(Icons.copy_all, size: 18, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      const Text('Quick apply: ', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                      TextButton(
-                        onPressed: () => _applyToAllDays(
-                          _getOpenTimeForDay(1), // Use Monday's times
-                          _getCloseTimeForDay(1),
+                        'Set different open/close times for each day. Times are displayed as "Op" (Open) and "CL" (Close) in the schedule.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: context.appColors.textSecondary,
                         ),
-                        child: const Text("Use Monday's hours for all days"),
                       ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 8),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  
-                  // Header row
-                  Row(
-                    children: [
-                      const SizedBox(width: 100), // Day name column
-                      Expanded(
-                        child: Text(
-                          'Opens',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: Colors.grey[700],
+                      const SizedBox(height: 16),
+
+                      // Quick apply row
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.copy_all,
+                            size: 18,
+                            color: context.appColors.textTertiary,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          'Closes',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: Colors.grey[700],
+                          const SizedBox(width: 8),
+                          Text(
+                            'Quick apply: ',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.appColors.textTertiary,
+                            ),
                           ),
-                          textAlign: TextAlign.center,
-                        ),
+                          TextButton(
+                            onPressed: () => provider.applyToAllDays(
+                              _getOpenTimeForDay(
+                                1,
+                                storeHours,
+                              ), // Use Monday's times
+                              _getCloseTimeForDay(1, storeHours),
+                            ),
+                            child: const Text(
+                              "Use Monday's hours for all days",
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 8),
+                      const Divider(),
+                      const SizedBox(height: 8),
+
+                      // Header row
+                      Row(
+                        children: [
+                          const SizedBox(width: 100), // Day name column
+                          Expanded(
+                            child: Text(
+                              'Opens',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: context.appColors.textSecondary,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              'Closes',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                color: context.appColors.textSecondary,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Day rows
+                      ...List.generate(
+                        7,
+                        (index) => _buildDayRow(index, timeOptions, storeHours),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  
-                  // Day rows
-                  ...List.generate(7, (index) => _buildDayRow(index, timeOptions)),
-                ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.preview, size: 24),
-                      const SizedBox(width: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.preview, size: 24),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Preview',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        'Preview',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        'How times appear in schedule cells:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.appColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildPreviewCell('Op', 'Store opens'),
+                          const SizedBox(width: 16),
+                          Icon(
+                            Icons.arrow_forward,
+                            color: context.appColors.textTertiary,
+                          ),
+                          const SizedBox(width: 16),
+                          _buildPreviewCell('CL', 'Store closes'),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'How times appear in schedule cells:',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildPreviewCell('Op', 'Store opens'),
-                      const SizedBox(width: 16),
-                      const Icon(Icons.arrow_forward, color: Colors.grey),
-                      const SizedBox(width: 16),
-                      _buildPreviewCell('CL', 'Store closes'),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 24),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: () => provider.resetToDefaults(),
+                  icon: const Icon(Icons.restore),
+                  label: const Text(
+                    'Reset All to Defaults (4:30 AM - 1:00 AM)',
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          Center(
-            child: OutlinedButton.icon(
-              onPressed: _resetToDefaults,
-              icon: const Icon(Icons.restore),
-              label: const Text('Reset All to Defaults (4:30 AM - 1:00 AM)'),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildDayRow(int dayIndex, List<String> timeOptions) {
-    final openTime = _getOpenTimeForDay(dayIndex);
-    final closeTime = _getCloseTimeForDay(dayIndex);
+  Widget _buildDayRow(
+    int dayIndex,
+    List<String> timeOptions,
+    StoreHours? storeHours,
+  ) {
+    final openTime = _getOpenTimeForDay(dayIndex, storeHours);
+    final closeTime = _getCloseTimeForDay(dayIndex, storeHours);
     final isWeekend = dayIndex == 0 || dayIndex == 6;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final appColors = context.appColors;
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: isWeekend 
-            ? (isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100)
-            : null,
+        color: isWeekend ? appColors.surfaceVariant : null,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Row(
@@ -419,9 +370,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                ),
+                border: Border.all(color: appColors.borderMedium),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: DropdownButtonHideUnderline(
@@ -432,7 +381,10 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                   items: timeOptions.map((time) {
                     return DropdownMenuItem(
                       value: time,
-                      child: Text(_formatTimeForDisplay(time), style: const TextStyle(fontSize: 13)),
+                      child: Text(
+                        _formatTimeForDisplay(time),
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     );
                   }).toList(),
                   onChanged: (v) => _updateTimeForDay(dayIndex, true, v),
@@ -445,9 +397,7 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
               margin: const EdgeInsets.symmetric(horizontal: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-                ),
+                border: Border.all(color: appColors.borderMedium),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: DropdownButtonHideUnderline(
@@ -458,7 +408,10 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
                   items: timeOptions.map((time) {
                     return DropdownMenuItem(
                       value: time,
-                      child: Text(_formatTimeForDisplay(time), style: const TextStyle(fontSize: 13)),
+                      child: Text(
+                        _formatTimeForDisplay(time),
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     );
                   }).toList(),
                   onChanged: (v) => _updateTimeForDay(dayIndex, false, v),
@@ -472,33 +425,25 @@ class _StoreHoursTabState extends State<StoreHoursTab> {
   }
 
   Widget _buildPreviewCell(String label, String description) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+    final appColors = context.appColors;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(
-          color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
-        ),
+        border: Border.all(color: appColors.borderMedium),
         borderRadius: BorderRadius.circular(8),
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade50,
+        color: appColors.surfaceVariant,
       ),
       child: Column(
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             description,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
+            style: TextStyle(fontSize: 12, color: appColors.textSecondary),
           ),
         ],
       ),

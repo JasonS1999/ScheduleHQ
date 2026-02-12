@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../services/app_colors.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart' as app_auth;
 import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
@@ -34,11 +37,19 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      await AuthService.instance.signInWithEmailAndPassword(
+      final authProvider = context.read<app_auth.AuthProvider>();
+      final success = await authProvider.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      widget.onLoginSuccess();
+      if (success) {
+        widget.onLoginSuccess();
+      } else {
+        setState(() {
+          _errorMessage =
+              authProvider.lastSignInError ?? 'Login failed. Please try again.';
+        });
+      }
     } catch (e) {
       setState(() {
         _errorMessage = getAuthErrorMessage(e);
@@ -71,7 +82,7 @@ class _LoginPageState extends State<LoginPage> {
           SnackBar(
             content: Text('Password reset email sent to $email'),
             behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.green,
+            backgroundColor: context.appColors.successForeground,
           ),
         );
       }
@@ -81,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
           SnackBar(
             content: Text(getAuthErrorMessage(e)),
             behavior: SnackBarBehavior.floating,
-            backgroundColor: Colors.red,
+            backgroundColor: context.appColors.errorForeground,
           ),
         );
       }
@@ -240,10 +251,7 @@ class _LoginPageState extends State<LoginPage> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text(
-                            'Sign In',
-                            style: TextStyle(fontSize: 16),
-                          ),
+                        : const Text('Sign In', style: TextStyle(fontSize: 16)),
                   ),
                   const SizedBox(height: 16),
 
@@ -306,14 +314,18 @@ class _LoginPageState extends State<LoginPage> {
                             children: [
                               Icon(
                                 Icons.error_outline,
-                                color: Theme.of(context).colorScheme.onErrorContainer,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onErrorContainer,
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   dialogError!,
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onErrorContainer,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onErrorContainer,
                                   ),
                                 ),
                               ),
@@ -406,7 +418,8 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             onPressed: () {
                               setDialogState(() {
-                                obscureConfirmPassword = !obscureConfirmPassword;
+                                obscureConfirmPassword =
+                                    !obscureConfirmPassword;
                               });
                             },
                           ),
@@ -459,7 +472,9 @@ class _LoginPageState extends State<LoginPage> {
             ),
             actions: [
               TextButton(
-                onPressed: isCreating ? null : () => Navigator.of(context).pop(),
+                onPressed: isCreating
+                    ? null
+                    : () => Navigator.of(context).pop(),
                 child: const Text('Cancel'),
               ),
               FilledButton(

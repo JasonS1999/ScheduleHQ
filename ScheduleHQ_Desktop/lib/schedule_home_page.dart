@@ -7,11 +7,7 @@ class ScheduleHomePage extends StatefulWidget {
   final int year;
   final int month;
 
-  const ScheduleHomePage({
-    super.key,
-    required this.year,
-    required this.month,
-  });
+  const ScheduleHomePage({super.key, required this.year, required this.month});
 
   @override
   State<ScheduleHomePage> createState() => _ScheduleHomePageState();
@@ -42,7 +38,8 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
     List<List<DateTime>> weeks = [];
     DateTime current = start;
 
-    while (current.isBefore(lastOfMonth) || current.weekday != DateTime.sunday) {
+    while (current.isBefore(lastOfMonth) ||
+        current.weekday != DateTime.sunday) {
       List<DateTime> week = [];
       for (int i = 0; i < 7; i++) {
         week.add(current);
@@ -78,8 +75,18 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
 
   String _monthName(int month) {
     const names = [
-      'January','February','March','April','May','June',
-      'July','August','September','October','November','December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return names[month - 1];
   }
@@ -106,7 +113,10 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
                 const SizedBox(width: 8),
                 Text(
                   '${_monthName(_currentMonth)} $_currentYear',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 IconButton(
@@ -133,7 +143,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
   }
 
   Widget _buildWeekdayHeader() {
-    const labels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return Row(
       children: labels
           .map(
@@ -153,9 +163,7 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
   }
 
   Widget _buildWeekRow(List<DateTime> week) {
-    return Row(
-      children: week.map((day) => _buildDayCell(day)).toList(),
-    );
+    return Row(children: week.map((day) => _buildDayCell(day)).toList());
   }
 
   Widget _buildDayCell(DateTime day) {
@@ -170,7 +178,9 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
         child: Container(
           decoration: BoxDecoration(
             border: Border.all(color: appColors.borderLight),
-            color: isCurrentMonth ? colorScheme.surface : appColors.surfaceVariant,
+            color: isCurrentMonth
+                ? colorScheme.surface
+                : appColors.surfaceVariant,
           ),
           padding: const EdgeInsets.all(4),
           height: 80,
@@ -181,18 +191,22 @@ class _ScheduleHomePageState extends State<ScheduleHomePage> {
                 '${day.day}',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isCurrentMonth ? appColors.textPrimary : appColors.textTertiary,
+                  color: isCurrentMonth
+                      ? appColors.textPrimary
+                      : appColors.textTertiary,
                 ),
               ),
               const SizedBox(height: 4),
-              ...entries.take(2).map(
-                (e) => Text(
-                  e.text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ),
+              ...entries
+                  .take(2)
+                  .map(
+                    (e) => Text(
+                      e.text,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
               if (entries.length > 2)
                 Text(
                   '+${entries.length - 2} more',
@@ -278,6 +292,7 @@ class _DayEntriesSheetState extends State<_DayEntriesSheet> {
         minChildSize: 0.4,
         initialChildSize: 0.6,
         builder: (context, scrollController) {
+          final appColors = context.appColors;
           return Column(
             children: [
               const SizedBox(height: 8),
@@ -285,7 +300,7 @@ class _DayEntriesSheetState extends State<_DayEntriesSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
+                  color: appColors.borderMedium,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -373,9 +388,7 @@ class _DayEntriesSheetState extends State<_DayEntriesSheet> {
           title: const Text('Edit entry'),
           content: TextField(
             controller: editController,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
           actions: [
             TextButton(
@@ -386,9 +399,7 @@ class _DayEntriesSheetState extends State<_DayEntriesSheet> {
               onPressed: () {
                 final newText = editController.text.trim();
                 if (newText.isNotEmpty) {
-                  widget.onUpdate(
-                    entry.copyWith(text: newText),
-                  );
+                  widget.onUpdate(entry.copyWith(text: newText));
                 }
                 Navigator.of(context).pop();
               },

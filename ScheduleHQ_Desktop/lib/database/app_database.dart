@@ -390,7 +390,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 31,
+      version: 33,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -878,6 +878,27 @@ class AppDatabase {
           } catch (e) {
             log('employeeId column already exists or table not found: $e', name: 'AppDatabase');
           }
+        }
+        if (oldVersion < 32) {
+          // Add date component columns to shifts table to fix DST issues
+          try {
+            await db.execute('ALTER TABLE shifts ADD COLUMN startDate TEXT');
+            await db.execute('ALTER TABLE shifts ADD COLUMN startHour INTEGER');
+            await db.execute('ALTER TABLE shifts ADD COLUMN startMinute INTEGER');
+            await db.execute('ALTER TABLE shifts ADD COLUMN endDate TEXT');
+            await db.execute('ALTER TABLE shifts ADD COLUMN endHour INTEGER');
+            await db.execute('ALTER TABLE shifts ADD COLUMN endMinute INTEGER');
+            log('Added date component columns to shifts table for DST fix', name: 'AppDatabase');
+          } catch (e) {
+            log('Date component columns already exist or error: $e', name: 'AppDatabase');
+          }
+        }
+        if (oldVersion < 33) {
+          // Rename 'sick' time-off type to 'requested'
+          final count = await db.rawUpdate(
+            "UPDATE time_off SET timeOffType = 'requested' WHERE timeOffType = 'sick'",
+          );
+          log('Migration 33: Renamed $count sick entries to requested', name: 'AppDatabase');
         }
       },
     );

@@ -59,6 +59,15 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color selectionBackground;
   final Color selectionForeground;
 
+  // Table colors
+  final Color tableHeaderBackground;
+  final Color tableBorder;
+
+  // Misc
+  final Color subtleTint;
+  final Color disabledForeground;
+  final Color destructive;
+
   const AppColors({
     required this.successBackground,
     required this.successForeground,
@@ -92,6 +101,11 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.overlayLight,
     required this.selectionBackground,
     required this.selectionForeground,
+    required this.tableHeaderBackground,
+    required this.tableBorder,
+    required this.subtleTint,
+    required this.disabledForeground,
+    required this.destructive,
   });
 
   /// Light theme colors
@@ -101,31 +115,26 @@ class AppColors extends ThemeExtension<AppColors> {
     successForeground: Color(0xFF2E7D32), // green.shade700
     successBorder: Color(0xFF81C784), // green.shade300
     successIcon: Color(0xFF43A047), // green.shade600
-
     // Error (red)
     errorBackground: Color(0xFFFFEBEE), // red.shade50
     errorForeground: Color(0xFFC62828), // red.shade800
     errorBorder: Color(0xFFEF9A9A), // red.shade200
     errorIcon: Color(0xFFE53935), // red.shade600
-
     // Warning (amber)
     warningBackground: Color(0xFFFFF8E1), // amber.shade50
     warningForeground: Color(0xFFFF8F00), // amber.shade800
     warningBorder: Color(0xFFFFE082), // amber.shade200
     warningIcon: Color(0xFFFFB300), // amber.shade600
-
     // Info (blue)
     infoBackground: Color(0xFFE3F2FD), // blue.shade50
     infoForeground: Color(0xFF1565C0), // blue.shade800
     infoBorder: Color(0xFF90CAF9), // blue.shade200
     infoIcon: Color(0xFF1E88E5), // blue.shade600
-
     // Surfaces
     surfaceVariant: Color(0xFFF5F5F5), // grey.shade100
     surfaceContainer: Color(0xFFEEEEEE), // grey.shade200
     surfaceContainerHigh: Color(0xFFE0E0E0), // grey.shade300
     surfaceContainerHighest: Color(0xFFBDBDBD), // grey.shade400
-
     // Text
     textPrimary: Color(0xFF212121), // grey.shade900
     textSecondary: Color(0xFF757575), // grey.shade600
@@ -137,14 +146,19 @@ class AppColors extends ThemeExtension<AppColors> {
     borderLight: Color(0xFFE0E0E0), // grey.shade300
     borderMedium: Color(0xFFBDBDBD), // grey.shade400
     borderStrong: Color(0xFF9E9E9E), // grey.shade500
-
     // Overlays
     overlayDim: Color(0x59000000), // black with 35% opacity
     overlayLight: Color(0x1F000000), // black with 12% opacity
-
     // Selection
     selectionBackground: Color(0xFFBBDEFB), // blue.shade100
     selectionForeground: Color(0xFF1565C0), // blue.shade800
+    // Table
+    tableHeaderBackground: Color(0xFFE0E0E0), // grey.shade300
+    tableBorder: Color(0xFFBDBDBD), // grey.shade400
+    // Misc
+    subtleTint: Color(0xFFF5F5F5), // grey.shade100
+    disabledForeground: Color(0xFF9E9E9E), // grey.shade500
+    destructive: Color(0xFFC62828), // red.shade800
   );
 
   /// Dark theme colors
@@ -154,25 +168,21 @@ class AppColors extends ThemeExtension<AppColors> {
     successForeground: Color(0xFF81C784), // green.shade300
     successBorder: Color(0xFF2E7D32), // green.shade700
     successIcon: Color(0xFF66BB6A), // green.shade400
-
     // Error (red)
     errorBackground: Color(0xFF3D1B1B), // dark red background
     errorForeground: Color(0xFFEF9A9A), // red.shade200
     errorBorder: Color(0xFFC62828), // red.shade800
     errorIcon: Color(0xFFEF5350), // red.shade400
-
     // Warning (amber)
     warningBackground: Color(0xFF3D321B), // dark amber background
     warningForeground: Color(0xFFFFE082), // amber.shade200
     warningBorder: Color(0xFFFF8F00), // amber.shade800
     warningIcon: Color(0xFFFFCA28), // amber.shade400
-
     // Info (blue)
     infoBackground: Color(0xFF1B2D3D), // dark blue background
     infoForeground: Color(0xFF90CAF9), // blue.shade200
     infoBorder: Color(0xFF1565C0), // blue.shade800
     infoIcon: Color(0xFF42A5F5), // blue.shade400
-
     // Surfaces - using Material 3 dark surface tones
     surfaceVariant: Color(0xFF2C2C2C),
     surfaceContainer: Color(0xFF1E1E1E),
@@ -185,7 +195,6 @@ class AppColors extends ThemeExtension<AppColors> {
     textTertiary: Color(0xFF808080), // grey
     textOnSuccess: Color(0xFF1B3D1F), // dark for contrast
     textOnError: Color(0xFF3D1B1B), // dark for contrast
-
     // Borders
     borderLight: Color(0xFF3D3D3D),
     borderMedium: Color(0xFF4D4D4D),
@@ -194,10 +203,16 @@ class AppColors extends ThemeExtension<AppColors> {
     // Overlays
     overlayDim: Color(0x8C000000), // black with 55% opacity for dark mode
     overlayLight: Color(0x33FFFFFF), // white with 20% opacity
-
     // Selection
     selectionBackground: Color(0xFF1E3A5F), // dark blue background
     selectionForeground: Color(0xFF90CAF9), // blue.shade200
+    // Table
+    tableHeaderBackground: Color(0xFF383838), // dark grey
+    tableBorder: Color(0xFF4D4D4D), // medium dark grey
+    // Misc
+    subtleTint: Color(0xFF2C2C2C), // dark surface
+    disabledForeground: Color(0xFF6D6D6D), // muted grey
+    destructive: Color(0xFFEF5350), // red.shade400
   );
 
   @override
@@ -234,6 +249,11 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? overlayLight,
     Color? selectionBackground,
     Color? selectionForeground,
+    Color? tableHeaderBackground,
+    Color? tableBorder,
+    Color? subtleTint,
+    Color? disabledForeground,
+    Color? destructive,
   }) {
     return AppColors(
       successBackground: successBackground ?? this.successBackground,
@@ -269,6 +289,12 @@ class AppColors extends ThemeExtension<AppColors> {
       overlayLight: overlayLight ?? this.overlayLight,
       selectionBackground: selectionBackground ?? this.selectionBackground,
       selectionForeground: selectionForeground ?? this.selectionForeground,
+      tableHeaderBackground:
+          tableHeaderBackground ?? this.tableHeaderBackground,
+      tableBorder: tableBorder ?? this.tableBorder,
+      subtleTint: subtleTint ?? this.subtleTint,
+      disabledForeground: disabledForeground ?? this.disabledForeground,
+      destructive: destructive ?? this.destructive,
     );
   }
 
@@ -276,20 +302,32 @@ class AppColors extends ThemeExtension<AppColors> {
   AppColors lerp(ThemeExtension<AppColors>? other, double t) {
     if (other is! AppColors) return this;
     return AppColors(
-      successBackground:
-          Color.lerp(successBackground, other.successBackground, t)!,
-      successForeground:
-          Color.lerp(successForeground, other.successForeground, t)!,
+      successBackground: Color.lerp(
+        successBackground,
+        other.successBackground,
+        t,
+      )!,
+      successForeground: Color.lerp(
+        successForeground,
+        other.successForeground,
+        t,
+      )!,
       successBorder: Color.lerp(successBorder, other.successBorder, t)!,
       successIcon: Color.lerp(successIcon, other.successIcon, t)!,
       errorBackground: Color.lerp(errorBackground, other.errorBackground, t)!,
       errorForeground: Color.lerp(errorForeground, other.errorForeground, t)!,
       errorBorder: Color.lerp(errorBorder, other.errorBorder, t)!,
       errorIcon: Color.lerp(errorIcon, other.errorIcon, t)!,
-      warningBackground:
-          Color.lerp(warningBackground, other.warningBackground, t)!,
-      warningForeground:
-          Color.lerp(warningForeground, other.warningForeground, t)!,
+      warningBackground: Color.lerp(
+        warningBackground,
+        other.warningBackground,
+        t,
+      )!,
+      warningForeground: Color.lerp(
+        warningForeground,
+        other.warningForeground,
+        t,
+      )!,
       warningBorder: Color.lerp(warningBorder, other.warningBorder, t)!,
       warningIcon: Color.lerp(warningIcon, other.warningIcon, t)!,
       infoBackground: Color.lerp(infoBackground, other.infoBackground, t)!,
@@ -297,11 +335,21 @@ class AppColors extends ThemeExtension<AppColors> {
       infoBorder: Color.lerp(infoBorder, other.infoBorder, t)!,
       infoIcon: Color.lerp(infoIcon, other.infoIcon, t)!,
       surfaceVariant: Color.lerp(surfaceVariant, other.surfaceVariant, t)!,
-      surfaceContainer: Color.lerp(surfaceContainer, other.surfaceContainer, t)!,
-      surfaceContainerHigh:
-          Color.lerp(surfaceContainerHigh, other.surfaceContainerHigh, t)!,
-      surfaceContainerHighest:
-          Color.lerp(surfaceContainerHighest, other.surfaceContainerHighest, t)!,
+      surfaceContainer: Color.lerp(
+        surfaceContainer,
+        other.surfaceContainer,
+        t,
+      )!,
+      surfaceContainerHigh: Color.lerp(
+        surfaceContainerHigh,
+        other.surfaceContainerHigh,
+        t,
+      )!,
+      surfaceContainerHighest: Color.lerp(
+        surfaceContainerHighest,
+        other.surfaceContainerHighest,
+        t,
+      )!,
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
@@ -312,10 +360,29 @@ class AppColors extends ThemeExtension<AppColors> {
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
       overlayDim: Color.lerp(overlayDim, other.overlayDim, t)!,
       overlayLight: Color.lerp(overlayLight, other.overlayLight, t)!,
-      selectionBackground:
-          Color.lerp(selectionBackground, other.selectionBackground, t)!,
-      selectionForeground:
-          Color.lerp(selectionForeground, other.selectionForeground, t)!,
+      selectionBackground: Color.lerp(
+        selectionBackground,
+        other.selectionBackground,
+        t,
+      )!,
+      selectionForeground: Color.lerp(
+        selectionForeground,
+        other.selectionForeground,
+        t,
+      )!,
+      tableHeaderBackground: Color.lerp(
+        tableHeaderBackground,
+        other.tableHeaderBackground,
+        t,
+      )!,
+      tableBorder: Color.lerp(tableBorder, other.tableBorder, t)!,
+      subtleTint: Color.lerp(subtleTint, other.subtleTint, t)!,
+      disabledForeground: Color.lerp(
+        disabledForeground,
+        other.disabledForeground,
+        t,
+      )!,
+      destructive: Color.lerp(destructive, other.destructive, t)!,
     );
   }
 }

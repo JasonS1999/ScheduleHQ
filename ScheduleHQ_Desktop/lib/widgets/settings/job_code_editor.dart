@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import '../../models/job_code_settings.dart';
 import '../../models/job_code_group.dart';
 import '../../database/job_code_settings_dao.dart';
+import '../../services/app_colors.dart';
 
 class JobCodeEditor extends StatefulWidget {
   final JobCodeSettings settings;
   final List<JobCodeGroup> groups;
 
-  const JobCodeEditor({super.key, required this.settings, this.groups = const []});
+  const JobCodeEditor({
+    super.key,
+    required this.settings,
+    this.groups = const [],
+  });
 
   @override
   State<JobCodeEditor> createState() => _JobCodeEditorState();
@@ -54,7 +59,9 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
     final otherCodes = codes
         .where((c) => c.code.toLowerCase() != _settings.code.toLowerCase())
         .toList();
-    String? selectedReplacement = otherCodes.isNotEmpty ? otherCodes.first.code : null;
+    String? selectedReplacement = otherCodes.isNotEmpty
+        ? otherCodes.first.code
+        : null;
 
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
@@ -81,19 +88,29 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                         key: ValueKey(selectedReplacement),
                         initialValue: selectedReplacement,
                         items: otherCodes
-                            .map((jc) => DropdownMenuItem(value: jc.code, child: Text(jc.code)))
+                            .map(
+                              (jc) => DropdownMenuItem(
+                                value: jc.code,
+                                child: Text(jc.code),
+                              ),
+                            )
                             .toList(),
                         onChanged: otherCodes.isEmpty
                             ? null
-                            : (v) => setDialogState(() => selectedReplacement = v),
-                        decoration: const InputDecoration(labelText: 'Reassign employees to'),
+                            : (v) =>
+                                  setDialogState(() => selectedReplacement = v),
+                        decoration: const InputDecoration(
+                          labelText: 'Reassign employees to',
+                        ),
                       ),
                       if (otherCodes.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
                           child: Text(
                             'Add another job code first before deleting this one.',
-                            style: TextStyle(color: Colors.red),
+                            style: TextStyle(
+                              color: context.appColors.errorForeground,
+                            ),
                           ),
                         ),
                     ],
@@ -135,7 +152,11 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
     }
     if (reassigned == -2) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot delete: employees still assigned and no reassignment selected.')),
+        const SnackBar(
+          content: Text(
+            'Cannot delete: employees still assigned and no reassignment selected.',
+          ),
+        ),
       );
       return;
     }
@@ -192,7 +213,7 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                     decoration: BoxDecoration(
                       color: _colorFromHex(hex),
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.black12),
+                      border: Border.all(color: context.appColors.borderLight),
                     ),
                   ),
                 );
@@ -234,7 +255,10 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                         )
                       : Text(
                           _settings.code,
-                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                 ),
                 const SizedBox(width: 12),
@@ -277,7 +301,9 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
 
             // Max Hours Per Week
             TextField(
-              decoration: const InputDecoration(labelText: "Max Hours Per Week"),
+              decoration: const InputDecoration(
+                labelText: "Max Hours Per Week",
+              ),
               keyboardType: TextInputType.number,
               controller: _maxHoursController,
               onChanged: (v) {
@@ -300,7 +326,7 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                   decoration: BoxDecoration(
                     color: _colorFromHex(_settings.colorHex),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black26),
+                    border: Border.all(color: context.appColors.borderLight),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -326,23 +352,25 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                     value: null,
                     child: Text('No group'),
                   ),
-                  ...widget.groups.map((g) => DropdownMenuItem<String?>(
-                    value: g.name,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: _colorFromHex(g.colorHex),
-                            shape: BoxShape.circle,
+                  ...widget.groups.map(
+                    (g) => DropdownMenuItem<String?>(
+                      value: g.name,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: _colorFromHex(g.colorHex),
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(g.name),
-                      ],
+                          const SizedBox(width: 8),
+                          Text(g.name),
+                        ],
+                      ),
                     ),
-                  )),
+                  ),
                 ],
                 onChanged: (v) {
                   setState(() {
@@ -362,10 +390,13 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
               children: [
                 TextButton.icon(
                   onPressed: _deleteThisJobCode,
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  label: const Text(
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: context.appColors.destructive,
+                  ),
+                  label: Text(
                     'Delete',
-                    style: TextStyle(color: Colors.redAccent),
+                    style: TextStyle(color: context.appColors.destructive),
                   ),
                 ),
                 ElevatedButton(
@@ -396,7 +427,11 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                     if (!mounted) return;
                     if (updated == -1) {
                       messenger.showSnackBar(
-                        const SnackBar(content: Text('A job code with that name already exists')),
+                        const SnackBar(
+                          content: Text(
+                            'A job code with that name already exists',
+                          ),
+                        ),
                       );
                       return;
                     }
@@ -404,7 +439,8 @@ class _JobCodeEditorState extends State<JobCodeEditor> {
                     // Provide feedback to the user about how many employee assignments were updated
                     String message = 'Saved.';
                     if (updated > 0) {
-                      message = 'Saved. Updated $updated employee(s) to the new job code.';
+                      message =
+                          'Saved. Updated $updated employee(s) to the new job code.';
                     }
                     messenger.showSnackBar(SnackBar(content: Text(message)));
 

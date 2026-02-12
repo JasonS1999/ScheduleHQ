@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/employee.dart';
 import '../models/weekly_template.dart';
 import '../database/weekly_template_dao.dart';
+import '../services/app_colors.dart';
 
 class WeeklyTemplateDialog extends StatefulWidget {
   final Employee employee;
@@ -14,13 +15,19 @@ class WeeklyTemplateDialog extends StatefulWidget {
 
 class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
   final WeeklyTemplateDao _dao = WeeklyTemplateDao();
-  
+
   // Template entries for each day (0 = Sunday, 6 = Saturday)
   late List<WeeklyTemplateEntry> _entries;
   bool _isLoading = true;
 
   static const List<String> _dayNames = [
-    'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+    'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
   ];
 
   @override
@@ -42,8 +49,10 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
   }
 
   Future<void> _loadTemplate() async {
-    final existingEntries = await _dao.getTemplateForEmployee(widget.employee.id!);
-    
+    final existingEntries = await _dao.getTemplateForEmployee(
+      widget.employee.id!,
+    );
+
     setState(() {
       // Merge existing entries with blank entries
       for (final entry in existingEntries) {
@@ -56,13 +65,13 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
   Future<void> _saveTemplate() async {
     // Only save entries that have a shift or are marked as off
     final entriesToSave = _entries.where((e) => e.hasShift || e.isOff).toList();
-    
+
     await _dao.saveWeekTemplate(widget.employee.id!, entriesToSave);
-    
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Weekly template saved')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Weekly template saved')));
       Navigator.pop(context, true);
     }
   }
@@ -72,14 +81,18 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear Template'),
-        content: const Text('Are you sure you want to clear all template entries for this employee?'),
+        content: const Text(
+          'Are you sure you want to clear all template entries for this employee?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.appColors.destructive,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Clear'),
           ),
@@ -92,9 +105,9 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
       _initializeEntries();
       setState(() {});
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Template cleared')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Template cleared')));
       }
     }
   }
@@ -105,7 +118,10 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
     });
   }
 
-  Future<TimeOfDay?> _pickTime(BuildContext context, TimeOfDay? initialTime) async {
+  Future<TimeOfDay?> _pickTime(
+    BuildContext context,
+    TimeOfDay? initialTime,
+  ) async {
     return showTimePicker(
       context: context,
       initialTime: initialTime ?? const TimeOfDay(hour: 9, minute: 0),
@@ -140,12 +156,19 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.1),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(4),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_view_week, color: Colors.blue),
+                  Icon(
+                    Icons.calendar_view_week,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -157,9 +180,10 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                         ),
                         Text(
                           widget.employee.name,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey[600],
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: context.appColors.textSecondary,
+                              ),
                         ),
                       ],
                     ),
@@ -171,7 +195,7 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                 ],
               ),
             ),
-            
+
             // Content
             Flexible(
               child: _isLoading
@@ -180,10 +204,12 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'Set the default schedule for each day. Leave blank for no default, '
                             'or mark as OFF for days the employee doesn\'t work.',
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(
+                              color: context.appColors.textSecondary,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           ..._entries.map((entry) => _buildDayRow(entry)),
@@ -191,19 +217,27 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                       ),
                     ),
             ),
-            
+
             // Footer
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade300)),
+                border: Border(
+                  top: BorderSide(color: context.appColors.borderLight),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton.icon(
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text('Clear All', style: TextStyle(color: Colors.red)),
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: context.appColors.destructive,
+                    ),
+                    label: Text(
+                      'Clear All',
+                      style: TextStyle(color: context.appColors.destructive),
+                    ),
                     onPressed: _clearTemplate,
                   ),
                   Row(
@@ -231,7 +265,7 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
 
   Widget _buildDayRow(WeeklyTemplateEntry entry) {
     final dayName = _dayNames[entry.dayOfWeek];
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -246,16 +280,25 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             ),
-            
+
             // Status indicator
             if (entry.isOff)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade100,
+                  color: context.appColors.errorBackground,
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Text('OFF', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                child: Text(
+                  'OFF',
+                  style: TextStyle(
+                    color: context.appColors.errorForeground,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               )
             else if (entry.hasShift)
               Expanded(
@@ -264,7 +307,10 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                     // Start time
                     InkWell(
                       onTap: () async {
-                        final time = await _pickTime(context, _parseTime(entry.startTime));
+                        final time = await _pickTime(
+                          context,
+                          _parseTime(entry.startTime),
+                        );
                         if (time != null) {
                           _updateEntry(
                             entry.dayOfWeek,
@@ -273,9 +319,14 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                         }
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(
+                            color: context.appColors.borderLight,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(_formatTime(entry.startTime)),
@@ -288,7 +339,10 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                     // End time
                     InkWell(
                       onTap: () async {
-                        final time = await _pickTime(context, _parseTime(entry.endTime));
+                        final time = await _pickTime(
+                          context,
+                          _parseTime(entry.endTime),
+                        );
                         if (time != null) {
                           _updateEntry(
                             entry.dayOfWeek,
@@ -297,9 +351,14 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                         }
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
+                          border: Border.all(
+                            color: context.appColors.borderLight,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(_formatTime(entry.endTime)),
@@ -312,10 +371,13 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
               Expanded(
                 child: Text(
                   'Not set',
-                  style: TextStyle(color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+                  style: TextStyle(
+                    color: context.appColors.textTertiary,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
-            
+
             // Action buttons
             const SizedBox(width: 8),
             PopupMenuButton<String>(
@@ -373,8 +435,10 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
   }
 
   Future<void> _showSetTimeDialog(WeeklyTemplateEntry entry) async {
-    TimeOfDay startTime = _parseTime(entry.startTime) ?? const TimeOfDay(hour: 9, minute: 0);
-    TimeOfDay endTime = _parseTime(entry.endTime) ?? const TimeOfDay(hour: 17, minute: 0);
+    TimeOfDay startTime =
+        _parseTime(entry.startTime) ?? const TimeOfDay(hour: 9, minute: 0);
+    TimeOfDay endTime =
+        _parseTime(entry.endTime) ?? const TimeOfDay(hour: 17, minute: 0);
 
     final result = await showDialog<Map<String, TimeOfDay>>(
       context: context,
@@ -424,10 +488,8 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx, {
-                    'start': startTime,
-                    'end': endTime,
-                  }),
+                  onPressed: () =>
+                      Navigator.pop(ctx, {'start': startTime, 'end': endTime}),
                   child: const Text('Set'),
                 ),
               ],
