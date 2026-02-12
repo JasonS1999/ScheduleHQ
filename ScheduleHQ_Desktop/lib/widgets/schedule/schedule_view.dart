@@ -128,9 +128,9 @@ class _ScheduleViewState extends State<ScheduleView> {
   List<ShiftPlaceholder> _timeOffToShifts(List<TimeOffEntry> entries) {
     return entries
         .where((e) {
-          // Skip partial day time off entries (sick/requested type with specific hours)
+          // Skip partial day time off entries (requested type with specific hours)
           // These should not show "REQ OFF" in the cell - only show a warning in the dialog
-          if (e.timeOffType.toLowerCase() == 'sick' && !e.isAllDay) {
+          if (e.timeOffType.toLowerCase() == 'requested' && !e.isAllDay) {
             return false;
           }
           return true;

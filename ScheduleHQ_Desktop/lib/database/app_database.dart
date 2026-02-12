@@ -390,7 +390,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 32,
+      version: 33,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -892,6 +892,13 @@ class AppDatabase {
           } catch (e) {
             log('Date component columns already exist or error: $e', name: 'AppDatabase');
           }
+        }
+        if (oldVersion < 33) {
+          // Rename 'sick' time-off type to 'requested'
+          final count = await db.rawUpdate(
+            "UPDATE time_off SET timeOffType = 'requested' WHERE timeOffType = 'sick'",
+          );
+          log('Migration 33: Renamed $count sick entries to requested', name: 'AppDatabase');
         }
       },
     );

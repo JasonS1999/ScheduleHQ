@@ -167,7 +167,7 @@ enum SyncStatus { synced, pending, syncing, error, conflict }
 enum EmployeeStatus { active, inactive, terminated, onLeave }
 
 /// Enum for shift types
-enum ShiftType { regular, overtime, holiday, vacation, sick, personal }
+enum ShiftType { regular, overtime, holiday, vacation, requested, personal }
 
 /// Enum for theme modes
 enum AppThemeMode { light, dark, system }

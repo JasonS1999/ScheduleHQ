@@ -38,7 +38,7 @@ class ApprovalProvider extends BaseProvider {
         ? FirebaseFirestore.instance
             .collection('managers')
             .doc(uid)
-            .collection('time_off_requests')
+            .collection('timeOff')
         : null;
   }
 
@@ -94,6 +94,27 @@ class ApprovalProvider extends BaseProvider {
     return _requestsRef?.where('status', isEqualTo: 'pending').snapshots();
   }
 
+  /// Get denied time-off requests from Firestore
+  Stream<QuerySnapshot<Map<String, dynamic>>>? getDeniedRequestsStream() {
+    return _requestsRef
+        ?.where('status', isEqualTo: 'denied')
+        .orderBy('deniedAt', descending: true)
+        .snapshots();
+  }
+
+  /// Manually add a time-off entry (manager-created, bypasses request flow)
+  Future<bool> addManualEntry(TimeOffEntry entry, Employee employee) async {
+    try {
+      await _timeOffDao.insertTimeOff(entry);
+      await FirestoreSyncService.instance.syncTimeOffEntry(entry, employee);
+      await loadApprovedEntries();
+      return true;
+    } catch (e) {
+      setErrorMessage('Failed to add time-off entry: $e');
+      return false;
+    }
+  }
+
   /// Approve a time-off request
   Future<bool> approveRequest(
     DocumentSnapshot<Map<String, dynamic>> doc,
@@ -103,14 +124,14 @@ class ApprovalProvider extends BaseProvider {
       final data = doc.data();
       if (data == null) return false;
 
-      final employeeId = data['employee_id'] as int?;
+      final employeeId = data['employeeLocalId'] as int?;
       if (employeeId == null) return false;
 
       final employee = _employeeById[employeeId];
       if (employee == null) return false;
 
       // Calculate PTO validation if needed
-      final timeOffType = data['time_off_type'] as String? ?? 'pto';
+      final timeOffType = data['timeOffType'] as String? ?? 'pto';
       if (timeOffType == 'pto') {
         final isValid = await _validatePtoRequest(data, employee, settings);
         if (!isValid) {
@@ -128,7 +149,7 @@ class ApprovalProvider extends BaseProvider {
       // Update Firestore document status
       await doc.reference.update({
         'status': 'approved',
-        'approved_at': FieldValue.serverTimestamp(),
+        'approvedAt': FieldValue.serverTimestamp(),
       });
 
       // Sync to Firestore for employee app
@@ -152,8 +173,8 @@ class ApprovalProvider extends BaseProvider {
     try {
       await doc.reference.update({
         'status': 'denied',
-        'denial_reason': reason,
-        'denied_at': FieldValue.serverTimestamp(),
+        'denialReason': reason,
+        'deniedAt': FieldValue.serverTimestamp(),
       });
 
       return true;
@@ -191,10 +212,11 @@ class ApprovalProvider extends BaseProvider {
     app_models.Settings settings,
   ) async {
     try {
-      final startDate = (data['start_date'] as Timestamp).toDate();
-      final endDate = data['end_date'] != null 
-          ? (data['end_date'] as Timestamp).toDate()
-          : startDate;
+      final dateStr = data['date'] as String?;
+      if (dateStr == null) return false;
+      final startDate = DateTime.parse(dateStr);
+      final endDateStr = data['endDate'] as String?;
+      final endDate = endDateStr != null ? DateTime.parse(endDateStr) : startDate;
       final hours = data['hours'] as int? ?? 8;
 
       // Calculate total hours for multi-day requests
@@ -216,21 +238,20 @@ class ApprovalProvider extends BaseProvider {
 
   /// Create TimeOffEntry from Firestore document data
   TimeOffEntry _createTimeOffEntryFromFirestore(Map<String, dynamic> data) {
-    final startDate = (data['start_date'] as Timestamp).toDate();
-    final endDate = data['end_date'] != null 
-        ? (data['end_date'] as Timestamp).toDate()
-        : null;
+    final startDate = DateTime.parse(data['date'] as String);
+    final endDateStr = data['endDate'] as String?;
+    final endDate = endDateStr != null ? DateTime.parse(endDateStr) : null;
 
     return TimeOffEntry(
       id: null,
-      employeeId: data['employee_id'] as int,
+      employeeId: data['employeeLocalId'] as int,
       date: startDate,
       endDate: endDate,
-      timeOffType: data['time_off_type'] as String? ?? 'pto',
+      timeOffType: data['timeOffType'] as String? ?? 'pto',
       hours: data['hours'] as int? ?? 8,
-      isAllDay: data['is_all_day'] as bool? ?? true,
-      startTime: data['start_time'] as String?,
-      endTime: data['end_time'] as String?,
+      isAllDay: data['isAllDay'] as bool? ?? true,
+      startTime: data['startTime'] as String?,
+      endTime: data['endTime'] as String?,
     );
   }
 

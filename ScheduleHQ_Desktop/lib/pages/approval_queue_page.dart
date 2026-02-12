@@ -5,9 +5,12 @@ import '../providers/employee_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/time_off_provider.dart';
 import '../providers/approval_provider.dart';
+import '../services/firestore_sync_service.dart';
 import '../utils/loading_state_mixin.dart';
 import '../widgets/common/loading_indicator.dart';
 import '../widgets/common/error_message.dart';
+import '../widgets/time_off/requests_management_tab.dart';
+import '../widgets/time_off/time_off_calendar_tab.dart';
 
 class ApprovalQueuePage extends StatefulWidget {
   const ApprovalQueuePage({super.key});
@@ -24,7 +27,7 @@ class _ApprovalQueuePageState extends State<ApprovalQueuePage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAllData();
     });
@@ -38,10 +41,14 @@ class _ApprovalQueuePageState extends State<ApprovalQueuePage>
 
   Future<void> _loadAllData() async {
     await withLoading(() async {
-      final employeeProvider = Provider.of<EmployeeProvider>(context, listen: false);
-      final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
-      final timeOffProvider = Provider.of<TimeOffProvider>(context, listen: false);
-      final approvalProvider = Provider.of<ApprovalProvider>(context, listen: false);
+      final employeeProvider =
+          Provider.of<EmployeeProvider>(context, listen: false);
+      final settingsProvider =
+          Provider.of<SettingsProvider>(context, listen: false);
+      final timeOffProvider =
+          Provider.of<TimeOffProvider>(context, listen: false);
+      final approvalProvider =
+          Provider.of<ApprovalProvider>(context, listen: false);
 
       // Load all required data
       await Future.wait([
@@ -57,6 +64,8 @@ class _ApprovalQueuePageState extends State<ApprovalQueuePage>
       await Future.wait([
         approvalProvider.loadApprovedEntries(),
         approvalProvider.preloadJobCodeColors(employeeProvider.employees),
+        // One-time migration: rename 'sick' to 'requested' in Firestore
+        FirestoreSyncService.instance.migrateSickToRequested(),
       ]);
     });
   }
@@ -65,30 +74,42 @@ class _ApprovalQueuePageState extends State<ApprovalQueuePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Approval Queue'),
+        title: const Text('Time Off'),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Pending Requests'),
-            Tab(text: 'Approved Entries'),
+            Tab(
+              icon: Icon(Icons.inbox, size: 18),
+              text: 'Requests & Management',
+            ),
+            Tab(
+              icon: Icon(Icons.calendar_month, size: 18),
+              text: 'Calendar',
+            ),
           ],
         ),
       ),
-      body: Consumer4<EmployeeProvider, SettingsProvider, TimeOffProvider, ApprovalProvider>(
-        builder: (context, employeeProvider, settingsProvider, timeOffProvider, approvalProvider, child) {
-          if (isLoading || employeeProvider.isLoading || settingsProvider.isLoading || 
-              timeOffProvider.isLoading || approvalProvider.isLoading) {
+      body: Consumer4<EmployeeProvider, SettingsProvider, TimeOffProvider,
+          ApprovalProvider>(
+        builder: (context, employeeProvider, settingsProvider, timeOffProvider,
+            approvalProvider, child) {
+          if (isLoading ||
+              employeeProvider.isLoading ||
+              settingsProvider.isLoading ||
+              timeOffProvider.isLoading ||
+              approvalProvider.isLoading) {
             return const LoadingIndicator();
           }
 
-          if (employeeProvider.errorMessage != null || 
-              settingsProvider.errorMessage != null || timeOffProvider.errorMessage != null ||
+          if (employeeProvider.errorMessage != null ||
+              settingsProvider.errorMessage != null ||
+              timeOffProvider.errorMessage != null ||
               approvalProvider.errorMessage != null) {
             return ErrorMessage(
-              message: employeeProvider.errorMessage ?? 
-                       settingsProvider.errorMessage ?? 
-                       timeOffProvider.errorMessage ??
-                       approvalProvider.errorMessage!,
+              message: employeeProvider.errorMessage ??
+                  settingsProvider.errorMessage ??
+                  timeOffProvider.errorMessage ??
+                  approvalProvider.errorMessage!,
               onRetry: _loadAllData,
             );
           }
@@ -103,26 +124,21 @@ class _ApprovalQueuePageState extends State<ApprovalQueuePage>
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildPendingRequestsTab(approvalProvider, settings),
-              _buildApprovedEntriesTab(approvalProvider),
+              RequestsManagementTab(
+                approvalProvider: approvalProvider,
+                employeeProvider: employeeProvider,
+                timeOffProvider: timeOffProvider,
+                settings: settings,
+              ),
+              TimeOffCalendarTab(
+                approvalProvider: approvalProvider,
+                employeeProvider: employeeProvider,
+                timeOffProvider: timeOffProvider,
+              ),
             ],
           );
         },
       ),
     );
   }
-
-  // Placeholder methods - these need full implementation
-  Widget _buildPendingRequestsTab(dynamic approvalProvider, dynamic settings) {
-    return const Center(
-      child: Text('Pending Requests Tab - To be implemented'),
-    );
-  }
-
-  Widget _buildApprovedEntriesTab(dynamic approvalProvider) {
-    return const Center(
-      child: Text('Approved Entries Tab - To be implemented'),
-    );
-  }
-
 }

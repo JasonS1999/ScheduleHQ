@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/employee_provider.dart';
+import '../providers/job_code_provider.dart';
+import '../models/job_code_settings.dart';
+import '../models/job_code_group.dart';
 import '../services/app_colors.dart';
 import '../widgets/common/loading_indicator.dart';
 import '../widgets/common/error_message.dart';
@@ -21,7 +24,6 @@ class RosterPage extends StatefulWidget {
 }
 
 class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
-  Employee? _selectedEmployee;
 
   @override
   void initState() {
@@ -39,6 +41,13 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
     );
     if (employeeProvider.isIdle) {
       await employeeProvider.initialize();
+    }
+    final jobCodeProvider = Provider.of<JobCodeProvider>(
+      context,
+      listen: false,
+    );
+    if (jobCodeProvider.isIdle) {
+      await jobCodeProvider.initialize();
     }
   }
 
@@ -74,14 +83,6 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
                 child: ListTile(
                   leading: Icon(Icons.upload_file),
                   title: Text('Import from CSV'),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'weekly_template',
-                child: ListTile(
-                  leading: Icon(Icons.calendar_view_week),
-                  title: Text('Weekly Template'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
@@ -149,7 +150,7 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
         children: [
           _buildStatItem('Total', stats['total'].toString()),
           _buildStatItem('With Email', stats['withEmail'].toString()),
-          _buildStatItem('With Vacation', stats['withVacation'].toString()),
+          _buildStatItem('Vacation Weeks', stats['totalVacationWeeks'].toString()),
           if (employeeProvider.isSearching)
             _buildStatItem('Filtered', stats['filtered'].toString()),
         ],
@@ -170,6 +171,39 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
         Text(label, style: Theme.of(context).textTheme.bodySmall),
       ],
     );
+  }
+
+  Color _colorFromHex(String hex) {
+    String clean = hex.replaceAll('#', '');
+    if (clean.length == 6) clean = 'FF$clean';
+    return Color(int.parse(clean, radix: 16));
+  }
+
+  Color _resolveJobCodeColor(String jobCode) {
+    final jobCodeProvider = context.read<JobCodeProvider>();
+    final codes = jobCodeProvider.codes;
+    final groups = jobCodeProvider.groups;
+
+    final settings = codes.cast<JobCodeSettings?>().firstWhere(
+      (s) => s != null && s.code.toLowerCase() == jobCode.toLowerCase(),
+      orElse: () => null,
+    );
+
+    if (settings != null && settings.sortGroup != null) {
+      final group = groups.cast<JobCodeGroup?>().firstWhere(
+        (g) => g != null && g.name == settings.sortGroup,
+        orElse: () => null,
+      );
+      if (group != null) {
+        return _colorFromHex(group.colorHex);
+      }
+    }
+
+    final hex = settings?.colorHex;
+    if (hex == null || hex.trim().isEmpty) {
+      return Theme.of(context).colorScheme.primary;
+    }
+    return _colorFromHex(hex);
   }
 
   Widget _buildEmployeeTable(EmployeeProvider employeeProvider) {
@@ -202,7 +236,9 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
     }
 
     return SingleChildScrollView(
-      child: DataTable(
+      child: SizedBox(
+        width: double.infinity,
+        child: DataTable(
         showCheckboxColumn: false,
         columns: const [
           DataColumn(label: Text('Name')),
@@ -212,30 +248,31 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
           DataColumn(label: Text('Actions')),
         ],
         rows: employeeProvider.items.map((employee) {
+          final bg = _resolveJobCodeColor(employee.jobCode);
+          final fg = ThemeData.estimateBrightnessForColor(bg) == Brightness.dark
+              ? Colors.white
+              : Colors.black;
           return DataRow(
-            selected: _selectedEmployee?.id == employee.id,
-            onSelectChanged: (selected) {
-              setState(() {
-                _selectedEmployee = selected == true ? employee : null;
-              });
-            },
+            onSelectChanged: (_) => _showEditEmployeeDialog(employee),
             cells: [
               DataCell(Text(employee.displayName)),
               DataCell(
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    employee.jobCode,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w500,
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: bg,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      employee.jobCode,
+                      style: TextStyle(
+                        color: fg,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
@@ -243,7 +280,7 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
               DataCell(Text(employee.email ?? 'No email')),
               DataCell(
                 Text(
-                  '${employee.vacationWeeksUsed}/${employee.vacationWeeksAllowed} weeks',
+                  '${employee.vacationWeeksAllowed} weeks',
                 ),
               ),
               DataCell(
@@ -251,9 +288,9 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      onPressed: () => _showEditEmployeeDialog(employee),
-                      icon: const Icon(Icons.edit),
-                      tooltip: 'Edit Employee',
+                      onPressed: () => _showWeeklyTemplateForEmployee(employee),
+                      icon: const Icon(Icons.calendar_view_week),
+                      tooltip: 'Weekly Template',
                     ),
                     IconButton(
                       onPressed: () => _showAvailabilityPage(employee),
@@ -271,6 +308,7 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
             ],
           );
         }).toList(),
+        ),
       ),
     );
   }
@@ -455,9 +493,6 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
 
       if (success) {
         SnackBarHelper.showSuccess(context, 'Employee deleted successfully');
-        if (_selectedEmployee?.id == employee.id) {
-          setState(() => _selectedEmployee = null);
-        }
       } else {
         SnackBarHelper.showError(
           context,
@@ -480,9 +515,6 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
       case 'import_csv':
         _showImportDialog();
         break;
-      case 'weekly_template':
-        _showWeeklyTemplateDialog();
-        break;
     }
   }
 
@@ -500,12 +532,10 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
     await employeeProvider.refresh();
   }
 
-  Future<void> _showWeeklyTemplateDialog() async {
-    if (_selectedEmployee == null) return;
-
+  Future<void> _showWeeklyTemplateForEmployee(Employee employee) async {
     await showDialog(
       context: context,
-      builder: (context) => WeeklyTemplateDialog(employee: _selectedEmployee!),
+      builder: (context) => WeeklyTemplateDialog(employee: employee),
     );
   }
 }

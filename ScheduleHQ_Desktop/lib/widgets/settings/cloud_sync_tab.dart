@@ -478,7 +478,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
                     context,
                     icon: Icons.beach_access,
                     title: 'Time Off Entries',
-                    description: 'PTO, sick days, and other time-off records.',
+                    description: 'PTO, requested days, and other time-off records.',
                   ),
                   const SizedBox(height: 8),
                   const Divider(),

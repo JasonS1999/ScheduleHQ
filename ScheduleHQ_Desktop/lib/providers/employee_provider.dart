@@ -280,7 +280,7 @@ class EmployeeProvider extends BaseProvider with CrudProviderMixin<Employee>, Se
       'filtered': _filteredEmployees.length,
       'byJobCode': <String, int>{},
       'withEmail': _allEmployees.where((e) => e.email?.isNotEmpty == true).length,
-      'withVacation': _allEmployees.where((e) => e.vacationWeeksAllowed > 0).length,
+      'totalVacationWeeks': _allEmployees.fold(0, (sum, e) => sum + e.vacationWeeksAllowed),
     };
 
     // Count by job code

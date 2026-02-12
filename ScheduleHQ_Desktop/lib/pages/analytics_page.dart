@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/employee_provider.dart';
 import '../services/app_colors.dart';
-import '../providers/schedule_provider.dart';
 import '../providers/time_off_provider.dart';
 import '../providers/analytics_provider.dart';
 import '../utils/loading_state_mixin.dart';
 import '../widgets/common/loading_indicator.dart';
 import '../widgets/common/error_message.dart';
+
+const _monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 class AnalyticsPage extends StatefulWidget {
   const AnalyticsPage({super.key});
@@ -31,10 +35,6 @@ class _AnalyticsPageState extends State<AnalyticsPage>
       context,
       listen: false,
     );
-    final scheduleProvider = Provider.of<ScheduleProvider>(
-      context,
-      listen: false,
-    );
     final timeOffProvider = Provider.of<TimeOffProvider>(
       context,
       listen: false,
@@ -47,7 +47,6 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     // Load all required data - each provider handles its own loading state
     await Future.wait([
       employeeProvider.loadEmployees(),
-      scheduleProvider.loadSchedule(),
       timeOffProvider.loadData(),
       analyticsProvider.loadData(),
     ]);
@@ -77,14 +76,17 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     analyticsProvider.setSelectedMonth(month);
   }
 
+  String _formatMonth(DateTime date) {
+    return '${_monthNames[date.month - 1]} ${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Analytics")),
       body:
-          Consumer4<
+          Consumer3<
             EmployeeProvider,
-            ScheduleProvider,
             TimeOffProvider,
             AnalyticsProvider
           >(
@@ -92,26 +94,22 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                 (
                   context,
                   employeeProvider,
-                  scheduleProvider,
                   timeOffProvider,
                   analyticsProvider,
                   child,
                 ) {
                   if (employeeProvider.isLoading ||
-                      scheduleProvider.isLoading ||
                       timeOffProvider.isLoading ||
                       analyticsProvider.isLoading) {
                     return const LoadingIndicator();
                   }
 
                   if (employeeProvider.errorMessage != null ||
-                      scheduleProvider.errorMessage != null ||
                       timeOffProvider.errorMessage != null ||
                       analyticsProvider.errorMessage != null) {
                     return ErrorMessage(
                       message:
                           employeeProvider.errorMessage ??
-                          scheduleProvider.errorMessage ??
                           timeOffProvider.errorMessage ??
                           analyticsProvider.errorMessage!,
                       onRetry: _loadAllData,
@@ -132,7 +130,6 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                           const SizedBox(height: 24),
                           _buildAnalyticsTable(
                             employeeProvider,
-                            scheduleProvider,
                             timeOffProvider,
                             analyticsProvider,
                           ),
@@ -152,6 +149,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
     final jobCodes = analyticsProvider.getAvailableJobCodes(
       employeeProvider.employees,
     );
+    final selected = analyticsProvider.selectedMonth;
 
     return Card(
       child: Padding(
@@ -166,7 +164,7 @@ class _AnalyticsPageState extends State<AnalyticsPage>
             const SizedBox(height: 16),
             Row(
               children: [
-                // Month Selection
+                // Month Selection with arrow navigation
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,41 +174,41 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
-                      InkWell(
-                        onTap: () async {
-                          final selectedMonth = await showDatePicker(
-                            context: context,
-                            initialDate: analyticsProvider.selectedMonth,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now().add(
-                              const Duration(days: 365),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: context.appColors.borderMedium,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            IconButton(
+                              onPressed: () {
+                                final prev = DateTime(selected.year, selected.month - 1, 1);
+                                _onMonthChanged(prev);
+                              },
+                              icon: const Icon(Icons.chevron_left),
+                              tooltip: 'Previous month',
                             ),
-                          );
-                          if (selectedMonth != null) {
-                            _onMonthChanged(selectedMonth);
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: context.appColors.borderMedium,
+                            Text(
+                              _formatMonth(selected),
+                              style: const TextStyle(fontSize: 16),
                             ),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "${analyticsProvider.selectedMonth.month}/${analyticsProvider.selectedMonth.year}",
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                              const Icon(Icons.calendar_today),
-                            ],
-                          ),
+                            IconButton(
+                              onPressed: () {
+                                final next = DateTime(selected.year, selected.month + 1, 1);
+                                _onMonthChanged(next);
+                              },
+                              icon: const Icon(Icons.chevron_right),
+                              tooltip: 'Next month',
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -273,10 +271,11 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
   Widget _buildAnalyticsTable(
     EmployeeProvider employeeProvider,
-    ScheduleProvider scheduleProvider,
     TimeOffProvider timeOffProvider,
     AnalyticsProvider analyticsProvider,
   ) {
+    final shiftTypes = analyticsProvider.shiftTypes;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -284,15 +283,13 @@ class _AnalyticsPageState extends State<AnalyticsPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Employee Analytics - ${analyticsProvider.selectedMonth.month}/${analyticsProvider.selectedMonth.year}",
+              "Employee Analytics - ${_formatMonth(analyticsProvider.selectedMonth)}",
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             FutureBuilder<List<EmployeeAnalytics>>(
               future: analyticsProvider.getEmployeeAnalytics(
                 employeeProvider.employees,
-                scheduleProvider.shifts,
-                scheduleProvider.shiftRunners,
                 timeOffProvider.jobCodeSettings,
               ),
               builder: (context, snapshot) {
@@ -322,33 +319,41 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text("Employee")),
-                      DataColumn(label: Text("Job Code")),
-                      DataColumn(label: Text("Total Hours")),
-                      DataColumn(label: Text("Shift Count")),
-                      DataColumn(label: Text("Avg Hours/Shift")),
-                      DataColumn(label: Text("Mid Shift %")),
-                    ],
-                    rows: analytics.map((data) {
-                      return DataRow(
-                        cells: [
-                          DataCell(Text(data.employee.displayName)),
-                          DataCell(Text(data.employee.jobCode)),
-                          DataCell(Text(data.totalHours.toStringAsFixed(1))),
-                          DataCell(Text(data.shiftCount.toString())),
-                          DataCell(
-                            Text(data.averageHoursPerShift.toStringAsFixed(1)),
-                          ),
-                          DataCell(
-                            Text(
-                              "${data.midShiftPercentage.toStringAsFixed(0)}%",
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: MediaQuery.of(context).size.width - 64,
+                    ),
+                    child: DataTable(
+                      columnSpacing: 24,
+                      columns: [
+                        const DataColumn(label: Text("Employee")),
+                        const DataColumn(label: Text("Job Code")),
+                        const DataColumn(label: Text("Total Shifts")),
+                        const DataColumn(label: Text("Total Runners")),
+                        const DataColumn(label: Text("Avg Hours/Week")),
+                        ...shiftTypes.map(
+                          (st) => DataColumn(label: Text(st.label)),
+                        ),
+                      ],
+                      rows: analytics.map((data) {
+                        return DataRow(
+                          cells: [
+                            DataCell(Text(data.employee.displayName)),
+                            DataCell(Text(data.employee.jobCode)),
+                            DataCell(Text(data.totalShifts.toString())),
+                            DataCell(Text(data.totalRunnerCount.toString())),
+                            DataCell(Text(data.avgHoursPerWeek.toStringAsFixed(1))),
+                            ...shiftTypes.map(
+                              (st) => DataCell(
+                                Text(
+                                  (data.runnerCountsByShiftType[st.key] ?? 0).toString(),
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
-                      );
-                    }).toList(),
+                          ],
+                        );
+                      }).toList(),
+                    ),
                   ),
                 );
               },

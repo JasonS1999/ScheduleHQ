@@ -1,3 +1,5 @@
+import '../database/shift_dao.dart';
+import '../database/shift_runner_dao.dart';
 import '../database/shift_type_dao.dart';
 import '../database/store_hours_dao.dart';
 import '../models/employee.dart';
@@ -10,6 +12,8 @@ import 'base_provider.dart';
 
 /// Provider for managing analytics data and calculations
 class AnalyticsProvider extends BaseProvider {
+  final ShiftDao _shiftDao = ShiftDao();
+  final ShiftRunnerDao _shiftRunnerDao = ShiftRunnerDao();
   final ShiftTypeDao _shiftTypeDao = ShiftTypeDao();
   final StoreHoursDao _storeHoursDao = StoreHoursDao();
 
@@ -17,18 +21,10 @@ class AnalyticsProvider extends BaseProvider {
   DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   List<ShiftType> _shiftTypes = [];
   StoreHours _storeHours = StoreHours.defaults();
-  
+
   // Filters
   String _searchQuery = '';
   String? _selectedJobCode;
-
-  // Mid shift definitions: (startHour, startMinute, endHour, endMinute)  
-  static const List<(int, int, int, int)> midShiftPatterns = [
-    (11, 0, 19, 0),  // 11-7
-    (12, 0, 20, 0),  // 12-8
-    (10, 0, 19, 0),  // 10-7
-    (11, 0, 20, 0),  // 11-8
-  ];
 
   // Getters
   DateTime get selectedMonth => _selectedMonth;
@@ -66,110 +62,67 @@ class AnalyticsProvider extends BaseProvider {
     notifyListeners();
   }
 
-  /// Check if a shift is a mid shift based on predefined patterns
-  bool isMidShift(Shift shift) {
-    final startTime = shift.startTime;
-    final endTime = shift.endTime;
-
-    final startHour = startTime.hour;
-    final startMinute = startTime.minute;
-    final endHour = endTime.hour;
-    final endMinute = endTime.minute;
-
-    return midShiftPatterns.any((pattern) {
-      return startHour == pattern.$1 &&
-             startMinute == pattern.$2 &&
-             endHour == pattern.$3 &&
-             endMinute == pattern.$4;
-    });
+  /// Check if a shift is a non-working entry (OFF, PTO, VAC, REQ OFF)
+  static bool _isNonWorkingShift(Shift shift) {
+    if (shift.label == null || shift.label!.isEmpty) return false;
+    final label = shift.label!.toLowerCase();
+    return label == 'off' || label == 'pto' || label == 'vac' || label == 'req off';
   }
 
-  /// Calculate mid shift percentage for an employee in the selected month
-  double calculateMidShiftPercentage(Employee employee, List<Shift> shifts, List<ShiftRunner> shiftRunners) {
+  /// Calculate total working hours for an employee in the selected month
+  double calculateTotalHours(Employee employee, List<Shift> shifts) {
     final employeeId = employee.id;
     if (employeeId == null) return 0.0;
 
-    // Get shift runners for this employee in the selected month
     final monthStart = _selectedMonth;
     final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 1);
-
-    final employeeShiftRunners = shiftRunners
-        .where((sr) => sr.employeeId == employeeId)
-        .where((sr) {
-          return sr.date.isAfter(monthStart.subtract(const Duration(days: 1))) &&
-                 sr.date.isBefore(monthEnd);
-        })
-        .toList();
-
-    if (employeeShiftRunners.isEmpty) return 0.0;
-
-    int totalShifts = employeeShiftRunners.length;
-    int midShifts = 0;
-
-    for (final shiftRunner in employeeShiftRunners) {
-      final shift = shifts.firstWhere(
-        (s) => s.employeeId == employeeId && 
-               s.startTime.year == shiftRunner.date.year && 
-               s.startTime.month == shiftRunner.date.month && 
-               s.startTime.day == shiftRunner.date.day,
-        orElse: () => shifts.first,
-      );
-      if (isMidShift(shift)) {
-        midShifts++;
-      }
-    }
-
-    return totalShifts > 0 ? (midShifts / totalShifts) * 100 : 0.0;
-  }
-
-  /// Calculate total hours worked for an employee in the selected month
-  double calculateTotalHours(Employee employee, List<Shift> shifts, List<ShiftRunner> shiftRunners) {
-    final employeeId = employee.id;
-    if (employeeId == null) return 0.0;
-
-    // Get shift runners for this employee in the selected month
-    final monthStart = _selectedMonth;
-    final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 1);
-
-    final employeeShiftRunners = shiftRunners
-        .where((sr) => sr.employeeId == employeeId)
-        .where((sr) {
-          return sr.date.isAfter(monthStart.subtract(const Duration(days: 1))) &&
-                 sr.date.isBefore(monthEnd);
-        })
-        .toList();
 
     double totalHours = 0.0;
-    for (final shiftRunner in employeeShiftRunners) {
-      final shift = shifts.firstWhere(
-        (s) => s.employeeId == employeeId &&
-               s.startTime.year == shiftRunner.date.year &&
-               s.startTime.month == shiftRunner.date.month &&
-               s.startTime.day == shiftRunner.date.day,
-        orElse: () => shifts.first,
-      );
+    for (final shift in shifts) {
+      if (shift.employeeId != employeeId) continue;
+      if (shift.startTime.isBefore(monthStart) || !shift.startTime.isBefore(monthEnd)) continue;
+      if (_isNonWorkingShift(shift)) continue;
       totalHours += shift.endTime.difference(shift.startTime).inMinutes / 60.0;
     }
 
     return totalHours;
   }
 
-  /// Calculate shift count for an employee in the selected month
-  int calculateShiftCount(Employee employee, List<Shift> shifts, List<ShiftRunner> shiftRunners) {
+  /// Calculate working shift count for an employee in the selected month
+  int calculateShiftCount(Employee employee, List<Shift> shifts) {
     final employeeId = employee.id;
     if (employeeId == null) return 0;
 
-    // Get shift runners for this employee in the selected month
     final monthStart = _selectedMonth;
     final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 1);
 
-    return shiftRunners
+    return shifts
+        .where((s) => s.employeeId == employeeId)
+        .where((s) => !s.startTime.isBefore(monthStart) && s.startTime.isBefore(monthEnd))
+        .where((s) => !_isNonWorkingShift(s))
+        .length;
+  }
+
+  /// Count runner assignments per shift type for an employee in the selected month
+  Map<String, int> calculateRunnerCountsByShiftType(Employee employee, List<ShiftRunner> shiftRunners) {
+    final employeeId = employee.id;
+    if (employeeId == null) return {};
+
+    final monthStart = _selectedMonth;
+    final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 1);
+
+    final employeeShiftRunners = shiftRunners
         .where((sr) => sr.employeeId == employeeId)
         .where((sr) {
-          return sr.date.isAfter(monthStart.subtract(const Duration(days: 1))) &&
-                 sr.date.isBefore(monthEnd);
-        })
-        .length;
+          return !sr.date.isBefore(monthStart) && sr.date.isBefore(monthEnd);
+        });
+
+    final counts = <String, int>{};
+    for (final sr in employeeShiftRunners) {
+      counts[sr.shiftType] = (counts[sr.shiftType] ?? 0) + 1;
+    }
+
+    return counts;
   }
 
   /// Filter employees based on search query and job code
@@ -180,7 +133,7 @@ class AnalyticsProvider extends BaseProvider {
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       filtered = filtered
-          .where((e) => e.displayName.toLowerCase().contains(query) || 
+          .where((e) => e.displayName.toLowerCase().contains(query) ||
                        e.jobCode.toLowerCase().contains(query))
           .toList();
     }
@@ -196,29 +149,52 @@ class AnalyticsProvider extends BaseProvider {
   /// Get analytics data for filtered employees
   Future<List<EmployeeAnalytics>> getEmployeeAnalytics(
     List<Employee> employees,
-    List<Shift> shifts,
-    List<ShiftRunner> shiftRunners,
     List<JobCodeSettings> jobCodeSettings,
   ) async {
+    // Load shifts and runners for the selected month directly from database
+    final monthStart = _selectedMonth;
+    final monthLastDay = DateTime(monthStart.year, monthStart.month + 1, 0);
+
+    final shifts = await _shiftDao.getByMonth(monthStart.year, monthStart.month);
+    final shiftRunners = await _shiftRunnerDao.getForDateRange(monthStart, monthLastDay);
+
     final filteredEmployees = filterEmployees(employees, jobCodeSettings);
     final List<EmployeeAnalytics> analytics = [];
 
     for (final employee in filteredEmployees) {
-      final totalHours = calculateTotalHours(employee, shifts, shiftRunners);
-      final shiftCount = calculateShiftCount(employee, shifts, shiftRunners);
-      final midShiftPercentage = calculateMidShiftPercentage(employee, shifts, shiftRunners);
+      final totalHours = calculateTotalHours(employee, shifts);
+      final totalShifts = calculateShiftCount(employee, shifts);
+
+      // Calculate weeks in the selected month for avg hours/week
+      final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 1);
+      final daysInMonth = monthEnd.difference(monthStart).inDays;
+      final weeksInMonth = daysInMonth / 7.0;
+      final avgHoursPerWeek = weeksInMonth > 0 ? totalHours / weeksInMonth : 0.0;
+
+      final runnerCounts = calculateRunnerCountsByShiftType(employee, shiftRunners);
+      final totalRunnerCount = runnerCounts.values.fold(0, (sum, v) => sum + v);
 
       analytics.add(EmployeeAnalytics(
         employee: employee,
-        totalHours: totalHours,
-        shiftCount: shiftCount,
-        midShiftPercentage: midShiftPercentage,
-        averageHoursPerShift: shiftCount > 0 ? totalHours / shiftCount : 0.0,
+        totalShifts: totalShifts,
+        avgHoursPerWeek: avgHoursPerWeek,
+        runnerCountsByShiftType: runnerCounts,
+        totalRunnerCount: totalRunnerCount,
       ));
     }
 
-    // Sort by total hours descending
-    analytics.sort((a, b) => b.totalHours.compareTo(a.totalHours));
+    // Sort by job code sort order (ascending), then by name
+    final orderByJobCode = <String, int>{
+      for (final jc in jobCodeSettings) jc.code.toLowerCase(): jc.sortOrder,
+    };
+    int orderFor(String jobCode) => orderByJobCode[jobCode.toLowerCase()] ?? 999999;
+
+    analytics.sort((a, b) {
+      final aOrder = orderFor(a.employee.jobCode);
+      final bOrder = orderFor(b.employee.jobCode);
+      if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+      return a.employee.displayName.compareTo(b.employee.displayName);
+    });
 
     return analytics;
   }
@@ -239,16 +215,16 @@ class AnalyticsProvider extends BaseProvider {
 /// Data class for employee analytics
 class EmployeeAnalytics {
   final Employee employee;
-  final double totalHours;
-  final int shiftCount;
-  final double midShiftPercentage;
-  final double averageHoursPerShift;
+  final int totalShifts;
+  final double avgHoursPerWeek;
+  final Map<String, int> runnerCountsByShiftType;
+  final int totalRunnerCount;
 
   const EmployeeAnalytics({
     required this.employee,
-    required this.totalHours,
-    required this.shiftCount,
-    required this.midShiftPercentage,
-    required this.averageHoursPerShift,
+    required this.totalShifts,
+    required this.avgHoursPerWeek,
+    required this.runnerCountsByShiftType,
+    required this.totalRunnerCount,
   });
 }

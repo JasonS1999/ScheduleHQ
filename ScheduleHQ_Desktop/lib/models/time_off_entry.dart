@@ -3,7 +3,7 @@ class TimeOffEntry {
   final int employeeId;
   final DateTime date;
   final DateTime? endDate; // For multi-day entries (vacation)
-  final String timeOffType; // pto / vac / sick
+  final String timeOffType; // pto / vac / requested
   final int hours;
   final String? vacationGroupId;
   final bool isAllDay; // true = all day, false = specific time range
