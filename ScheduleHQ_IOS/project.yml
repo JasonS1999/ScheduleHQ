@@ -22,7 +22,7 @@ targets:
       - path: GoogleService-Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.schedulehq.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.schedulehq.ios
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_GENERATION_MODE: GeneratedFile
@@ -31,8 +31,8 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Select a profile photo"
+        TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.9"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: S4LN25J73K
@@ -42,8 +42,7 @@ targets:
         product: FirebaseAuth
       - package: FirebaseAuth
         product: FirebaseFirestore
-      - package: FirebaseAuth
-        product: FirebaseMessaging
+
       - package: FirebaseAuth
         product: FirebaseStorage
 
