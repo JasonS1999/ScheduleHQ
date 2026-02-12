@@ -209,23 +209,25 @@ class TimeOffProvider extends BaseProvider {
   /// Calculate vacation weeks used for an employee
   int getVacationWeeksUsed(Employee employee) {
     try {
-      // Use raw entries to count vacation weeks (not expanded)
-      // Each vacation entry with endDate represents one week
-      int vacationWeeks = 0;
+      final vacationEntries = _allEntries
+          .where((e) => e.employeeId == employee.id && e.timeOffType == 'vacation')
+          .toList();
 
-      for (final entry in _rawEntries) {
-        if (entry.employeeId != employee.id) continue;
-        
-        if (entry.timeOffType == 'vacation' && entry.endDate != null) {
-          // Multi-day vacation entries count as vacation weeks
-          final days = entry.endDate!.difference(entry.date).inDays + 1;
-          if (days >= 5) {
-            // Consider 5+ consecutive days as vacation weeks
-            vacationWeeks += (days / 5).floor();
-          }
+      // Group by vacationGroupId, count days per group
+      final groups = <String, int>{};
+      for (final entry in vacationEntries) {
+        final groupId = entry.vacationGroupId;
+        if (groupId != null) {
+          groups[groupId] = (groups[groupId] ?? 0) + 1;
         }
       }
 
+      int vacationWeeks = 0;
+      for (final dayCount in groups.values) {
+        if (dayCount >= 5) {
+          vacationWeeks += (dayCount / 5).floor();
+        }
+      }
       return vacationWeeks;
     } catch (e) {
       debugPrint("Vacation weeks calculation error: $e");

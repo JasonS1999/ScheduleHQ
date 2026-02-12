@@ -39,12 +39,24 @@ class _AddTimeOffEntryDialogState extends State<AddTimeOffEntryDialog> {
   final _hoursController = TextEditingController(text: '8');
   bool _isSubmitting = false;
 
-  bool get _isValid =>
-      _selectedEmployeeId != null &&
-      _startDate != null &&
-      _hoursController.text.isNotEmpty &&
-      int.tryParse(_hoursController.text) != null &&
-      int.parse(_hoursController.text) > 0;
+  bool get _isValid {
+    if (_selectedEmployeeId == null || _startDate == null) return false;
+    switch (_selectedType) {
+      case 'pto':
+        return _hoursController.text.isNotEmpty &&
+            int.tryParse(_hoursController.text) != null &&
+            int.parse(_hoursController.text) > 0;
+      case 'vacation':
+        return _endDate != null;
+      case 'requested':
+        if (!_isAllDay) {
+          return _startTime != null && _endTime != null;
+        }
+        return true;
+      default:
+        return false;
+    }
+  }
 
   @override
   void dispose() {
@@ -99,72 +111,105 @@ class _AddTimeOffEntryDialogState extends State<AddTimeOffEntryDialog> {
                   DropdownMenuItem(value: 'requested', child: Text('Requested')),
                 ],
                 onChanged: (value) {
-                  if (value != null) setState(() => _selectedType = value);
+                  if (value != null) {
+                    setState(() {
+                      _selectedType = value;
+                      if (value == 'pto') {
+                        _endDate = null;
+                        _isAllDay = true;
+                      } else if (value == 'vacation') {
+                        _isAllDay = true;
+                        _hoursController.text = '8';
+                      } else if (value == 'requested') {
+                        _endDate = null;
+                      }
+                    });
+                  }
                 },
               ),
               const SizedBox(height: 16),
 
-              // Date pickers
-              Row(
-                children: [
-                  Expanded(
-                    child: _DatePickerField(
-                      label: 'Start Date',
-                      value: _startDate,
-                      onChanged: (date) => setState(() => _startDate = date),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _DatePickerField(
-                      label: 'End Date (optional)',
-                      value: _endDate,
-                      onChanged: (date) => setState(() => _endDate = date),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // All day toggle
-              SwitchListTile(
-                title: const Text('All Day'),
-                value: _isAllDay,
-                onChanged: (value) => setState(() => _isAllDay = value),
-                contentPadding: EdgeInsets.zero,
-              ),
-
-              // Time pickers (if not all day)
-              if (!_isAllDay) ...[
+              // Date pickers — vary by type
+              if (_selectedType == 'vacation') ...[
+                // Vacation: required start + end date
                 Row(
                   children: [
                     Expanded(
-                      child: _TimePickerField(
-                        label: 'Start Time',
-                        value: _startTime,
-                        onChanged: (time) =>
-                            setState(() => _startTime = time),
+                      child: _DatePickerField(
+                        label: 'Start Date',
+                        value: _startDate,
+                        onChanged: (date) => setState(() => _startDate = date),
                       ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: _TimePickerField(
-                        label: 'End Time',
-                        value: _endTime,
-                        onChanged: (time) => setState(() => _endTime = time),
+                      child: _DatePickerField(
+                        label: 'End Date',
+                        value: _endDate,
+                        onChanged: (date) => setState(() => _endDate = date),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+              ] else ...[
+                // PTO / Requested: single date only
+                _DatePickerField(
+                  label: 'Date',
+                  value: _startDate,
+                  onChanged: (date) => setState(() => _startDate = date),
+                ),
               ],
+              const SizedBox(height: 16),
 
-              // Hours
-              TextFormField(
-                controller: _hoursController,
-                decoration: const InputDecoration(labelText: 'Hours'),
-                keyboardType: TextInputType.number,
-              ),
+              // Hours — PTO only
+              if (_selectedType == 'pto')
+                TextFormField(
+                  controller: _hoursController,
+                  decoration: const InputDecoration(labelText: 'Hours'),
+                  keyboardType: TextInputType.number,
+                ),
+
+              // All day toggle + time pickers — Requested only
+              if (_selectedType == 'requested') ...[
+                SwitchListTile(
+                  title: const Text('All Day'),
+                  value: _isAllDay,
+                  onChanged: (value) => setState(() => _isAllDay = value),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                if (!_isAllDay) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Select the time the employee is available that day',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: appColors.textSecondary,
+                          ),
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TimePickerField(
+                          label: 'Start Time',
+                          value: _startTime,
+                          onChanged: (time) =>
+                              setState(() => _startTime = time),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _TimePickerField(
+                          label: 'End Time',
+                          value: _endTime,
+                          onChanged: (time) => setState(() => _endTime = time),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ],
             ],
           ),
         ),
@@ -199,13 +244,26 @@ class _AddTimeOffEntryDialogState extends State<AddTimeOffEntryDialog> {
     setState(() => _isSubmitting = true);
 
     try {
+      // Calculate hours based on type
+      int hours;
+      if (_selectedType == 'vacation') {
+        // Vacation: 8 hours per day across the range
+        final dayCount = _endDate!.difference(_startDate!).inDays + 1;
+        hours = dayCount * 8;
+      } else if (_selectedType == 'pto') {
+        hours = int.parse(_hoursController.text);
+      } else {
+        // Requested: 8 hours for all day
+        hours = 8;
+      }
+
       final entry = TimeOffEntry(
         id: null,
         employeeId: _selectedEmployeeId!,
         date: _startDate!,
-        endDate: _endDate,
+        endDate: _selectedType == 'vacation' ? _endDate : null,
         timeOffType: _selectedType,
-        hours: int.parse(_hoursController.text),
+        hours: hours,
         isAllDay: _isAllDay,
         startTime: _isAllDay ? null : _formatTimeOfDay(_startTime),
         endTime: _isAllDay ? null : _formatTimeOfDay(_endTime),

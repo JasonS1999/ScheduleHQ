@@ -139,6 +139,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           String label;
           switch (e.timeOffType.toLowerCase()) {
             case 'vac':
+            case 'vacation':
               label = 'VAC';
               break;
             case 'pto':
@@ -1974,12 +1975,19 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     );
 
     if (timeOffEntry != null) {
-      final timeRange = timeOffEntry.isAllDay
-          ? 'All Day'
-          : '${timeOffEntry.startTime ?? ''} - ${timeOffEntry.endTime ?? ''}';
+      String reason;
+      if (!timeOffEntry.isAllDay && timeOffEntry.timeOffType.toLowerCase() == 'requested') {
+        // Partial-day requested: times represent availability window
+        reason = 'Employee Is Available (${timeOffEntry.startTime ?? ''} - ${timeOffEntry.endTime ?? ''})';
+      } else {
+        final timeRange = timeOffEntry.isAllDay
+            ? 'All Day'
+            : '${timeOffEntry.startTime ?? ''} - ${timeOffEntry.endTime ?? ''}';
+        reason = 'Time off scheduled ($timeRange)';
+      }
       return {
         'available': false,
-        'reason': 'Time off scheduled ($timeRange)',
+        'reason': reason,
         'type': 'time-off',
         'isAllDay': timeOffEntry.isAllDay,
         'startTime': timeOffEntry.startTime,
@@ -2252,14 +2260,22 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     String? selectedRunnerShift;
     final notesController = TextEditingController(text: shift.notes ?? '');
 
-    // Helper to check if the selected shift times overlap with time off
+    // Helper to check if the selected shift conflicts with time off
     bool shiftOverlapsTimeOff(int startIndex, int endIndex) {
       if (timeOffEntry == null) return false;
       final shiftStart = times[startIndex];
       final shiftEnd = times[endIndex];
       final shiftStartDt = _timeOfDayToDateTime(day, shiftStart);
       final shiftEndDt = _timeOfDayToDateTime(day, shiftEnd);
-      return timeOffEntry.overlapsWithShift(shiftStartDt, shiftEndDt);
+      final overlaps = timeOffEntry.overlapsWithShift(shiftStartDt, shiftEndDt);
+
+      // For partial-day "requested" entries, times represent availability window
+      // Conflict exists when shift is OUTSIDE the availability window (no overlap)
+      if (!timeOffEntry.isAllDay && timeOffEntry.timeOffType.toLowerCase() == 'requested') {
+        return !overlaps;
+      }
+
+      return overlaps;
     }
 
     final result = await showDialog<Map<String, dynamic>>(

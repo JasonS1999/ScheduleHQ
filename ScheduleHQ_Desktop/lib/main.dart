@@ -21,6 +21,7 @@ import 'providers/job_code_provider.dart';
 import 'providers/store_settings_provider.dart';
 import 'services/app_colors.dart';
 import 'services/auto_sync_service.dart';
+import 'services/firestore_sync_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -246,6 +247,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_currentUid != uid) {
       _dbInitialized = false;
       _currentUid = uid;
+      // Stop previous listener when switching accounts
+      FirestoreSyncService.instance.stopTimeOffListener();
     }
     if (!_dbInitialized) {
       await AppDatabase.instance.initForManager(uid);
@@ -281,10 +284,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
         await settingsProvider.initialize();
         await employeeProvider.initialize();
         await scheduleProvider.initialize();
+
+        // Start real-time cloud listener for time-off entries
+        final timeOffProvider = Provider.of<TimeOffProvider>(
+          context,
+          listen: false,
+        );
+        FirestoreSyncService.instance.startTimeOffListener(() {
+          if (mounted) {
+            timeOffProvider.loadData();
+          }
+        });
       }
 
       _dbInitialized = true;
     }
+  }
+
+  @override
+  void dispose() {
+    FirestoreSyncService.instance.stopTimeOffListener();
+    super.dispose();
   }
 
   @override

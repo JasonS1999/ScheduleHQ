@@ -53,6 +53,33 @@ class TimeOffEntry {
     );
   }
 
+  /// Create a copy with selected fields replaced.
+  TimeOffEntry copyWith({
+    int? id,
+    int? employeeId,
+    DateTime? date,
+    DateTime? endDate,
+    String? timeOffType,
+    int? hours,
+    String? vacationGroupId,
+    bool? isAllDay,
+    String? startTime,
+    String? endTime,
+  }) {
+    return TimeOffEntry(
+      id: id ?? this.id,
+      employeeId: employeeId ?? this.employeeId,
+      date: date ?? this.date,
+      endDate: endDate ?? this.endDate,
+      timeOffType: timeOffType ?? this.timeOffType,
+      hours: hours ?? this.hours,
+      vacationGroupId: vacationGroupId ?? this.vacationGroupId,
+      isAllDay: isAllDay ?? this.isAllDay,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+    );
+  }
+
   /// Returns a human-readable time range string
   String get timeRangeDisplay {
     if (isAllDay) return 'All Day';

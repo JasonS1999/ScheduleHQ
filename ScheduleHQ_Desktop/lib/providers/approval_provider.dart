@@ -105,8 +105,32 @@ class ApprovalProvider extends BaseProvider {
   /// Manually add a time-off entry (manager-created, bypasses request flow)
   Future<bool> addManualEntry(TimeOffEntry entry, Employee employee) async {
     try {
-      await _timeOffDao.insertTimeOff(entry);
-      await FirestoreSyncService.instance.syncTimeOffEntry(entry, employee);
+      if (entry.endDate != null && entry.endDate != entry.date) {
+        // Multi-day: expand to individual day rows
+        final groupId = entry.vacationGroupId ??
+            DateTime.now().millisecondsSinceEpoch.toString();
+        await _timeOffDao.insertTimeOffRange(
+          employeeId: entry.employeeId,
+          startDate: entry.date,
+          endDate: entry.endDate!,
+          timeOffType: entry.timeOffType,
+          totalHours: entry.hours,
+          vacationGroupId: groupId,
+          isAllDay: entry.isAllDay,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+        );
+        // Sync each individual day to Firestore
+        final dayEntries = await _timeOffDao.getEntriesByGroup(groupId);
+        for (final dayEntry in dayEntries) {
+          await FirestoreSyncService.instance.syncTimeOffEntry(dayEntry, employee);
+        }
+      } else {
+        // Single day: insert as before
+        final localId = await _timeOffDao.insertTimeOff(entry);
+        final saved = entry.copyWith(id: localId);
+        await FirestoreSyncService.instance.syncTimeOffEntry(saved, employee);
+      }
       await loadApprovedEntries();
       return true;
     } catch (e) {
@@ -140,20 +164,38 @@ class ApprovalProvider extends BaseProvider {
         }
       }
 
-      // Create time-off entry
+      // Create time-off entry and insert locally
       final entry = _createTimeOffEntryFromFirestore(data);
-      
-      // Add to local database
-      await _timeOffDao.insertTimeOff(entry);
+      final endDateStr = data['endDate'] as String?;
+      final endDate = endDateStr != null ? DateTime.parse(endDateStr) : null;
 
-      // Update Firestore document status
-      await doc.reference.update({
-        'status': 'approved',
-        'approvedAt': FieldValue.serverTimestamp(),
-      });
-
-      // Sync to Firestore for employee app
-      await FirestoreSyncService.instance.syncTimeOffEntry(entry, employee);
+      if (endDate != null && endDate != entry.date) {
+        // Multi-day: expand to individual day rows
+        final groupId = entry.vacationGroupId ??
+            DateTime.now().millisecondsSinceEpoch.toString();
+        await _timeOffDao.insertTimeOffRange(
+          employeeId: entry.employeeId,
+          startDate: entry.date,
+          endDate: endDate,
+          timeOffType: entry.timeOffType,
+          totalHours: entry.hours,
+          vacationGroupId: groupId,
+          isAllDay: entry.isAllDay,
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+        );
+        await doc.reference.delete();
+        final dayEntries = await _timeOffDao.getEntriesByGroup(groupId);
+        for (final dayEntry in dayEntries) {
+          await FirestoreSyncService.instance.syncTimeOffEntry(dayEntry, employee);
+        }
+      } else {
+        // Single day
+        final localId = await _timeOffDao.insertTimeOff(entry);
+        final saved = entry.copyWith(id: localId);
+        await doc.reference.delete();
+        await FirestoreSyncService.instance.syncTimeOffEntry(saved, employee);
+      }
 
       // Reload approved entries
       await loadApprovedEntries();
@@ -189,11 +231,20 @@ class ApprovalProvider extends BaseProvider {
     try {
       if (entry.id == null) return false;
 
-      // Delete from local database
-      await _timeOffDao.deleteTimeOff(entry.id!);
-
-      // Delete from Firestore employee sync
-      await FirestoreSyncService.instance.deleteTimeOffEntry(entry.employeeId, entry.id!);
+      if (entry.vacationGroupId != null) {
+        // Delete all days in the vacation group
+        final groupEntries = await _timeOffDao.getEntriesByGroup(entry.vacationGroupId!);
+        for (final groupEntry in groupEntries) {
+          if (groupEntry.id != null) {
+            await FirestoreSyncService.instance.deleteTimeOffEntry(entry.employeeId, groupEntry.id!);
+          }
+        }
+        await _timeOffDao.deleteVacationGroup(entry.vacationGroupId!);
+      } else {
+        // Single day: delete just this entry
+        await _timeOffDao.deleteTimeOff(entry.id!);
+        await FirestoreSyncService.instance.deleteTimeOffEntry(entry.employeeId, entry.id!);
+      }
 
       // Reload approved entries
       await loadApprovedEntries();

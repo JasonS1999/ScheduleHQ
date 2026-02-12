@@ -390,7 +390,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 33,
+      version: 34,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -899,6 +899,44 @@ class AppDatabase {
             "UPDATE time_off SET timeOffType = 'requested' WHERE timeOffType = 'sick'",
           );
           log('Migration 33: Renamed $count sick entries to requested', name: 'AppDatabase');
+        }
+        if (oldVersion < 34) {
+          // Expand multi-day time_off entries into individual day rows
+          final rangeEntries = await db.query(
+            'time_off',
+            where: "endDate IS NOT NULL AND endDate != date",
+          );
+
+          for (final row in rangeEntries) {
+            final id = row['id'] as int;
+            final startDate = DateTime.parse(row['date'] as String);
+            final endDate = DateTime.parse(row['endDate'] as String);
+            final totalHours = row['hours'] as int;
+            final dayCount = endDate.difference(startDate).inDays + 1;
+            final hoursPerDay = dayCount > 0 ? (totalHours / dayCount).round() : totalHours;
+            final groupId = row['vacationGroupId'] as String? ?? 'migrated_$id';
+
+            var current = DateTime(startDate.year, startDate.month, startDate.day);
+            final endNorm = DateTime(endDate.year, endDate.month, endDate.day);
+
+            while (!current.isAfter(endNorm)) {
+              await db.insert('time_off', {
+                'employeeId': row['employeeId'],
+                'date': current.toIso8601String(),
+                'endDate': null,
+                'timeOffType': row['timeOffType'],
+                'hours': hoursPerDay > 0 ? hoursPerDay : 8,
+                'vacationGroupId': groupId,
+                'isAllDay': row['isAllDay'],
+                'startTime': row['startTime'],
+                'endTime': row['endTime'],
+              });
+              current = DateTime(current.year, current.month, current.day + 1);
+            }
+
+            await db.delete('time_off', where: 'id = ?', whereArgs: [id]);
+          }
+          log('Migration 34: Expanded ${rangeEntries.length} range entries to individual days', name: 'AppDatabase');
         }
       },
     );

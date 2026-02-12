@@ -7,48 +7,12 @@ class TimeOffDao {
   Future<Database> get _db async => AppDatabase.instance.db;
 
   // ------------------------------------------------------------
-  // GET ALL TIME OFF (expands multi-day entries)
+  // GET ALL TIME OFF
   // ------------------------------------------------------------
   Future<List<TimeOffEntry>> getAllTimeOff() async {
     final db = await _db;
     final result = await db.query('time_off', orderBy: 'date ASC');
-    
-    // Expand multi-day entries into individual entries for each day
-    final List<TimeOffEntry> expandedEntries = [];
-    for (final row in result) {
-      final entry = TimeOffEntry.fromMap(row);
-      
-      if (entry.endDate != null && entry.endDate != entry.date) {
-        // Multi-day entry - expand to individual days
-        final dayCount = entry.endDate!.difference(entry.date).inDays + 1;
-        final hoursPerDay = dayCount > 0 ? (entry.hours / dayCount).round() : entry.hours;
-        
-        // Use calendar day iteration to avoid DST issues
-        var currentDate = DateTime(entry.date.year, entry.date.month, entry.date.day);
-        final endDateNormalized = DateTime(entry.endDate!.year, entry.endDate!.month, entry.endDate!.day);
-        
-        while (!currentDate.isAfter(endDateNormalized)) {
-          expandedEntries.add(TimeOffEntry(
-            id: entry.id,
-            employeeId: entry.employeeId,
-            date: currentDate,
-            endDate: entry.endDate,
-            timeOffType: entry.timeOffType,
-            hours: hoursPerDay > 0 ? hoursPerDay : 8,
-            vacationGroupId: entry.vacationGroupId,
-            isAllDay: entry.isAllDay,
-            startTime: entry.startTime,
-            endTime: entry.endTime,
-          ));
-          currentDate = DateTime(currentDate.year, currentDate.month, currentDate.day + 1);
-        }
-      } else {
-        // Single-day entry
-        expandedEntries.add(entry);
-      }
-    }
-    
-    return expandedEntries;
+    return result.map((row) => TimeOffEntry.fromMap(row)).toList();
   }
 
   // ------------------------------------------------------------
@@ -61,7 +25,7 @@ class TimeOffDao {
   }
 
   // ------------------------------------------------------------
-  // GET ALL TIME OFF FOR A MONTH (expands date ranges)
+  // GET ALL TIME OFF FOR A MONTH
   // ------------------------------------------------------------
   Future<List<TimeOffEntry>> getAllTimeOffForMonth(int year, int month) async {
     final db = await _db;
@@ -69,64 +33,17 @@ class TimeOffDao {
     final monthStart = DateTime(year, month, 1);
     final monthEnd = DateTime(year, month + 1, 0);
 
-    // Query entries where:
-    // 1. Single-day entries: date is within the month
-    // 2. Multi-day entries: date range overlaps with the month
     final result = await db.query(
       'time_off',
-      where: '''
-        (endDate IS NULL AND date >= ? AND date <= ?) OR
-        (endDate IS NOT NULL AND date <= ? AND endDate >= ?)
-      ''',
+      where: 'date >= ? AND date <= ?',
       whereArgs: [
         monthStart.toIso8601String(),
         monthEnd.toIso8601String(),
-        monthEnd.toIso8601String(),
-        monthStart.toIso8601String(),
       ],
       orderBy: 'date ASC',
     );
 
-    // Expand multi-day entries into individual entries for each day
-    final List<TimeOffEntry> expandedEntries = [];
-    for (final row in result) {
-      final entry = TimeOffEntry.fromMap(row);
-      
-      if (entry.endDate != null && entry.endDate != entry.date) {
-        // Multi-day entry - expand to individual days
-        final dayCount = entry.endDate!.difference(entry.date).inDays + 1;
-        final hoursPerDay = dayCount > 0 ? (entry.hours / dayCount).round() : entry.hours;
-        
-        // Use calendar day iteration to avoid DST issues
-        var currentDate = DateTime(entry.date.year, entry.date.month, entry.date.day);
-        final endDateNormalized = DateTime(entry.endDate!.year, entry.endDate!.month, entry.endDate!.day);
-        
-        while (!currentDate.isAfter(endDateNormalized)) {
-          // Only include days that fall within the requested month
-          if (currentDate.year == year && currentDate.month == month) {
-            expandedEntries.add(TimeOffEntry(
-              id: entry.id,
-              employeeId: entry.employeeId,
-              date: currentDate,
-              endDate: entry.endDate, // Keep reference to original end date
-              timeOffType: entry.timeOffType,
-              hours: hoursPerDay > 0 ? hoursPerDay : 8,
-              vacationGroupId: entry.vacationGroupId,
-              isAllDay: entry.isAllDay,
-              startTime: entry.startTime,
-              endTime: entry.endTime,
-            ));
-          }
-          // Move to next calendar day (avoids DST issues)
-          currentDate = DateTime(currentDate.year, currentDate.month, currentDate.day + 1);
-        }
-      } else {
-        // Single-day entry
-        expandedEntries.add(entry);
-      }
-    }
-
-    return expandedEntries;
+    return result.map((row) => TimeOffEntry.fromMap(row)).toList();
   }
 
   // ------------------------------------------------------------
@@ -176,6 +93,48 @@ class TimeOffDao {
     AutoSyncService.instance.onTimeOffDataChanged();
     
     return result;
+  }
+
+  // ------------------------------------------------------------
+  // INSERT RANGE (one row per day)
+  // ------------------------------------------------------------
+  Future<List<int>> insertTimeOffRange({
+    required int employeeId,
+    required DateTime startDate,
+    required DateTime endDate,
+    required String timeOffType,
+    required int totalHours,
+    required String vacationGroupId,
+    bool isAllDay = true,
+    String? startTime,
+    String? endTime,
+  }) async {
+    final db = await _db;
+    final dayCount = endDate.difference(startDate).inDays + 1;
+    final hoursPerDay = dayCount > 0 ? (totalHours / dayCount).round() : totalHours;
+
+    final List<int> ids = [];
+    var current = DateTime(startDate.year, startDate.month, startDate.day);
+    final endNorm = DateTime(endDate.year, endDate.month, endDate.day);
+
+    while (!current.isAfter(endNorm)) {
+      final id = await db.insert('time_off', {
+        'employeeId': employeeId,
+        'date': current.toIso8601String(),
+        'endDate': null,
+        'timeOffType': timeOffType,
+        'hours': hoursPerDay > 0 ? hoursPerDay : 8,
+        'vacationGroupId': vacationGroupId,
+        'isAllDay': isAllDay ? 1 : 0,
+        'startTime': startTime,
+        'endTime': endTime,
+      });
+      ids.add(id);
+      current = DateTime(current.year, current.month, current.day + 1);
+    }
+
+    AutoSyncService.instance.onTimeOffDataChanged();
+    return ids;
   }
 
   // ------------------------------------------------------------

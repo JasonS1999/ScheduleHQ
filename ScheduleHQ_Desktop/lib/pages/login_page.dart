@@ -44,16 +44,18 @@ class _LoginPageState extends State<LoginPage> {
       );
       if (success) {
         widget.onLoginSuccess();
-      } else {
+      } else if (mounted) {
         setState(() {
           _errorMessage =
               authProvider.lastSignInError ?? 'Login failed. Please try again.';
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = getAuthErrorMessage(e);
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = getAuthErrorMessage(e);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {

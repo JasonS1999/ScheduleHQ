@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1122,35 +1123,67 @@ class FirestoreSyncService {
       final endDateStr = data['endDate'] as String?;
       final endDate = endDateStr != null ? DateTime.parse(endDateStr) : null;
 
-      // Insert into local database as a single entry with date range
+      // Insert into local database
       final timeOffDao = TimeOffDao();
-      final entry = TimeOffEntry(
-        id: null,
-        employeeId: data['employeeLocalId'] as int,
-        date: startDate,
-        endDate: endDate,
-        timeOffType: data['timeOffType'] as String,
-        hours: (data['hours'] as int?) ?? 8,
-        vacationGroupId: data['vacationGroupId'] as String?,
-        isAllDay: (data['isAllDay'] as bool?) ?? true,
-        startTime: data['startTime'] as String?,
-        endTime: data['endTime'] as String?,
-      );
-      final localId = await timeOffDao.insertTimeOff(entry);
 
-      // Update the existing document with approved status and local ID
-      await requestDoc.reference.update({
-        'localId': localId,
-        'status': 'approved',
-        'reviewedAt': FieldValue.serverTimestamp(),
-        'managerUid': _managerUid,
-      });
+      if (endDate != null && endDate != startDate) {
+        // Multi-day: expand to individual day rows
+        final groupId = data['vacationGroupId'] as String? ??
+            DateTime.now().millisecondsSinceEpoch.toString();
+        final ids = await timeOffDao.insertTimeOffRange(
+          employeeId: data['employeeLocalId'] as int,
+          startDate: startDate,
+          endDate: endDate,
+          timeOffType: data['timeOffType'] as String,
+          totalHours: (data['hours'] as int?) ?? 8,
+          vacationGroupId: groupId,
+          isAllDay: (data['isAllDay'] as bool?) ?? true,
+          startTime: data['startTime'] as String?,
+          endTime: data['endTime'] as String?,
+        );
 
-      final dayCount = endDate != null ? endDate.difference(startDate).inDays + 1 : 1;
-      log(
-        'Approved time-off request: $requestId ($dayCount days, local ID: $localId)',
-        name: 'FirestoreSyncService',
-      );
+        // Update the existing document with approved status and first local ID
+        await requestDoc.reference.update({
+          'localId': ids.first,
+          'status': 'approved',
+          'reviewedAt': FieldValue.serverTimestamp(),
+          'managerUid': _managerUid,
+        });
+
+        final dayCount = endDate.difference(startDate).inDays + 1;
+        log(
+          'Approved time-off request: $requestId ($dayCount days, ${ids.length} rows)',
+          name: 'FirestoreSyncService',
+        );
+      } else {
+        // Single day
+        final entry = TimeOffEntry(
+          id: null,
+          employeeId: data['employeeLocalId'] as int,
+          date: startDate,
+          endDate: null,
+          timeOffType: data['timeOffType'] as String,
+          hours: (data['hours'] as int?) ?? 8,
+          vacationGroupId: data['vacationGroupId'] as String?,
+          isAllDay: (data['isAllDay'] as bool?) ?? true,
+          startTime: data['startTime'] as String?,
+          endTime: data['endTime'] as String?,
+        );
+        final localId = await timeOffDao.insertTimeOff(entry);
+
+        // Update the existing document with approved status and local ID
+        await requestDoc.reference.update({
+          'localId': localId,
+          'status': 'approved',
+          'reviewedAt': FieldValue.serverTimestamp(),
+          'managerUid': _managerUid,
+        });
+
+        log(
+          'Approved time-off request: $requestId (1 day, local ID: $localId)',
+          name: 'FirestoreSyncService',
+        );
+      }
     } catch (e) {
       log('Error approving request: $e', name: 'FirestoreSyncService');
       rethrow;
@@ -1320,66 +1353,29 @@ class FirestoreSyncService {
         name: 'FirestoreSyncService',
       );
 
-      // Download time-off - deduplicate by (employeeId, date) and store with endDate
+      // Download time-off - deduplicate by (employeeId, date) using shared helper
       final timeOffSnapshot = await timeOffRef.get();
-      
+
       // Group by employeeId + date to remove duplicates
       final Map<String, Map<String, dynamic>> uniqueTimeOff = {};
       for (final doc in timeOffSnapshot.docs) {
-        final data = doc.data();
-        final employeeLocalId = data['employeeLocalId'] as int?;
-        if (employeeLocalId == null) continue;
-        
-        final dateStr = data['date'] as String;
-        final key = '${employeeLocalId}_$dateStr';
-        
+        final map = _firestoreDocToLocalMap(doc.data());
+        if (map == null) continue;
+
+        final key = '${map['employeeId']}_${doc.data()['date']}';
+
         // Keep only the first entry for each employee+date combination
         if (!uniqueTimeOff.containsKey(key)) {
-          // Use localId if available, otherwise generate one from the key
-          int localId;
-          if (data['localId'] != null) {
-            localId = data['localId'] as int;
-          } else {
-            // Generate a consistent ID from employeeId + date
-            localId = key.hashCode.abs() % 900000 + 100000;
-          }
-          
-          // Convert date to full ISO format for consistency with local storage
-          String fullDateStr = dateStr;
-          if (!fullDateStr.contains('T')) {
-            fullDateStr = DateTime.parse(fullDateStr).toIso8601String();
-          }
-          
-          // Handle endDate for multi-day entries
-          String? fullEndDateStr;
-          final endDateStr = data['endDate'] as String?;
-          if (endDateStr != null) {
-            fullEndDateStr = endDateStr.contains('T') 
-                ? endDateStr 
-                : DateTime.parse(endDateStr).toIso8601String();
-          }
-          
-          uniqueTimeOff[key] = {
-            'id': localId,
-            'employeeId': employeeLocalId,
-            'date': fullDateStr,
-            'endDate': fullEndDateStr,
-            'timeOffType': data['timeOffType'],
-            'hours': data['hours'],
-            'vacationGroupId': data['vacationGroupId'],
-            'isAllDay': (data['isAllDay'] ?? true) ? 1 : 0,
-            'startTime': data['startTime'],
-            'endTime': data['endTime'],
-          };
+          uniqueTimeOff[key] = map;
         }
       }
-      
+
       // Clear existing time-off and insert deduplicated entries
       await db.delete('time_off');
       for (final entry in uniqueTimeOff.values) {
         await db.insert('time_off', entry, conflictAlgorithm: ConflictAlgorithm.replace);
       }
-      
+
       log(
         'Downloaded ${uniqueTimeOff.length} time-off entries (deduplicated from ${timeOffSnapshot.docs.length})',
         name: 'FirestoreSyncService',
@@ -1809,6 +1805,174 @@ class FirestoreSyncService {
       log('Error migrating doc ${doc.id}: $e', name: 'FirestoreSyncService');
       return false;
     }
+  }
+
+  // ============== SHARED HELPERS ==============
+
+  /// Convert a Firestore time-off document to a local SQLite row map.
+  /// Returns null if required fields (employeeLocalId) are missing.
+  /// Always resolves an `id` — uses `localId` from the doc when available,
+  /// otherwise generates a deterministic fallback from (employeeId, date).
+  Map<String, dynamic>? _firestoreDocToLocalMap(Map<String, dynamic> data) {
+    final employeeLocalId = data['employeeLocalId'] as int?;
+    if (employeeLocalId == null) return null;
+
+    final dateStr = data['date'] as String;
+    String fullDateStr = dateStr;
+    if (!fullDateStr.contains('T')) {
+      fullDateStr = DateTime.parse(fullDateStr).toIso8601String();
+    }
+
+    String? fullEndDateStr;
+    final endDateStr = data['endDate'] as String?;
+    if (endDateStr != null) {
+      fullEndDateStr = endDateStr.contains('T')
+          ? endDateStr
+          : DateTime.parse(endDateStr).toIso8601String();
+    }
+
+    // Resolve the local primary key
+    int localId;
+    if (data['localId'] != null) {
+      localId = data['localId'] as int;
+    } else {
+      // Generate a deterministic fallback from (employeeId, date)
+      final key = '${employeeLocalId}_$dateStr';
+      localId = key.hashCode.abs() % 900000 + 100000;
+    }
+
+    return {
+      'id': localId,
+      'employeeId': employeeLocalId,
+      'date': fullDateStr,
+      'endDate': fullEndDateStr,
+      'timeOffType': data['timeOffType'],
+      'hours': data['hours'],
+      'vacationGroupId': data['vacationGroupId'],
+      'isAllDay': (data['isAllDay'] ?? true) ? 1 : 0,
+      'startTime': data['startTime'],
+      'endTime': data['endTime'],
+    };
+  }
+
+  // ============== REAL-TIME TIME-OFF LISTENER (Cloud to Local) ==============
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _timeOffListenerSubscription;
+  Timer? _timeOffDebounce;
+
+  /// Start listening for approved time-off changes in Firestore and sync to local DB.
+  /// [onChanged] is called (debounced) whenever changes are applied locally.
+  void startTimeOffListener(void Function() onChanged) {
+    final timeOffRef = _timeOffRef;
+    if (timeOffRef == null) {
+      log('Cannot start time-off listener - not logged in',
+          name: 'FirestoreSyncService');
+      return;
+    }
+
+    // Don't start a duplicate listener
+    if (_timeOffListenerSubscription != null) {
+      log('Time-off listener already active', name: 'FirestoreSyncService');
+      return;
+    }
+
+    log('Starting real-time time-off listener', name: 'FirestoreSyncService');
+
+    _timeOffListenerSubscription = timeOffRef
+        .where('status', isEqualTo: 'approved')
+        .snapshots()
+        .listen(
+      (snapshot) async {
+        if (snapshot.docChanges.isEmpty) return;
+
+        try {
+          final db = await AppDatabase.instance.db;
+          int changesApplied = 0;
+
+          for (final change in snapshot.docChanges) {
+            final data = change.doc.data();
+            if (data == null) continue;
+
+            if (change.type == DocumentChangeType.removed) {
+              final localId = data['localId'] as int?;
+              if (localId != null) {
+                final deleted = await db.delete(
+                  'time_off',
+                  where: 'id = ?',
+                  whereArgs: [localId],
+                );
+                if (deleted > 0) changesApplied++;
+              }
+            } else {
+              // Added or modified — use shared helper
+              final map = _firestoreDocToLocalMap(data);
+              if (map == null) continue;
+
+              final employeeId = map['employeeId'] as int;
+              final dateStr = map['date'] as String;
+
+              // Check if an entry already exists for this (employeeId, date)
+              final existing = await db.query(
+                'time_off',
+                columns: ['id'],
+                where: 'employeeId = ? AND date = ?',
+                whereArgs: [employeeId, dateStr],
+                limit: 1,
+              );
+
+              if (existing.isNotEmpty) {
+                // Update the existing row to preserve its local id
+                final existingId = existing.first['id'] as int;
+                final updateMap = Map<String, dynamic>.from(map);
+                updateMap.remove('id');
+                await db.update(
+                  'time_off',
+                  updateMap,
+                  where: 'id = ?',
+                  whereArgs: [existingId],
+                );
+              } else {
+                await db.insert(
+                  'time_off',
+                  map,
+                  conflictAlgorithm: ConflictAlgorithm.replace,
+                );
+              }
+              changesApplied++;
+            }
+          }
+
+          if (changesApplied > 0) {
+            log(
+              'Applied $changesApplied time-off changes from cloud',
+              name: 'FirestoreSyncService',
+            );
+            // Debounce the UI callback
+            _timeOffDebounce?.cancel();
+            _timeOffDebounce = Timer(
+              const Duration(milliseconds: 300),
+              onChanged,
+            );
+          }
+        } catch (e) {
+          log('Error processing time-off listener snapshot: $e',
+              name: 'FirestoreSyncService');
+        }
+      },
+      onError: (error) {
+        log('Time-off listener error: $error', name: 'FirestoreSyncService');
+      },
+    );
+  }
+
+  /// Stop listening for time-off changes from Firestore.
+  void stopTimeOffListener() {
+    _timeOffListenerSubscription?.cancel();
+    _timeOffListenerSubscription = null;
+    _timeOffDebounce?.cancel();
+    _timeOffDebounce = null;
+    log('Stopped real-time time-off listener', name: 'FirestoreSyncService');
   }
 }
 
