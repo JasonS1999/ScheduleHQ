@@ -190,22 +190,6 @@ class _NavigationShellState extends State<NavigationShell>
                             color: context.appColors.textSecondary,
                             size: 22,
                           ),
-                          selectedLabelStyle: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.primary,
-                                letterSpacing: 0.3,
-                              ),
-                          unselectedLabelStyle: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w400,
-                                color: context.appColors.textSecondary,
-                                letterSpacing: 0.2,
-                              ),
                           destinations: const [
                             NavigationRailDestination(
                               icon: Icon(Icons.calendar_month_outlined),
