@@ -1665,7 +1665,7 @@ class MonthlyScheduleView extends StatefulWidget {
 }
 
 class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
-  ShiftPlaceholder? _selectedShift;
+  final ValueNotifier<ShiftPlaceholder?> _selectedShift = ValueNotifier(null);
   // Drag & drop state
   DateTime? _dragHoverDay;
   int? _dragHoverEmployeeId;
@@ -1707,6 +1707,7 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
   @override
   void dispose() {
+    _selectedShift.dispose();
     _horizontalScrollController.dispose();
     super.dispose();
   }
@@ -2902,7 +2903,6 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: shiftsForCell.map((shift) {
-                      final isSelected = _selectedShift == shift;
                       final startLabel = _formatTimeOfDay(
                         TimeOfDay(
                           hour: shift.start.hour,
@@ -2923,82 +2923,90 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       // Check if this is a time-off label (not editable/draggable)
                       final isTimeOffLabel = _isLabelOnly(shift.text);
 
-                      // Build the shift chip widget
-                      Widget shiftChip = GestureDetector(
-                        onTap: isTimeOffLabel
-                            ? null
-                            : () {
-                                setState(() {
-                                  _selectedShift = isSelected ? null : shift;
-                                });
-                              },
-                        onDoubleTap: isTimeOffLabel
-                            ? null
-                            : () {
-                                _showEditDialog(context, shift);
-                              },
-                        onSecondaryTapDown: isTimeOffLabel
-                            ? null
-                            : (details) {
-                                setState(() {
-                                  _selectedShift = shift;
-                                });
-                                _showShiftContextMenu(
-                                  context,
-                                  shift,
-                                  details.globalPosition,
-                                );
-                              },
-                        child: _buildShiftChip(
-                          shift,
-                          isSelected && !isTimeOffLabel,
-                          startLabel,
-                          endLabel,
-                          context,
-                        ),
-                      );
+                      // Use ValueListenableBuilder to only rebuild
+                      // this cell when selection changes, not the
+                      // entire grid.
+                      return ValueListenableBuilder<ShiftPlaceholder?>(
+                        valueListenable: _selectedShift,
+                        builder: (context, selectedShift, _) {
+                          final isSelected = selectedShift == shift;
 
-                      // Only wrap in Draggable if not a time-off label
-                      if (isTimeOffLabel) {
-                        return SizedBox(height: 50, child: shiftChip);
-                      }
-
-                      return SizedBox(
-                        height: 50,
-                        child: Draggable<ShiftPlaceholder>(
-                          data: shift,
-                          feedback: Material(
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.primary,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '$startLabel-$endLabel',
-                                style: TextStyle(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimary,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          ),
-                          childWhenDragging: Opacity(
-                            opacity: 0.3,
+                          // Build the shift chip widget
+                          Widget shiftChip = GestureDetector(
+                            onTap: isTimeOffLabel
+                                ? null
+                                : () {
+                                    _selectedShift.value =
+                                        isSelected ? null : shift;
+                                  },
+                            onDoubleTap: isTimeOffLabel
+                                ? null
+                                : () {
+                                    _showEditDialog(context, shift);
+                                  },
+                            onSecondaryTapDown: isTimeOffLabel
+                                ? null
+                                : (details) {
+                                    _selectedShift.value = shift;
+                                    _showShiftContextMenu(
+                                      context,
+                                      shift,
+                                      details.globalPosition,
+                                    );
+                                  },
                             child: _buildShiftChip(
                               shift,
-                              isSelected,
+                              isSelected && !isTimeOffLabel,
                               startLabel,
                               endLabel,
                               context,
                             ),
-                          ),
-                          child: shiftChip,
-                        ),
+                          );
+
+                          // Only wrap in Draggable if not a time-off label
+                          if (isTimeOffLabel) {
+                            return SizedBox(height: 50, child: shiftChip);
+                          }
+
+                          return SizedBox(
+                            height: 50,
+                            child: Draggable<ShiftPlaceholder>(
+                              data: shift,
+                              feedback: Material(
+                                elevation: 4,
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    '$startLabel-$endLabel',
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onPrimary,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              childWhenDragging: Opacity(
+                                opacity: 0.3,
+                                child: _buildShiftChip(
+                                  shift,
+                                  isSelected,
+                                  startLabel,
+                                  endLabel,
+                                  context,
+                                ),
+                              ),
+                              child: shiftChip,
+                            ),
+                          );
+                        },
                       );
                     }).toList(),
                   ),

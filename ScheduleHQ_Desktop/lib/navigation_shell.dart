@@ -26,12 +26,12 @@ class _NavigationShellState extends State<NavigationShell>
   int _index = 0;
   bool _updateAvailable = false;
   bool _checkingUpdate = false;
+  bool _collapsed = false;
 
   late final AnimationController _sidebarController;
   late final Animation<double> _sidebarFade;
   late final Animation<Offset> _sidebarSlide;
 
-  // Use ValueKey to force rebuild when switching tabs
   final List<Widget Function()> _pageBuilders = [
     () => const SchedulePage(),
     () => const RosterPage(),
@@ -83,11 +83,8 @@ class _NavigationShellState extends State<NavigationShell>
           if (hasUpdate) {
             _showUpdateDialog();
           } else {
-            // Show snackbar with status
             final error = StoreUpdateService.lastError;
-
             if (error != null) {
-              // API failed - offer to open Store
               SnackBarHelper.showError(
                 context,
                 'Could not check for updates. Open Microsoft Store?',
@@ -138,10 +135,14 @@ class _NavigationShellState extends State<NavigationShell>
               opacity: _sidebarFade,
               child: SlideTransition(
                 position: _sidebarSlide,
-                child: Container(
-                  width: 220,
+                child: AnimatedContainer(
+                  duration: AppConstants.mediumAnimation,
+                  curve: Curves.easeInOut,
+                  width: _collapsed ? 72 : 220,
                   decoration: BoxDecoration(
-                    color: context.appColors.surfaceVariant,
+                    color: isDark
+                        ? context.appColors.surfaceVariant
+                        : context.appColors.surfaceContainer,
                     border: isDark
                         ? Border(
                             right: BorderSide(
@@ -163,6 +164,8 @@ class _NavigationShellState extends State<NavigationShell>
                     children: [
                       // User info section with avatar
                       _buildUserInfoSection(),
+                      // Collapse toggle
+                      _buildCollapseToggle(),
                       // Padded divider
                       _buildInternalDivider(),
                       // Navigation rail
@@ -171,7 +174,9 @@ class _NavigationShellState extends State<NavigationShell>
                           selectedIndex: _index,
                           onDestinationSelected: (i) =>
                               setState(() => _index = i),
-                          labelType: NavigationRailLabelType.all,
+                          labelType: _collapsed
+                              ? NavigationRailLabelType.none
+                              : NavigationRailLabelType.all,
                           backgroundColor: Colors.transparent,
                           indicatorColor:
                               Theme.of(context).colorScheme.primaryContainer,
@@ -265,7 +270,6 @@ class _NavigationShellState extends State<NavigationShell>
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Update button above bottom navigation
                 if (_updateAvailable || _checkingUpdate)
                   _buildUpdateButtonHorizontal(),
                 NavigationBar(
@@ -325,24 +329,33 @@ class _NavigationShellState extends State<NavigationShell>
                 .substring(0, displayName.length.clamp(0, 2))
                 .toUpperCase();
 
+        final avatar = CircleAvatar(
+          radius: 20,
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          child: Text(
+            initials,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              letterSpacing: 0.5,
+            ),
+          ),
+        );
+
+        if (_collapsed) {
+          return Padding(
+            padding: const EdgeInsets.all(12),
+            child: Center(child: avatar),
+          );
+        }
+
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(AppConstants.defaultPadding),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
+              avatar,
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -384,10 +397,42 @@ class _NavigationShellState extends State<NavigationShell>
     );
   }
 
+  Widget _buildCollapseToggle() {
+    return Align(
+      alignment: _collapsed ? Alignment.center : Alignment.centerRight,
+      child: Padding(
+        padding: EdgeInsets.only(
+          right: _collapsed ? 0 : 8,
+          bottom: 4,
+        ),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: IconButton(
+            onPressed: () => setState(() => _collapsed = !_collapsed),
+            icon: Icon(
+              _collapsed ? Icons.chevron_right : Icons.chevron_left,
+              size: 18,
+              color: context.appColors.textTertiary,
+            ),
+            tooltip: _collapsed ? 'Expand sidebar' : 'Collapse sidebar',
+            style: IconButton.styleFrom(
+              backgroundColor: context.appColors.surfaceContainerHigh,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+              ),
+              padding: EdgeInsets.zero,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildInternalDivider() {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppConstants.defaultPadding,
+      padding: EdgeInsets.symmetric(
+        horizontal: _collapsed ? 8 : AppConstants.defaultPadding,
       ),
       child: Divider(
         height: 1,
@@ -397,51 +442,75 @@ class _NavigationShellState extends State<NavigationShell>
   }
 
   Widget _buildLogoutButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppConstants.defaultPadding,
-        0,
-        AppConstants.defaultPadding,
-        AppConstants.defaultPadding,
-      ),
-      child: Consumer<app_auth.AuthProvider>(
-        builder: (context, authProvider, child) {
-          return SizedBox(
+    return Consumer<app_auth.AuthProvider>(
+      builder: (context, authProvider, child) {
+        final onPressed = authProvider.isLoading
+            ? null
+            : () async {
+                final confirmed = await DialogHelper.showConfirmDialog(
+                  context,
+                  title: 'Sign Out',
+                  message: 'Are you sure you want to sign out?',
+                  confirmText: 'Sign Out',
+                  cancelText: 'Cancel',
+                  icon: Icons.logout,
+                );
+
+                if (confirmed) {
+                  final success = await authProvider.signOut();
+                  if (!success && mounted) {
+                    SnackBarHelper.showError(
+                      context,
+                      'Failed to sign out. Please try again.',
+                    );
+                  }
+                }
+              };
+
+        final icon = authProvider.isLoading
+            ? const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                Icons.logout_rounded,
+                size: 16,
+                color: context.appColors.textSecondary,
+              );
+
+        if (_collapsed) {
+          return Padding(
+            padding: const EdgeInsets.only(
+              bottom: AppConstants.defaultPadding,
+            ),
+            child: IconButton(
+              onPressed: onPressed,
+              icon: icon,
+              tooltip: 'Sign Out',
+              style: IconButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(AppConstants.radiusMedium),
+                  side: BorderSide(color: context.appColors.borderLight),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppConstants.defaultPadding,
+            0,
+            AppConstants.defaultPadding,
+            AppConstants.defaultPadding,
+          ),
+          child: SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: authProvider.isLoading
-                  ? null
-                  : () async {
-                      final confirmed = await DialogHelper.showConfirmDialog(
-                        context,
-                        title: 'Sign Out',
-                        message: 'Are you sure you want to sign out?',
-                        confirmText: 'Sign Out',
-                        cancelText: 'Cancel',
-                        icon: Icons.logout,
-                      );
-
-                      if (confirmed) {
-                        final success = await authProvider.signOut();
-                        if (!success && mounted) {
-                          SnackBarHelper.showError(
-                            context,
-                            'Failed to sign out. Please try again.',
-                          );
-                        }
-                      }
-                    },
-              icon: authProvider.isLoading
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(
-                      Icons.logout_rounded,
-                      size: 16,
-                      color: context.appColors.textSecondary,
-                    ),
+              onPressed: onPressed,
+              icon: icon,
               label: Text(
                 authProvider.isLoading ? 'Signing out...' : 'Sign Out',
                 style: TextStyle(
@@ -460,14 +529,48 @@ class _NavigationShellState extends State<NavigationShell>
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildUpdateButton() {
     final appColors = context.appColors;
+
+    if (_collapsed) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          vertical: AppConstants.smallPadding,
+        ),
+        child: _checkingUpdate
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : _updateAvailable
+                ? IconButton(
+                    onPressed: _showUpdateDialog,
+                    icon: const Icon(Icons.system_update, size: 18),
+                    tooltip: 'Update Available',
+                    style: IconButton.styleFrom(
+                      backgroundColor: appColors.successForeground,
+                      foregroundColor: appColors.textOnSuccess,
+                    ),
+                  )
+                : IconButton(
+                    onPressed: () =>
+                        _checkForUpdates(showDialogIfAvailable: true),
+                    icon: Icon(
+                      Icons.verified_outlined,
+                      size: 16,
+                      color: appColors.textTertiary,
+                    ),
+                    tooltip: 'v${StoreUpdateService.currentVersion}',
+                  ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -607,7 +710,6 @@ class _StoreUpdateDialog extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Current version info
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -644,10 +746,7 @@ class _StoreUpdateDialog extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // Instructions
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
