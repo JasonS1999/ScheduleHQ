@@ -91,7 +91,10 @@ class StoreUpdateService {
           if (\$package) {
             # App is installed as MSIX - check Store for updates using winget
             \$wingetResult = winget upgrade --id "9NL0BML96F0F" --accept-source-agreements 2>&1
-            if (\$wingetResult -match "available|upgrade") {
+            \$resultString = \$wingetResult | Out-String
+            if (\$resultString -match "No applicable upgrade|No installed package|no package found") {
+              Write-Output "UP_TO_DATE"
+            } elseif (\$resultString -match "9NL0BML96F0F" -and \$resultString -match "\d+\.\d+\.\d+.*\d+\.\d+\.\d+") {
               Write-Output "UPDATE_AVAILABLE"
             } else {
               Write-Output "UP_TO_DATE"
