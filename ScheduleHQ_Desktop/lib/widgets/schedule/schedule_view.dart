@@ -27,6 +27,8 @@ import '../../utils/color_helpers.dart';
 import '../../services/schedule_pdf_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/notification_sender_service.dart';
+import '../../utils/dialog_helper.dart';
+import 'time_off_cell_dialog.dart';
 
 // Custom intents for keyboard shortcuts
 class CopyIntent extends Intent {
@@ -153,6 +155,8 @@ class _ScheduleViewState extends State<ScheduleView> {
             start: DateTime(e.date.year, e.date.month, e.date.day, 0, 0),
             end: DateTime(e.date.year, e.date.month, e.date.day, 23, 59),
             text: label,
+            timeOffEntryId: e.id,
+            vacationGroupId: e.vacationGroupId,
           );
         })
         .toList();
@@ -1472,6 +1476,206 @@ class _ScheduleViewState extends State<ScheduleView> {
         }
         await _refreshShifts();
       },
+      onAddTimeOff: (employeeId, day) async {
+        final employee = _employees.cast<Employee?>().firstWhere(
+          (e) => e?.id == employeeId,
+          orElse: () => null,
+        );
+        if (employee == null || !mounted) return;
+
+        final result = await showDialog<Map<String, dynamic>>(
+          context: context,
+          builder: (ctx) => TimeOffCellDialog(
+            employeeName: employee.displayName,
+            date: day,
+          ),
+        );
+        if (result == null || !mounted) return;
+
+        final type = result['timeOffType'] as String;
+
+        if (type == 'vacation') {
+          // Vacation: insert a row per day using date range
+          final startDate = result['startDate'] as DateTime;
+          final endDate = result['endDate'] as DateTime;
+          final groupId = 'vac_${employeeId}_${startDate.millisecondsSinceEpoch}';
+
+          // Check for existing time off in range
+          final existing = await _timeOffDao.getTimeOffInRange(employeeId, startDate, endDate);
+          if (existing.isNotEmpty && mounted) {
+            final proceed = await DialogHelper.showConfirmDialog(
+              context,
+              title: 'Time Off Conflict',
+              message: '${employee.displayName} already has time off during this period. Add anyway?',
+              confirmText: 'Add',
+              icon: Icons.warning_amber_rounded,
+            );
+            if (!proceed) return;
+          }
+
+          final ids = await _timeOffDao.insertTimeOffRange(
+            employeeId: employeeId,
+            startDate: startDate,
+            endDate: endDate,
+            timeOffType: type,
+            totalHours: (endDate.difference(startDate).inDays + 1) * 8,
+            vacationGroupId: groupId,
+          );
+
+          // Sync each entry
+          for (final id in ids) {
+            final entry = await _timeOffDao.getById(id);
+            if (entry != null) {
+              try {
+                await FirestoreSyncService.instance.syncTimeOffEntry(entry, employee);
+              } catch (e) {
+                debugPrint('Failed to sync vacation entry to Firestore: $e');
+              }
+            }
+          }
+        } else {
+          // PTO or Requested: single-day insert
+          final existing = await _timeOffDao.getTimeOffInRange(employeeId, day, day);
+          if (existing.isNotEmpty && mounted) {
+            final proceed = await DialogHelper.showConfirmDialog(
+              context,
+              title: 'Time Off Conflict',
+              message: '${employee.displayName} already has time off on this date. Add anyway?',
+              confirmText: 'Add',
+              icon: Icons.warning_amber_rounded,
+            );
+            if (!proceed) return;
+          }
+
+          final entry = TimeOffEntry(
+            id: null,
+            employeeId: employeeId,
+            date: day,
+            timeOffType: type,
+            hours: result['hours'] as int,
+            isAllDay: result['isAllDay'] as bool,
+            startTime: result['startTime'] as String?,
+            endTime: result['endTime'] as String?,
+          );
+
+          final localId = await _timeOffDao.insertTimeOff(entry);
+          try {
+            await FirestoreSyncService.instance.syncTimeOffEntry(
+              entry.copyWith(id: localId),
+              employee,
+            );
+          } catch (e) {
+            debugPrint('Failed to sync time-off to Firestore: $e');
+          }
+        }
+
+        await _refreshShifts();
+      },
+      onEditTimeOff: (timeOffEntryId) async {
+        final entry = await _timeOffDao.getById(timeOffEntryId);
+        if (entry == null || !mounted) return;
+
+        final employee = _employees.cast<Employee?>().firstWhere(
+          (e) => e?.id == entry.employeeId,
+          orElse: () => null,
+        );
+        if (employee == null || !mounted) return;
+
+        final result = await showDialog<Map<String, dynamic>>(
+          context: context,
+          builder: (ctx) => TimeOffCellDialog(
+            employeeName: employee.displayName,
+            date: entry.date,
+            existingEntry: entry,
+          ),
+        );
+        if (result == null || !mounted) return;
+
+        final updated = entry.copyWith(
+          timeOffType: result['timeOffType'] as String,
+          hours: result['hours'] as int,
+          isAllDay: result['isAllDay'] as bool,
+          startTime: result['startTime'] as String?,
+          endTime: result['endTime'] as String?,
+        );
+
+        await _timeOffDao.updateTimeOff(updated);
+        try {
+          await FirestoreSyncService.instance.syncTimeOffEntry(updated, employee);
+        } catch (e) {
+          debugPrint('Failed to sync time-off update to Firestore: $e');
+        }
+        await _refreshShifts();
+      },
+      onDeleteTimeOff: (timeOffEntryId, vacationGroupId) async {
+        if (!mounted) return;
+
+        if (vacationGroupId != null) {
+          // Multi-day vacation — ask user what to delete
+          final choice = await DialogHelper.showChoiceDialog(
+            context,
+            title: 'Delete Time Off',
+            message: 'This is part of a multi-day vacation block.',
+            options: ['Delete this day only', 'Delete entire vacation block'],
+            icon: Icons.delete,
+          );
+
+          if (choice == null || !mounted) return;
+
+          if (choice == 0) {
+            // Delete single day
+            final entry = await _timeOffDao.getById(timeOffEntryId);
+            if (entry != null) {
+              try {
+                await FirestoreSyncService.instance.deleteTimeOffEntry(
+                  entry.employeeId,
+                  timeOffEntryId,
+                );
+              } catch (e) {
+                debugPrint('Failed to sync time-off delete to Firestore: $e');
+              }
+              await _timeOffDao.deleteTimeOff(timeOffEntryId);
+            }
+          } else if (choice == 1) {
+            // Delete entire group
+            final groupEntries = await _timeOffDao.getEntriesByGroup(vacationGroupId);
+            for (final e in groupEntries) {
+              try {
+                await FirestoreSyncService.instance.deleteTimeOffEntry(
+                  e.employeeId,
+                  e.id!,
+                );
+              } catch (err) {
+                debugPrint('Failed to sync group entry delete to Firestore: $err');
+              }
+            }
+            await _timeOffDao.deleteVacationGroup(vacationGroupId);
+          }
+        } else {
+          // Single-day time off — confirm delete
+          final confirmed = await DialogHelper.showDeleteConfirmDialog(
+            context,
+            title: 'Delete Time Off',
+            message: 'Are you sure you want to delete this time off entry?',
+          );
+          if (!confirmed || !mounted) return;
+
+          final entry = await _timeOffDao.getById(timeOffEntryId);
+          if (entry != null) {
+            try {
+              await FirestoreSyncService.instance.deleteTimeOffEntry(
+                entry.employeeId,
+                timeOffEntryId,
+              );
+            } catch (e) {
+              debugPrint('Failed to sync time-off delete to Firestore: $e');
+            }
+            await _timeOffDao.deleteTimeOff(timeOffEntryId);
+          }
+        }
+
+        await _refreshShifts();
+      },
     );
   }
 
@@ -1640,6 +1844,10 @@ class MonthlyScheduleView extends StatefulWidget {
   final bool clipboardAvailable;
   final int shiftRunnerRefreshKey;
   final bool showRunners;
+  final void Function(int employeeId, DateTime date)? onAddTimeOff;
+  final void Function(int timeOffEntryId)? onEditTimeOff;
+  final void Function(int timeOffEntryId, String? vacationGroupId)?
+      onDeleteTimeOff;
 
   const MonthlyScheduleView({
     super.key,
@@ -1658,6 +1866,9 @@ class MonthlyScheduleView extends StatefulWidget {
     this.clipboardAvailable = false,
     this.shiftRunnerRefreshKey = 0,
     this.showRunners = true,
+    this.onAddTimeOff,
+    this.onEditTimeOff,
+    this.onDeleteTimeOff,
   });
 
   @override
@@ -2075,6 +2286,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       items: [
         const PopupMenuItem(value: 'add', child: Text('Add Shift')),
         const PopupMenuItem(value: 'off', child: Text('Mark as Off')),
+        const PopupMenuItem(
+          value: 'addTimeOff',
+          child: Text('Add Time Off'),
+        ),
         if (widget.clipboardAvailable)
           const PopupMenuItem(value: 'paste', child: Text('Paste Shift')),
       ],
@@ -2116,6 +2331,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       widget.onUpdateShift!(tempShift, offShift.start, offShift.end);
     } else if (result == 'paste') {
       widget.onPasteTarget?.call(day, employeeId);
+    } else if (result == 'addTimeOff') {
+      widget.onAddTimeOff?.call(employeeId, day);
     }
   }
 
@@ -2210,6 +2427,37 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       if (widget.onUpdateShift != null) {
         widget.onUpdateShift!(shift, shift.start, shift.start);
       }
+    }
+  }
+
+  void _showTimeOffContextMenu(
+    BuildContext context,
+    ShiftPlaceholder shift,
+    Offset position,
+  ) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: const [
+        PopupMenuItem(value: 'edit', child: Text('Edit Time Off')),
+        PopupMenuItem(value: 'delete', child: Text('Delete Time Off')),
+      ],
+    );
+
+    if (!mounted || !context.mounted) return;
+
+    if (result == 'edit') {
+      widget.onEditTimeOff?.call(shift.timeOffEntryId!);
+    } else if (result == 'delete') {
+      widget.onDeleteTimeOff?.call(
+        shift.timeOffEntryId!,
+        shift.vacationGroupId,
+      );
     }
   }
 
@@ -2945,7 +3193,15 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                     _showEditDialog(context, shift);
                                   },
                             onSecondaryTapDown: isTimeOffLabel
-                                ? null
+                                ? (shift.timeOffEntryId != null
+                                    ? (details) {
+                                        _showTimeOffContextMenu(
+                                          context,
+                                          shift,
+                                          details.globalPosition,
+                                        );
+                                      }
+                                    : null)
                                 : (details) {
                                     _selectedShift.value = shift;
                                     _showShiftContextMenu(
@@ -3643,6 +3899,8 @@ class ShiftPlaceholder {
   final DateTime end;
   final String text;
   final String? notes; // Shift-specific notes
+  final int? timeOffEntryId; // Database ID of the TimeOffEntry (null for shifts)
+  final String? vacationGroupId; // Links multi-day vacation blocks
 
   ShiftPlaceholder({
     this.id,
@@ -3651,6 +3909,8 @@ class ShiftPlaceholder {
     required this.end,
     required this.text,
     this.notes,
+    this.timeOffEntryId,
+    this.vacationGroupId,
   });
 
   @override
@@ -3660,12 +3920,17 @@ class ShiftPlaceholder {
         other.id == id &&
         other.employeeId == employeeId &&
         other.start == start &&
-        other.end == end;
+        other.end == end &&
+        other.timeOffEntryId == timeOffEntryId;
   }
 
   @override
   int get hashCode =>
-      id.hashCode ^ employeeId.hashCode ^ start.hashCode ^ end.hashCode;
+      id.hashCode ^
+      employeeId.hashCode ^
+      start.hashCode ^
+      end.hashCode ^
+      timeOffEntryId.hashCode;
 }
 
 /// Dialog for selecting a shift runner in monthly view (same as weekly)

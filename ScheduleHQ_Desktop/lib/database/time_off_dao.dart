@@ -16,6 +16,20 @@ class TimeOffDao {
   }
 
   // ------------------------------------------------------------
+  // GET TIME OFF BY ID
+  // ------------------------------------------------------------
+  Future<TimeOffEntry?> getById(int id) async {
+    final db = await _db;
+    final result = await db.query(
+      'time_off',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    if (result.isEmpty) return null;
+    return TimeOffEntry.fromMap(result.first);
+  }
+
+  // ------------------------------------------------------------
   // GET ALL TIME OFF RAW (without expanding, for editing/deletion)
   // ------------------------------------------------------------
   Future<List<TimeOffEntry>> getAllTimeOffRaw() async {
