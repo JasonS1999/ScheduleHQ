@@ -2,6 +2,66 @@ import Foundation
 import FirebaseFirestore
 import Combine
 
+/// A group of related time off entries (single entry, or multi-day vacation sharing a vacationGroupId)
+struct TimeOffGroup: Identifiable, Equatable {
+    let entries: [TimeOffEntry]
+
+    var id: String {
+        entries.first?.vacationGroupId ?? entries.first?.id ?? UUID().uuidString
+    }
+
+    /// The representative entry (first chronologically)
+    var primaryEntry: TimeOffEntry { entries.first! }
+
+    var timeOffType: TimeOffType { primaryEntry.timeOffType }
+    var status: TimeOffRequestStatus { primaryEntry.status }
+    var isMultiDay: Bool { entries.count > 1 }
+    var dayCount: Int { entries.count }
+    var startDate: Date { entries.map(\.date).min()! }
+    var endDate: Date { entries.map(\.date).max()! }
+    var notes: String? { primaryEntry.notes }
+    var autoApproved: Bool { primaryEntry.autoApproved }
+    var denialReason: String? { primaryEntry.denialReason }
+
+    var formattedStartDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: startDate)
+    }
+
+    var formattedEndDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: endDate)
+    }
+
+    var formattedRequestedAt: String? {
+        primaryEntry.formattedRequestedAt
+    }
+
+    /// Groups a flat list of entries by vacationGroupId. Entries without a group become their own group.
+    static func grouped(from entries: [TimeOffEntry]) -> [TimeOffGroup] {
+        var groups: [String: [TimeOffEntry]] = [:]
+        var ungrouped: [TimeOffEntry] = []
+
+        for entry in entries {
+            if let groupId = entry.vacationGroupId {
+                groups[groupId, default: []].append(entry)
+            } else {
+                ungrouped.append(entry)
+            }
+        }
+
+        var result: [TimeOffGroup] = groups.values.map { groupEntries in
+            TimeOffGroup(entries: groupEntries.sorted { $0.date < $1.date })
+        }
+
+        result += ungrouped.map { TimeOffGroup(entries: [$0]) }
+
+        return result.sorted { $0.startDate < $1.startDate }
+    }
+}
+
 /// Manages time off requests and PTO/vacation tracking
 /// All time off data is stored in the unified `timeOff` collection with status field
 final class TimeOffManager: ObservableObject {
@@ -60,6 +120,31 @@ final class TimeOffManager: ObservableObject {
         return approvedRequests.filter { $0.date >= today }
             .sorted { $0.date < $1.date }
     }
+
+    // MARK: - Grouped Computed Properties
+
+    /// Pending requests grouped by vacationGroupId
+    var pendingGroups: [TimeOffGroup] {
+        TimeOffGroup.grouped(from: pendingRequests)
+    }
+
+    /// Approved requests grouped by vacationGroupId
+    var approvedGroups: [TimeOffGroup] {
+        TimeOffGroup.grouped(from: approvedRequests)
+    }
+
+    /// Denied requests grouped by vacationGroupId
+    var deniedGroups: [TimeOffGroup] {
+        let entries = allTimeOff.filter { $0.status == .denied }.sorted { $0.date > $1.date }
+        return TimeOffGroup.grouped(from: entries)
+    }
+
+    /// Upcoming approved groups (from today onwards)
+    var upcomingGroups: [TimeOffGroup] {
+        let today = Date().startOfDay
+        let upcoming = approvedRequests.filter { $0.date >= today }
+        return TimeOffGroup.grouped(from: upcoming)
+    }
     
     /// Current trimester summary
     var currentTrimesterSummary: TrimesterSummary? {
@@ -111,10 +196,13 @@ final class TimeOffManager: ObservableObject {
                     
                     // Filter by employee ID (handles both employeeId and employeeLocalId fields)
                     let allEntries = documents.compactMap { doc -> TimeOffEntry? in
-                        guard let entry = try? doc.data(as: TimeOffEntry.self) else {
+                        guard var entry = try? doc.data(as: TimeOffEntry.self) else {
                             print("TimeOffManager: Failed to decode document: \(doc.documentID)")
                             return nil
                         }
+                        // Explicitly set documentId from Firestore document reference
+                        // (custom decoder can't rely on @DocumentID property wrapper)
+                        entry.documentId = doc.documentID
                         // employeeId in the model handles both field names via the decoder
                         return entry.employeeId == employeeId ? entry : nil
                     }
@@ -245,32 +333,119 @@ final class TimeOffManager: ObservableObject {
         
         alertManager.showSuccess("Request Submitted", message: message)
     }
-    
+
+    /// Submit a multi-day time off range, creating one Firestore document per calendar day
+    /// with a shared vacationGroupId (matches Desktop expansion pattern)
+    func submitMultiDayTimeOff(
+        employeeId: Int,
+        employeeEmail: String,
+        employeeName: String,
+        startDate: Date,
+        endDate: Date,
+        timeOffType: TimeOffType,
+        vacationGroupId: String,
+        notes: String?
+    ) async throws {
+        guard let managerUid = authManager.managerUid else {
+            throw TimeOffError.notAuthenticated
+        }
+
+        let calendar = Calendar.current
+        let employeeUid = authManager.appUser?.id
+        let normalizedStart = calendar.startOfDay(for: startDate)
+        let normalizedEnd = calendar.startOfDay(for: endDate)
+
+        // Check for duplicates across the entire range first
+        var checkDate = normalizedStart
+        while checkDate <= normalizedEnd {
+            let existingEntry = allTimeOff.first { entry in
+                calendar.startOfDay(for: entry.date) == checkDate && entry.status != .denied
+            }
+            if let existing = existingEntry {
+                throw TimeOffError.duplicateRequest(
+                    date: existing.formattedDate,
+                    type: existing.timeOffType.displayName
+                )
+            }
+            checkDate = calendar.date(byAdding: .day, value: 1, to: checkDate)!
+        }
+
+        // Create one document per day
+        let baseTimestamp = Int(Date().timeIntervalSince1970 * 1000) % 1000000
+        var currentDate = normalizedStart
+        var dayIndex = 0
+        var firstAutoApproved: Bool? = nil
+
+        while currentDate <= normalizedEnd {
+            let shouldAutoApprove = await checkAutoApproval(
+                for: currentDate, timeOffType: timeOffType, managerUid: managerUid
+            )
+            if firstAutoApproved == nil { firstAutoApproved = shouldAutoApprove }
+
+            let localId = baseTimestamp + dayIndex
+
+            let entry = TimeOffEntry(
+                employeeId: employeeId,
+                employeeEmail: employeeEmail,
+                employeeName: employeeName,
+                date: currentDate,
+                timeOffType: timeOffType,
+                hours: 8,
+                vacationGroupId: vacationGroupId,
+                isAllDay: true,
+                status: shouldAutoApprove ? .approved : .pending,
+                autoApproved: shouldAutoApprove,
+                requestedAt: Date(),
+                notes: notes
+            )
+
+            var firestoreData = entry.toFirestoreData(
+                employeeUid: employeeUid, managerUid: managerUid
+            )
+            firestoreData["localId"] = localId
+
+            try await db.collection("managers")
+                .document(managerUid)
+                .collection("timeOff")
+                .document("\(employeeId)_\(localId)")
+                .setData(firestoreData)
+
+            currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
+            dayIndex += 1
+        }
+
+        let message = (firstAutoApproved == true)
+            ? "Your vacation has been auto-approved!"
+            : "Your vacation request has been submitted for review."
+        alertManager.showSuccess("Vacation Submitted", message: message)
+    }
+
     /// Check if a request should be auto-approved (fewer than 2 others off that day)
     /// Fetches all entries for the date and filters in-memory to avoid composite index requirement
     private func checkAutoApproval(for date: Date, timeOffType: TimeOffType, managerUid: String) async -> Bool {
-        // Only auto-approve PTO and Day Off types
-        guard timeOffType == .pto || timeOffType == .dayOff else {
+        // Only auto-approve PTO and Requested Off types
+        guard timeOffType == .pto || timeOffType == .requested else {
             return false
         }
-        
+
         do {
-            let requestDate = Calendar.current.startOfDay(for: date)
-            let nextDay = Calendar.current.date(byAdding: .day, value: 1, to: requestDate)!
-            
-            // Fetch all time off entries for this date (no status filter to avoid index)
+            // Format date as "YYYY-MM-DD" string to match Firestore storage format
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let dateString = dateFormatter.string(from: Calendar.current.startOfDay(for: date))
+
+            // Query by exact date string match
             let snapshot = try await db.collection("managers")
                 .document(managerUid)
                 .collection("timeOff")
-                .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: requestDate))
-                .whereField("date", isLessThan: Timestamp(date: nextDay))
+                .whereField("date", isEqualTo: dateString)
                 .getDocuments()
-            
+
             // Filter in-memory for approved entries only
             let approvedCount = snapshot.documents.filter { doc in
                 (doc.data()["status"] as? String) == "approved"
             }.count
-            
+
             // Auto-approve if fewer than 2 others are approved off
             return approvedCount < 2
         } catch {

@@ -32,6 +32,9 @@ final class LeaderboardManager: ObservableObject {
     @Published var selectedMetric: LeaderboardMetric = .oepe
     
     private init() {}
+
+    /// Whether shift types have been loaded (avoids redundant fetches)
+    private var shiftTypesLoaded = false
     
     // MARK: - Date Range Calculations
     
@@ -185,10 +188,12 @@ final class LeaderboardManager: ObservableObject {
     /// Fetch shift types from managerSettings document
     @MainActor
     private func fetchShiftTypes(managerUid: String) async {
+        guard !shiftTypesLoaded else { return }
+
         do {
             // Shift types are stored in managerSettings collection, not managers
             let docRef = db.collection("managerSettings").document(managerUid)
-            let snapshot = try await docRef.getDocument(source: .server)
+            let snapshot = try await docRef.getDocument(source: .default)
             
             guard let data = snapshot.data(),
                   let shiftTypesData = data["shiftTypes"] as? [[String: Any]] else {
@@ -206,6 +211,7 @@ final class LeaderboardManager: ObservableObject {
                 }
             }
             shiftTypes = types
+            shiftTypesLoaded = true
             print("LeaderboardManager: Loaded \(types.count - 1) shift types: \(types.map { $0.label })")
             
         } catch {
@@ -217,50 +223,62 @@ final class LeaderboardManager: ObservableObject {
         let (startDate, endDate) = dateRange()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        
+
         var dates: [String] = []
         var currentDate = startDate
         let calendar = Calendar.current
-        
+
         while currentDate <= endDate {
             dates.append(dateFormatter.string(from: currentDate))
             currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? endDate.addingTimeInterval(86400)
         }
-        
-        var allEntries: [ShiftManagerEntry] = []
-        
-        for dateStr in dates {
-            do {
-                // Fetch shift runners for this date to get employeeId/employeeUid
-                let shiftRunners = try await fetchShiftRunners(managerUid: managerUid, date: dateStr)
-                
-                let docRef = db.collection("managers")
-                    .document(managerUid)
-                    .collection("shiftManagerReports")
-                    .document(dateStr)
-                
-                let snapshot = try await docRef.getDocument(source: .server)
-                
-                guard snapshot.exists, let data = snapshot.data() else { continue }
-                
-                let storeNsn = data["location"] as? String ?? ""
-                
-                if let entriesData = data["entries"] as? [[String: Any]] {
-                    for entryData in entriesData {
-                        if var entry = parseEntry(from: entryData, shiftRunners: shiftRunners) {
-                            entry.storeNsn = storeNsn
-                            entry.reportDate = dateStr
-                            entry.managerUid = managerUid
-                            allEntries.append(entry)
-                        }
-                    }
+
+        // Fetch all dates in parallel using TaskGroup
+        return try await withThrowingTaskGroup(of: [ShiftManagerEntry].self) { group in
+            for dateStr in dates {
+                group.addTask {
+                    try await self.fetchEntriesForDate(managerUid: managerUid, date: dateStr)
                 }
-            } catch {
-                print("LeaderboardManager: Error fetching \(dateStr): \(error)")
+            }
+
+            var allEntries: [ShiftManagerEntry] = []
+            for try await dateEntries in group {
+                allEntries.append(contentsOf: dateEntries)
+            }
+            return allEntries
+        }
+    }
+
+    /// Fetch shift runners and report entries for a single date in parallel
+    private func fetchEntriesForDate(managerUid: String, date: String) async throws -> [ShiftManagerEntry] {
+        // Fetch shift runners and report document in parallel
+        async let shiftRunners = fetchShiftRunners(managerUid: managerUid, date: date)
+        async let reportSnapshot = db.collection("managers")
+            .document(managerUid)
+            .collection("shiftManagerReports")
+            .document(date)
+            .getDocument(source: .default)
+
+        let runners = try await shiftRunners
+        let snapshot = try await reportSnapshot
+
+        guard snapshot.exists, let data = snapshot.data() else { return [] }
+
+        let storeNsn = data["location"] as? String ?? ""
+        var entries: [ShiftManagerEntry] = []
+
+        if let entriesData = data["entries"] as? [[String: Any]] {
+            for entryData in entriesData {
+                if var entry = parseEntry(from: entryData, shiftRunners: runners) {
+                    entry.storeNsn = storeNsn
+                    entry.reportDate = date
+                    entry.managerUid = managerUid
+                    entries.append(entry)
+                }
             }
         }
-        
-        return allEntries
+
+        return entries
     }
     
     /// Fetch shift runners for a specific date to get employeeId/employeeUid
@@ -274,7 +292,7 @@ final class LeaderboardManager: ObservableObject {
         // Query runners for this date (document IDs are formatted as {date}_{shiftType})
         let snapshot = try await runnersRef
             .whereField("date", isEqualTo: date)
-            .getDocuments(source: .server)
+            .getDocuments(source: .default)
         
         for doc in snapshot.documents {
             let data = doc.data()

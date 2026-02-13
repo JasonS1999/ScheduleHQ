@@ -8,7 +8,7 @@ struct TimeOffRequestSheet: View {
     let editingEntry: TimeOffEntry?
     var isEditing: Bool { editingEntry != nil }
     
-    @State private var requestType: TimeOffType = .dayOff
+    @State private var requestType: TimeOffType = .requested
     @State private var selectedDate = Date()
     @State private var endDate = Date()
     @State private var ptoHours: Int = 9
@@ -21,7 +21,7 @@ struct TimeOffRequestSheet: View {
     @ObservedObject private var timeOffManager = TimeOffManager.shared
     
     // Supported request types for employees - Day Off first
-    private let availableTypes: [TimeOffType] = [.dayOff, .pto, .vacation]
+    private let availableTypes: [TimeOffType] = [.requested, .pto, .vacation]
     
     init(editingEntry: TimeOffEntry? = nil) {
         self.editingEntry = editingEntry
@@ -139,10 +139,7 @@ struct TimeOffRequestSheet: View {
             let components = calendar.dateComponents([.day], from: selectedDate, to: endDate)
             let days = (components.day ?? 0) + 1
             return days * 8
-        case .dayOff:
-            // Day off doesn't track hours
-            return 0
-        default:
+        case .requested:
             return 8
         }
     }
@@ -161,6 +158,7 @@ struct TimeOffRequestSheet: View {
                 employeeEmail: employee.email ?? "",
                 employeeName: employee.name,
                 date: selectedDate,
+                endDate: requestType == .vacation ? endDate : nil,
                 timeOffType: requestType,
                 hours: calculatedHours,
                 isAllDay: true,

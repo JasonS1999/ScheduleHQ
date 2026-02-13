@@ -107,12 +107,16 @@ struct TimeOffRequest: Codable, Identifiable, Equatable {
         
         if let timestamp = try? container.decode(Timestamp.self, forKey: .date) {
             date = timestamp.dateValue()
+        } else if let dateString = try? container.decode(String.self, forKey: .date) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            date = formatter.date(from: dateString) ?? Date()
         } else {
-            date = try container.decode(Date.self, forKey: .date)
+            date = try container.decodeIfPresent(Date.self, forKey: .date) ?? Date()
         }
-        
+
         let typeString = try container.decode(String.self, forKey: .timeOffType)
-        timeOffType = TimeOffType(rawValue: typeString) ?? .dayOff
+        timeOffType = TimeOffType.fromRawValue(typeString)
         
         hours = try container.decodeIfPresent(Int.self, forKey: .hours) ?? 8
         isAllDay = try container.decodeIfPresent(Bool.self, forKey: .isAllDay) ?? true
@@ -187,17 +191,22 @@ struct TimeOffRequest: Codable, Identifiable, Equatable {
     
     /// Convert to dictionary for Firestore upload
     func toFirestoreData() -> [String: Any] {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateString = dateFormatter.string(from: date)
+
         var data: [String: Any] = [
-            "employeeId": employeeId,
+            "employeeLocalId": employeeId,
             "employeeEmail": employeeEmail,
             "employeeName": employeeName,
-            "date": Timestamp(date: date),
+            "date": dateString,
             "timeOffType": timeOffType.rawValue,
             "hours": hours,
             "isAllDay": isAllDay,
             "status": status.rawValue,
             "autoApproved": autoApproved,
-            "requestedAt": Timestamp(date: requestedAt)
+            "requestedAt": Timestamp(date: requestedAt),
+            "updatedAt": Timestamp(date: Date())
         ]
         
         if let startTime = startTime { data["startTime"] = startTime }

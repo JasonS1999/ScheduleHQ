@@ -404,9 +404,7 @@ struct TimeOffTypeBadge: View {
         switch type {
         case .pto: return AppTheme.Colors.pto
         case .vacation: return AppTheme.Colors.vacation
-        case .sick: return AppTheme.Colors.sick
-        case .dayOff: return AppTheme.Colors.dayOff
-        case .requestedOff: return AppTheme.Colors.requestedOff
+        case .requested: return AppTheme.Colors.requested
         }
     }
     

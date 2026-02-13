@@ -17,40 +17,44 @@ struct LeaderboardView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // View toggle
-                Picker("View", selection: $selectedTab) {
-                    Text("My Metrics").tag(0)
-                    Text("Leaderboard").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, AppTheme.Spacing.lg)
-                .padding(.top, AppTheme.Spacing.md)
-                
-                // Filters
-                filtersSection
-                
-                Divider()
-                    .padding(.top, AppTheme.Spacing.sm)
-                
-                // Content
-                Group {
-                    if leaderboardManager.isLoading {
-                        loadingView
-                    } else if let errorMessage = leaderboardManager.errorMessage {
-                        errorView(message: errorMessage)
-                    } else if leaderboardManager.aggregatedMetrics.isEmpty {
-                        emptyStateView
-                    } else {
-                        if selectedTab == 0 {
-                            MyMetricsView(leaderboardManager: leaderboardManager)
+            ZStack {
+                AppBackgroundGradient()
+                    .ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    // View toggle
+                    Picker("View", selection: $selectedTab) {
+                        Text("My Metrics").tag(0)
+                        Text("Leaderboard").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, AppTheme.Spacing.lg)
+                    .padding(.top, AppTheme.Spacing.md)
+
+                    // Filters
+                    filtersSection
+
+                    Divider()
+                        .padding(.top, AppTheme.Spacing.sm)
+
+                    // Content
+                    Group {
+                        if leaderboardManager.isLoading {
+                            loadingView
+                        } else if let errorMessage = leaderboardManager.errorMessage {
+                            errorView(message: errorMessage)
+                        } else if leaderboardManager.aggregatedMetrics.isEmpty {
+                            emptyStateView
                         } else {
-                            MetricLeaderboardView(leaderboardManager: leaderboardManager)
+                            if selectedTab == 0 {
+                                MyMetricsView(leaderboardManager: leaderboardManager)
+                            } else {
+                                MetricLeaderboardView(leaderboardManager: leaderboardManager)
+                            }
                         }
                     }
                 }
             }
-            .background(AppTheme.Colors.backgroundGrouped)
             .navigationTitle("Performance")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -68,8 +72,9 @@ struct LeaderboardView: View {
                 }
             }
             .task {
-                await EmployeeCache.shared.loadEmployees()
-                await leaderboardManager.fetchData()
+                async let employeeLoad: () = EmployeeCache.shared.loadEmployees()
+                async let dataFetch: () = leaderboardManager.fetchData()
+                _ = await (employeeLoad, dataFetch)
             }
             .onChange(of: leaderboardManager.selectedDateRangeType) { _ in
                 Task {
@@ -219,7 +224,6 @@ struct LeaderboardView: View {
             }
         }
         .padding(.vertical, AppTheme.Spacing.md)
-        .background(AppTheme.Colors.backgroundPrimary)
     }
     
     // MARK: - Loading View

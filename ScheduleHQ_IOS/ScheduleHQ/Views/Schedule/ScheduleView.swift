@@ -6,10 +6,7 @@ struct ScheduleView: View {
     @Environment(\.colorScheme) private var colorScheme
     
     // State for team schedule sheet
-    @State private var showTeamSchedule = false
-    @State private var selectedDate: Date = Date()
-    @State private var teamShifts: [ScheduleManager.TeamShift] = []
-    @State private var teamDailyNote: String? = nil
+    @State private var teamSchedulePresentation: TeamSchedulePresentation?
     
     var body: some View {
         NavigationStack {
@@ -65,8 +62,8 @@ struct ScheduleView: View {
                         }
                     }
             )
-            .sheet(isPresented: $showTeamSchedule) {
-                DayTeamScheduleSheet(date: selectedDate, teamShifts: teamShifts, dailyNote: teamDailyNote)
+            .sheet(item: $teamSchedulePresentation) { presentation in
+                DayTeamScheduleSheet(date: presentation.date, teamShifts: presentation.shifts, dailyNote: presentation.dailyNote)
             }
         }
     }
@@ -173,13 +170,13 @@ struct ScheduleView: View {
                         onLongPress: { date in
                             Task {
                                 let result = await scheduleManager.fetchTeamShiftsForDate(date)
-                                // Only show sheet if someone is working
                                 if !result.shifts.isEmpty {
                                     await MainActor.run {
-                                        selectedDate = date
-                                        teamShifts = result.shifts
-                                        teamDailyNote = result.dailyNote
-                                        showTeamSchedule = true
+                                        teamSchedulePresentation = TeamSchedulePresentation(
+                                            date: date,
+                                            shifts: result.shifts,
+                                            dailyNote: result.dailyNote
+                                        )
                                     }
                                 }
                             }
@@ -342,6 +339,14 @@ struct WeekStatView: View {
         }
         .frame(maxWidth: .infinity)
     }
+}
+
+/// Data for presenting the team schedule sheet via .sheet(item:)
+struct TeamSchedulePresentation: Identifiable {
+    let id = UUID()
+    let date: Date
+    let shifts: [ScheduleManager.TeamShift]
+    let dailyNote: String?
 }
 
 #Preview("Schedule View") {

@@ -200,6 +200,7 @@ final class OfflineQueueManager: ObservableObject {
         employeeEmail: String,
         employeeName: String,
         date: Date,
+        endDate: Date? = nil,
         timeOffType: TimeOffType,
         hours: Int,
         isAllDay: Bool,
@@ -208,55 +209,93 @@ final class OfflineQueueManager: ObservableObject {
         vacationGroupId: String?,
         notes: String?
     ) async {
+        let isMultiDay = endDate != nil
+            && Calendar.current.startOfDay(for: endDate!) != Calendar.current.startOfDay(for: date)
+
         if networkMonitor.isConnected {
             do {
-                try await timeOffManager.submitTimeOff(
-                    employeeId: employeeId,
-                    employeeEmail: employeeEmail,
-                    employeeName: employeeName,
-                    date: date,
-                    timeOffType: timeOffType,
-                    hours: hours,
-                    isAllDay: isAllDay,
-                    startTime: startTime,
-                    endTime: endTime,
-                    vacationGroupId: vacationGroupId,
-                    notes: notes
-                )
+                if isMultiDay {
+                    try await timeOffManager.submitMultiDayTimeOff(
+                        employeeId: employeeId,
+                        employeeEmail: employeeEmail,
+                        employeeName: employeeName,
+                        startDate: date,
+                        endDate: endDate!,
+                        timeOffType: timeOffType,
+                        vacationGroupId: vacationGroupId ?? UUID().uuidString,
+                        notes: notes
+                    )
+                } else {
+                    try await timeOffManager.submitTimeOff(
+                        employeeId: employeeId,
+                        employeeEmail: employeeEmail,
+                        employeeName: employeeName,
+                        date: date,
+                        timeOffType: timeOffType,
+                        hours: hours,
+                        isAllDay: isAllDay,
+                        startTime: startTime,
+                        endTime: endTime,
+                        vacationGroupId: vacationGroupId,
+                        notes: notes
+                    )
+                }
             } catch {
-                // If submission fails, queue it
-                let entry = TimeOffEntry(
-                    employeeId: employeeId,
-                    employeeEmail: employeeEmail,
-                    employeeName: employeeName,
-                    date: date,
-                    timeOffType: timeOffType,
-                    hours: hours,
-                    vacationGroupId: vacationGroupId,
-                    isAllDay: isAllDay,
-                    startTime: startTime,
-                    endTime: endTime,
-                    status: .pending,
-                    requestedAt: Date(),
-                    notes: notes
+                // If submission fails, queue expanded entries
+                enqueueEntries(
+                    employeeId: employeeId, employeeEmail: employeeEmail,
+                    employeeName: employeeName, date: date, endDate: isMultiDay ? endDate : nil,
+                    timeOffType: timeOffType, hours: hours, isAllDay: isAllDay,
+                    startTime: startTime, endTime: endTime,
+                    vacationGroupId: vacationGroupId, notes: notes
                 )
-                enqueue(entry)
             }
         } else {
+            enqueueEntries(
+                employeeId: employeeId, employeeEmail: employeeEmail,
+                employeeName: employeeName, date: date, endDate: isMultiDay ? endDate : nil,
+                timeOffType: timeOffType, hours: hours, isAllDay: isAllDay,
+                startTime: startTime, endTime: endTime,
+                vacationGroupId: vacationGroupId, notes: notes
+            )
+        }
+    }
+
+    /// Enqueue time off entries, expanding multi-day ranges into individual per-day entries
+    private func enqueueEntries(
+        employeeId: Int, employeeEmail: String, employeeName: String,
+        date: Date, endDate: Date?,
+        timeOffType: TimeOffType, hours: Int, isAllDay: Bool,
+        startTime: String?, endTime: String?,
+        vacationGroupId: String?, notes: String?
+    ) {
+        if let endDate = endDate {
+            // Multi-day: expand into individual entries
+            let calendar = Calendar.current
+            let groupId = vacationGroupId ?? UUID().uuidString
+            var currentDate = calendar.startOfDay(for: date)
+            let normalizedEnd = calendar.startOfDay(for: endDate)
+
+            while currentDate <= normalizedEnd {
+                let entry = TimeOffEntry(
+                    employeeId: employeeId, employeeEmail: employeeEmail,
+                    employeeName: employeeName, date: currentDate,
+                    timeOffType: timeOffType, hours: 8,
+                    vacationGroupId: groupId, isAllDay: true,
+                    status: .pending, requestedAt: Date(), notes: notes
+                )
+                enqueue(entry)
+                currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate)!
+            }
+        } else {
+            // Single day
             let entry = TimeOffEntry(
-                employeeId: employeeId,
-                employeeEmail: employeeEmail,
-                employeeName: employeeName,
-                date: date,
-                timeOffType: timeOffType,
-                hours: hours,
-                vacationGroupId: vacationGroupId,
-                isAllDay: isAllDay,
-                startTime: startTime,
-                endTime: endTime,
-                status: .pending,
-                requestedAt: Date(),
-                notes: notes
+                employeeId: employeeId, employeeEmail: employeeEmail,
+                employeeName: employeeName, date: date,
+                timeOffType: timeOffType, hours: hours,
+                vacationGroupId: vacationGroupId, isAllDay: isAllDay,
+                startTime: startTime, endTime: endTime,
+                status: .pending, requestedAt: Date(), notes: notes
             )
             enqueue(entry)
         }

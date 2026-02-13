@@ -1,45 +1,56 @@
 import Foundation
 import FirebaseFirestore
 
-/// Types of time off available
-enum TimeOffType: String, Codable, CaseIterable {
+/// Types of time off available (aligned with Desktop: pto, vac, requested)
+enum TimeOffType: String, CaseIterable {
     case pto = "pto"
     case vacation = "vac"
-    case sick = "sick"
-    case dayOff = "off"
-    case requestedOff = "req"
-    
+    case requested = "requested"
+
+    /// Maps any raw value (including legacy) to the current TimeOffType.
+    /// Old values "sick", "off", "req" all map to .requested.
+    static func fromRawValue(_ raw: String) -> TimeOffType {
+        switch raw {
+        case "pto": return .pto
+        case "vac": return .vacation
+        case "sick", "off", "req", "requested": return .requested
+        default: return .requested
+        }
+    }
+
     /// Display name for the time off type
     var displayName: String {
         switch self {
         case .pto: return "PTO"
         case .vacation: return "Vacation"
-        case .sick: return "Sick"
-        case .dayOff: return "Day Off"
-        case .requestedOff: return "Requested Off"
+        case .requested: return "Requested Off"
         }
     }
-    
+
     /// Short label for display in shift cards
     var shortLabel: String {
         switch self {
         case .pto: return "PTO"
         case .vacation: return "VAC"
-        case .sick: return "SICK"
-        case .dayOff: return "OFF"
-        case .requestedOff: return "REQ OFF"
+        case .requested: return "REQ"
         }
     }
-    
+
     /// SF Symbol name for the type
     var iconName: String {
         switch self {
         case .pto: return "clock.badge.checkmark"
         case .vacation: return "airplane"
-        case .sick: return "cross.case"
-        case .dayOff: return "moon.zzz"
-        case .requestedOff: return "calendar.badge.clock"
+        case .requested: return "calendar.badge.clock"
         }
+    }
+}
+
+extension TimeOffType: Codable {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        self = TimeOffType.fromRawValue(rawValue)
     }
 }
 
@@ -169,9 +180,9 @@ struct TimeOffEntry: Codable, Identifiable, Equatable {
             date = try container.decode(Date.self, forKey: .date)
         }
         
-        // Handle timeOffType as string
+        // Handle timeOffType as string (maps legacy values via fromRawValue)
         let typeString = try container.decode(String.self, forKey: .timeOffType)
-        timeOffType = TimeOffType(rawValue: typeString) ?? .dayOff
+        timeOffType = TimeOffType.fromRawValue(typeString)
         
         hours = try container.decodeIfPresent(Int.self, forKey: .hours) ?? 8
         vacationGroupId = try container.decodeIfPresent(String.self, forKey: .vacationGroupId)

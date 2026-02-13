@@ -5,19 +5,19 @@ struct TimeOffView: View {
     @State private var selectedTab = 0
     @State private var showNewRequestSheet = false
     @State private var entryToEdit: TimeOffEntry?
-    @State private var entryToDelete: TimeOffEntry?
+    @State private var groupToDelete: TimeOffGroup?
     @State private var showDeleteConfirmation = false
-    
+
     @ObservedObject private var timeOffManager = TimeOffManager.shared
     @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
-    
+
     var body: some View {
         NavigationStack {
             ZStack {
                 // Background gradient
                 AppBackgroundGradient()
                     .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     // Segmented control
                     Picker("View", selection: $selectedTab) {
@@ -26,7 +26,7 @@ struct TimeOffView: View {
                     }
                     .pickerStyle(.segmented)
                     .padding()
-                    
+
                     // Content
                     Group {
                         if selectedTab == 0 {
@@ -56,28 +56,33 @@ struct TimeOffView: View {
             .alert("Delete Request?", isPresented: $showDeleteConfirmation) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
-                    if let entry = entryToDelete {
-                        deleteEntry(entry)
+                    if let group = groupToDelete {
+                        deleteGroup(group)
                     }
                 }
             } message: {
-                if let entry = entryToDelete {
-                    Text("Delete your \(entry.timeOffType.displayName) request for \(entry.formattedDate)?")
+                if let group = groupToDelete {
+                    if group.isMultiDay {
+                        Text("Delete your \(group.timeOffType.displayName) request for \(group.formattedStartDate) - \(group.formattedEndDate) (\(group.dayCount) days)?")
+                    } else {
+                        Text("Delete your \(group.timeOffType.displayName) request for \(group.formattedStartDate)?")
+                    }
                 }
             }
         }
     }
-    
+
     // MARK: - Requests List
-    
+
     private var requestsListView: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                // Queued entries section (offline)
+                // Queued entries section (offline) - group these too
                 if offlineQueueManager.hasQueuedRequests {
+                    let queuedGroups = TimeOffGroup.grouped(from: offlineQueueManager.queuedRequests)
                     Section {
-                        ForEach(offlineQueueManager.queuedRequests) { entry in
-                            TimeOffEntryCard(entry: entry, isQueued: true)
+                        ForEach(queuedGroups) { group in
+                            TimeOffGroupCard(group: group, isQueued: true)
                         }
                     } header: {
                         HStack {
@@ -94,64 +99,58 @@ struct TimeOffView: View {
                         .padding(.top, 8)
                     }
                 }
-                
-                // Pending requests
-                if !timeOffManager.pendingRequests.isEmpty {
+
+                // Pending requests (grouped)
+                if !timeOffManager.pendingGroups.isEmpty {
                     Section {
-                        ForEach(timeOffManager.pendingRequests) { entry in
-                            SwipeableTimeOffCard(
-                                entry: entry,
-                                canEdit: true,
+                        ForEach(timeOffManager.pendingGroups) { group in
+                            SwipeableTimeOffGroupCard(
+                                group: group,
+                                canEdit: !group.isMultiDay,
                                 canDelete: true,
-                                onEdit: { entryToEdit = entry },
+                                onEdit: { entryToEdit = group.primaryEntry },
                                 onDelete: {
-                                    entryToDelete = entry
+                                    groupToDelete = group
                                     showDeleteConfirmation = true
                                 }
                             )
                         }
                     } header: {
-                        sectionHeader("Pending", count: timeOffManager.pendingRequests.count)
+                        sectionHeader("Pending", count: timeOffManager.pendingGroups.count)
                     }
                 }
-                
-                // Approved requests
-                if !timeOffManager.approvedRequests.isEmpty {
+
+                // Approved requests (grouped)
+                if !timeOffManager.approvedGroups.isEmpty {
                     Section {
-                        ForEach(timeOffManager.approvedRequests) { entry in
-                            SwipeableTimeOffCard(
-                                entry: entry,
-                                canEdit: false,
-                                canDelete: false,
-                                onEdit: { },
-                                onDelete: { }
-                            )
+                        ForEach(timeOffManager.approvedGroups) { group in
+                            TimeOffGroupCard(group: group)
                         }
                     } header: {
-                        sectionHeader("Approved", count: timeOffManager.approvedRequests.count)
+                        sectionHeader("Approved", count: timeOffManager.approvedGroups.count)
                     }
                 }
-                
-                // Denied requests
-                if !timeOffManager.deniedRequests.isEmpty {
+
+                // Denied requests (grouped)
+                if !timeOffManager.deniedGroups.isEmpty {
                     Section {
-                        ForEach(timeOffManager.deniedRequests) { entry in
-                            SwipeableTimeOffCard(
-                                entry: entry,
+                        ForEach(timeOffManager.deniedGroups) { group in
+                            SwipeableTimeOffGroupCard(
+                                group: group,
                                 canEdit: false,
                                 canDelete: true,
                                 onEdit: { },
                                 onDelete: {
-                                    entryToDelete = entry
+                                    groupToDelete = group
                                     showDeleteConfirmation = true
                                 }
                             )
                         }
                     } header: {
-                        sectionHeader("Denied", count: timeOffManager.deniedRequests.count)
+                        sectionHeader("Denied", count: timeOffManager.deniedGroups.count)
                     }
                 }
-                
+
                 // Empty state
                 if timeOffManager.requests.isEmpty && !offlineQueueManager.hasQueuedRequests {
                     EmptyStateView(
@@ -168,13 +167,13 @@ struct TimeOffView: View {
             .padding()
         }
     }
-    
+
     // MARK: - Upcoming List
-    
+
     private var upcomingListView: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                if timeOffManager.upcomingTimeOff.isEmpty {
+                if timeOffManager.upcomingGroups.isEmpty {
                     EmptyStateView(
                         icon: "calendar.badge.clock",
                         title: "No Upcoming Time Off",
@@ -185,17 +184,17 @@ struct TimeOffView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
                 } else {
-                    ForEach(timeOffManager.upcomingTimeOff) { entry in
-                        UpcomingTimeOffCard(entry: entry)
+                    ForEach(timeOffManager.upcomingGroups) { group in
+                        UpcomingTimeOffGroupCard(group: group)
                     }
                 }
             }
             .padding()
         }
     }
-    
+
     // MARK: - Helpers
-    
+
     private func sectionHeader(_ title: String, count: Int) -> some View {
         HStack {
             Text(title)
@@ -209,59 +208,75 @@ struct TimeOffView: View {
         .padding(.top, 16)
         .padding(.bottom, 4)
     }
-    
-    private func deleteEntry(_ entry: TimeOffEntry) {
+
+    private func deleteGroup(_ group: TimeOffGroup) {
         Task {
-            try? await timeOffManager.deleteTimeOff(entry)
+            // Delete all entries in the group
+            for entry in group.entries {
+                do {
+                    try await timeOffManager.deleteTimeOff(entry)
+                } catch {
+                    print("Failed to delete entry \(entry.documentId ?? "unknown"): \(error)")
+                }
+            }
         }
     }
 }
 
-/// Card for upcoming approved time off
-struct UpcomingTimeOffCard: View {
-    let entry: TimeOffEntry
-    
+/// Card for upcoming approved time off (grouped)
+struct UpcomingTimeOffGroupCard: View {
+    let group: TimeOffGroup
+
     var body: some View {
         HStack(spacing: 16) {
             // Date column
             VStack(spacing: 4) {
-                Text(entry.date.dayAbbreviation)
+                Text(group.startDate.dayAbbreviation)
                     .font(.caption)
                     .fontWeight(.medium)
                     .foregroundStyle(.secondary)
-                
-                Text(entry.date.dayNumber)
+
+                Text(group.startDate.dayNumber)
                     .font(.title)
                     .fontWeight(.bold)
-                
-                Text(entry.date.monthDay.split(separator: " ").first ?? "")
+
+                Text(group.startDate.monthDay.split(separator: " ").first ?? "")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             .frame(width: 50)
-            
+
             // Details
             VStack(alignment: .leading, spacing: 8) {
-                TimeOffTypeBadge(type: entry.timeOffType)
-                
-                HStack {
-                    Text("\(entry.hours) hours")
+                TimeOffTypeBadge(type: group.timeOffType)
+
+                if group.isMultiDay {
+                    Text("\(group.formattedStartDate) - \(group.formattedEndDate)")
                         .font(.subheadline)
-                    
-                    if !entry.isAllDay, let timeRange = entry.timeRangeDisplay {
-                        Text("•")
-                            .foregroundStyle(.secondary)
-                        Text(timeRange)
+                    Text("\(group.dayCount) days")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    let entry = group.primaryEntry
+                    HStack {
+                        Text("\(entry.hours) hours")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+
+                        if !entry.isAllDay, let timeRange = entry.timeRangeDisplay {
+                            Text("\u{2022}")
+                                .foregroundStyle(.secondary)
+                            Text(timeRange)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
-            
+
             Spacer()
-            
+
             // Days until
-            if let daysUntil = daysUntilEntry {
+            if let daysUntil = daysUntilStart {
                 VStack {
                     Text("\(daysUntil)")
                         .font(.title2)
@@ -278,28 +293,28 @@ struct UpcomingTimeOffCard: View {
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
     }
-    
-    private var daysUntilEntry: Int? {
+
+    private var daysUntilStart: Int? {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let entryDate = calendar.startOfDay(for: entry.date)
-        let components = calendar.dateComponents([.day], from: today, to: entryDate)
+        let startDate = calendar.startOfDay(for: group.startDate)
+        let components = calendar.dateComponents([.day], from: today, to: startDate)
         return components.day
     }
 }
 
-// MARK: - Swipeable Time Off Card
+// MARK: - Swipeable Time Off Group Card
 
-struct SwipeableTimeOffCard: View {
-    let entry: TimeOffEntry
+struct SwipeableTimeOffGroupCard: View {
+    let group: TimeOffGroup
     let canEdit: Bool
     let canDelete: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
-    
+
     @State private var offset: CGFloat = 0
     @State private var isSwiped = false
-    
+
     private let buttonWidth: CGFloat = 70
     private var totalButtonWidth: CGFloat {
         var width: CGFloat = 0
@@ -307,7 +322,7 @@ struct SwipeableTimeOffCard: View {
         if canDelete { width += buttonWidth }
         return width
     }
-    
+
     var body: some View {
         ZStack(alignment: .trailing) {
             // Action buttons (revealed on swipe)
@@ -331,7 +346,7 @@ struct SwipeableTimeOffCard: View {
                         .background(Color.blue)
                     }
                 }
-                
+
                 if canDelete {
                     Button {
                         withAnimation(.spring(response: 0.3)) {
@@ -353,9 +368,9 @@ struct SwipeableTimeOffCard: View {
                 }
             }
             .cornerRadius(12)
-            
+
             // Main card content
-            TimeOffEntryCard(entry: entry)
+            TimeOffGroupCard(group: group)
                 .offset(x: offset)
                 .gesture(
                     DragGesture()
@@ -363,10 +378,8 @@ struct SwipeableTimeOffCard: View {
                             if totalButtonWidth > 0 {
                                 let dragAmount = value.translation.width
                                 if dragAmount < 0 {
-                                    // Swiping left (revealing buttons)
                                     offset = max(dragAmount, -totalButtonWidth - 20)
                                 } else if isSwiped {
-                                    // Swiping right (hiding buttons)
                                     offset = min(-totalButtonWidth + dragAmount, 0)
                                 }
                             }

@@ -27,9 +27,7 @@ struct AppTheme {
         // Time off type colors
         static let pto = Color(hex: "8B5CF6")
         static let vacation = Color(hex: "06B6D4")
-        static let sick = Color(hex: "EF4444")
-        static let dayOff = Color(hex: "F97316")
-        static let requestedOff = Color(hex: "6B7280")
+        static let requested = Color(hex: "F97316")
         
         // Background colors (adapts to light/dark)
         static let backgroundPrimary = Color(uiColor: .systemBackground)
