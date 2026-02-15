@@ -7,6 +7,7 @@ import '../providers/analytics_provider.dart';
 import '../utils/loading_state_mixin.dart';
 import '../widgets/common/loading_indicator.dart';
 import '../widgets/common/error_message.dart';
+import '../widgets/common/employee_avatar.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -319,34 +320,46 @@ class _AnalyticsPageState extends State<AnalyticsPage>
 
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: MediaQuery.of(context).size.width - 64,
-                    ),
-                    child: DataTable(
-                      columnSpacing: 24,
+                  child: DataTable(
+                    columnSpacing: 25,
                       columns: [
                         const DataColumn(label: Text("Employee")),
                         const DataColumn(label: Text("Job Code")),
-                        const DataColumn(label: Text("Total Shifts")),
-                        const DataColumn(label: Text("Total Runners")),
-                        const DataColumn(label: Text("Avg Hours/Week")),
+                        const DataColumn(label: Expanded(child: Center(child: Text("Shifts")))),
+                        const DataColumn(label: Expanded(child: Center(child: Text("Running")))),
+                        const DataColumn(label: Expanded(child: Center(child: Text("Avg Hrs/Wk")))),
                         ...shiftTypes.map(
-                          (st) => DataColumn(label: Text(st.label)),
+                          (st) => DataColumn(label: Expanded(child: Center(child: Text(st.label)))),
                         ),
                       ],
                       rows: analytics.map((data) {
                         return DataRow(
                           cells: [
-                            DataCell(Text(data.employee.displayName)),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  EmployeeAvatar(
+                                    name: data.employee.displayName,
+                                    imageUrl: data.employee.profileImageURL,
+                                    jobCode: data.employee.jobCode,
+                                    radius: 14,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(data.employee.displayName),
+                                ],
+                              ),
+                            ),
                             DataCell(Text(data.employee.jobCode)),
-                            DataCell(Text(data.totalShifts.toString())),
-                            DataCell(Text(data.totalRunnerCount.toString())),
-                            DataCell(Text(data.avgHoursPerWeek.toStringAsFixed(1))),
+                            DataCell(Center(child: Text(data.totalShifts.toString()))),
+                            DataCell(Center(child: Text(data.totalRunnerCount.toString()))),
+                            DataCell(Center(child: Text(data.avgHoursPerWeek.toStringAsFixed(1)))),
                             ...shiftTypes.map(
                               (st) => DataCell(
-                                Text(
-                                  (data.runnerCountsByShiftType[st.key] ?? 0).toString(),
+                                Center(
+                                  child: Text(
+                                    (data.runnerCountsByShiftType[st.key] ?? 0).toString(),
+                                  ),
                                 ),
                               ),
                             ),
@@ -354,7 +367,6 @@ class _AnalyticsPageState extends State<AnalyticsPage>
                         );
                       }).toList(),
                     ),
-                  ),
                 );
               },
             ),

@@ -1,12 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/settings.dart' as app_models;
 import '../../providers/approval_provider.dart';
 import '../../providers/employee_provider.dart';
 import '../../providers/time_off_provider.dart';
 import '../../utils/app_constants.dart';
 import '../../widgets/common/loading_indicator.dart';
-import '../../widgets/common/error_message.dart';
 import 'request_card.dart';
 import 'requests_filter_bar.dart';
 import 'requests_empty_state.dart';
@@ -35,6 +34,27 @@ class _RequestsManagementTabState extends State<RequestsManagementTab> {
   int? _selectedEmployeeId;
   String? _selectedType;
   bool _showDenied = false;
+  Timer? _pollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshCurrentView();
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshCurrentView(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshCurrentView() async {
+    await widget.approvalProvider.fetchRequests(denied: _showDenied);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,14 +75,20 @@ class _RequestsManagementTabState extends State<RequestsManagementTab> {
             selectedType: _selectedType,
             onTypeChanged: (v) => setState(() => _selectedType = v),
             showDenied: _showDenied,
-            onShowDeniedChanged: (v) => setState(() => _showDenied = v),
+            onShowDeniedChanged: (v) {
+              setState(() => _showDenied = v);
+              widget.approvalProvider.fetchRequests(denied: v);
+            },
             employees: widget.employeeProvider.employees,
           ),
           const Divider(height: 1),
 
           // Content
           Expanded(
-            child: _buildRequestsList(),
+            child: ListenableBuilder(
+              listenable: widget.approvalProvider,
+              builder: (context, _) => _buildRequestsList(),
+            ),
           ),
         ],
       ),
@@ -70,78 +96,59 @@ class _RequestsManagementTabState extends State<RequestsManagementTab> {
   }
 
   Widget _buildRequestsList() {
-    final stream = _showDenied
-        ? widget.approvalProvider.getDeniedRequestsStream()
-        : widget.approvalProvider.getPendingRequestsStream();
+    final provider = widget.approvalProvider;
 
-    if (stream == null) {
-      return const Center(
-        child: ErrorMessage(
-          message: 'Not connected to cloud. Please sign in to view requests.',
-        ),
-      );
+    if (provider.isLoadingRequests) {
+      return const LoadingIndicator();
     }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingIndicator();
+    final docs = _showDenied ? provider.deniedRequests : provider.pendingRequests;
+
+    // Apply client-side filters
+    final filtered = docs.where((doc) {
+      final data = doc.data();
+      // Employee filter
+      if (_selectedEmployeeId != null &&
+          data['employeeLocalId'] != _selectedEmployeeId) {
+        return false;
+      }
+      // Type filter
+      if (_selectedType != null &&
+          data['timeOffType'] != _selectedType) {
+        return false;
+      }
+      // Search filter
+      if (_searchQuery.isNotEmpty) {
+        final name = provider
+            .getEmployeeName(data['employeeLocalId'] as int? ?? 0);
+        if (!name.toLowerCase().contains(_searchQuery.toLowerCase())) {
+          return false;
         }
+      }
+      return true;
+    }).toList();
 
-        if (snapshot.hasError) {
-          return ErrorMessage(
-            message: 'Error loading requests: ${snapshot.error}',
-          );
-        }
+    if (filtered.isEmpty) {
+      return RequestsEmptyState(isDeniedView: _showDenied);
+    }
 
-        final docs = snapshot.data?.docs ?? [];
-
-        // Apply client-side filters
-        final filtered = docs.where((doc) {
-          final data = doc.data();
-          // Employee filter
-          if (_selectedEmployeeId != null &&
-              data['employeeLocalId'] != _selectedEmployeeId) {
-            return false;
-          }
-          // Type filter
-          if (_selectedType != null &&
-              data['timeOffType'] != _selectedType) {
-            return false;
-          }
-          // Search filter
-          if (_searchQuery.isNotEmpty) {
-            final name = widget.approvalProvider
-                .getEmployeeName(data['employeeLocalId'] as int? ?? 0);
-            if (!name.toLowerCase().contains(_searchQuery.toLowerCase())) {
-              return false;
-            }
-          }
-          return true;
-        }).toList();
-
-        if (filtered.isEmpty) {
-          return RequestsEmptyState(isDeniedView: _showDenied);
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.only(
-            top: AppConstants.smallPadding,
-            bottom: 80, // room for FAB
-          ),
-          itemCount: filtered.length,
-          itemBuilder: (context, index) => RequestCard(
-            document: filtered[index],
-            approvalProvider: widget.approvalProvider,
-            settings: widget.settings,
-            onApproved: () {
-              widget.approvalProvider.loadApprovedEntries();
-              widget.timeOffProvider.loadData();
-            },
-          ),
-        );
-      },
+    return ListView.builder(
+      padding: const EdgeInsets.only(
+        top: AppConstants.smallPadding,
+        bottom: 80, // room for FAB
+      ),
+      itemCount: filtered.length,
+      itemBuilder: (context, index) => RequestCard(
+        document: filtered[index],
+        approvalProvider: provider,
+        settings: widget.settings,
+        onApproved: () {
+          _refreshCurrentView();
+          widget.approvalProvider.loadApprovedEntries();
+          widget.timeOffProvider.loadData();
+        },
+        onDenied: () => _refreshCurrentView(),
+      ),
     );
   }
 

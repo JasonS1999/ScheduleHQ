@@ -8,6 +8,7 @@ import '../../services/app_colors.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/dialog_helper.dart';
 import '../../utils/snackbar_helper.dart';
+import '../common/employee_avatar.dart';
 import 'time_off_type_badge.dart';
 
 class TimeOffCalendarTab extends StatefulWidget {
@@ -224,20 +225,13 @@ class _DayDetailPanel extends StatelessWidget {
                     final jobCode = employee?.jobCode ?? '';
                     final avatarColor =
                         approvalProvider.getJobCodeColor(jobCode);
-                    final initials = _getInitials(employeeName);
 
                     return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: avatarColor,
+                      leading: EmployeeAvatar(
+                        name: employeeName,
+                        imageUrl: employee?.profileImageURL,
                         radius: 16,
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        backgroundColor: avatarColor,
                       ),
                       title: Text(employeeName),
                       subtitle: Text(
@@ -289,12 +283,5 @@ class _DayDetailPanel extends StatelessWidget {
         }
       }
     }
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 }

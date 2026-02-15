@@ -280,10 +280,24 @@ class _AuthWrapperState extends State<AuthWrapper> {
           context,
           listen: false,
         );
+        final jobCodeProvider = Provider.of<JobCodeProvider>(
+          context,
+          listen: false,
+        );
 
         await settingsProvider.initialize();
         await employeeProvider.initialize();
         await scheduleProvider.initialize();
+        await jobCodeProvider.initialize();
+
+        // Sync profile image URLs from Firestore in the background (non-blocking)
+        FirestoreSyncService.instance.syncEmployeeUidsFromFirestore().then((_) {
+          if (mounted) {
+            employeeProvider.loadEmployees();
+          }
+        }).catchError((e) {
+          debugPrint('Background profile image sync failed: $e');
+        });
 
         // Start real-time cloud listener for time-off entries
         final timeOffProvider = Provider.of<TimeOffProvider>(

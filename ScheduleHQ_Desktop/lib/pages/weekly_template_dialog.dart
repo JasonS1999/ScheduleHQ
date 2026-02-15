@@ -283,21 +283,12 @@ class _WeeklyTemplateDialogState extends State<WeeklyTemplateDialog> {
 
             // Status indicator
             if (entry.isOff)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: context.appColors.errorBackground,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'OFF',
-                  style: TextStyle(
-                    color: context.appColors.errorForeground,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Text(
+                'OFF',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: context.appColors.errorForeground,
                 ),
               )
             else if (entry.hasShift)

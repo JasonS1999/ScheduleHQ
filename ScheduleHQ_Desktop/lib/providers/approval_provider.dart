@@ -22,6 +22,11 @@ class ApprovalProvider extends BaseProvider {
   Map<int, Employee> _employeeById = {};
   final Map<String, Color> _jobCodeColorCache = {};
 
+  // Cached request data (replaces real-time streams to avoid platform thread crash)
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _pendingRequests = [];
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _deniedRequests = [];
+  bool _isLoadingRequests = false;
+
   ApprovalProvider() {
     _ptoService = PtoTrimesterService(timeOffDao: _timeOffDao);
   }
@@ -29,6 +34,11 @@ class ApprovalProvider extends BaseProvider {
   // Getters
   List<TimeOffEntry> get approvedEntries => List.unmodifiable(_approvedEntries);
   Map<int, Employee> get employeeById => Map.unmodifiable(_employeeById);
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> get pendingRequests =>
+      List.unmodifiable(_pendingRequests);
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> get deniedRequests =>
+      List.unmodifiable(_deniedRequests);
+  bool get isLoadingRequests => _isLoadingRequests;
 
   String? get _managerUid => AuthService.instance.currentUserUid;
 
@@ -89,17 +99,50 @@ class ApprovalProvider extends BaseProvider {
     }
   }
 
-  /// Get pending time-off requests from Firestore
-  Stream<QuerySnapshot<Map<String, dynamic>>>? getPendingRequestsStream() {
-    return _requestsRef?.where('status', isEqualTo: 'pending').snapshots();
+  /// Fetch pending time-off requests from Firestore
+  Future<void> fetchPendingRequests() async {
+    final ref = _requestsRef;
+    if (ref == null) return;
+    try {
+      _isLoadingRequests = true;
+      notifyListeners();
+      final snapshot = await ref.where('status', isEqualTo: 'pending').get();
+      _pendingRequests = snapshot.docs;
+    } catch (e) {
+      debugPrint('Error fetching pending requests: $e');
+    } finally {
+      _isLoadingRequests = false;
+      notifyListeners();
+    }
   }
 
-  /// Get denied time-off requests from Firestore
-  Stream<QuerySnapshot<Map<String, dynamic>>>? getDeniedRequestsStream() {
-    return _requestsRef
-        ?.where('status', isEqualTo: 'denied')
-        .orderBy('deniedAt', descending: true)
-        .snapshots();
+  /// Fetch denied time-off requests from Firestore
+  Future<void> fetchDeniedRequests() async {
+    final ref = _requestsRef;
+    if (ref == null) return;
+    try {
+      _isLoadingRequests = true;
+      notifyListeners();
+      final snapshot = await ref
+          .where('status', isEqualTo: 'denied')
+          .orderBy('deniedAt', descending: true)
+          .get();
+      _deniedRequests = snapshot.docs;
+    } catch (e) {
+      debugPrint('Error fetching denied requests: $e');
+    } finally {
+      _isLoadingRequests = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetch requests based on view type
+  Future<void> fetchRequests({required bool denied}) async {
+    if (denied) {
+      await fetchDeniedRequests();
+    } else {
+      await fetchPendingRequests();
+    }
   }
 
   /// Manually add a time-off entry (manager-created, bypasses request flow)
@@ -337,8 +380,15 @@ class ApprovalProvider extends BaseProvider {
     return _employeeById[employeeId]?.displayName ?? 'Unknown Employee';
   }
 
+  /// Get employee profile image URL by ID
+  String? getEmployeeProfileImageURL(int employeeId) {
+    return _employeeById[employeeId]?.profileImageURL;
+  }
+
   @override
   Future<void> refresh() async {
     await loadApprovedEntries();
+    await fetchPendingRequests();
+    await fetchDeniedRequests();
   }
 }

@@ -26,6 +26,7 @@ class AuthProvider extends BaseProvider {
   String? get userEmail => _currentUser?.email;
   String? get userUid => _currentUser?.uid;
   String? get userDisplayName => _currentUser?.displayName ?? userEmail;
+  String? get userPhotoURL => _currentUser?.photoURL;
 
   /// Initialize the provider
   Future<void> initialize() async {

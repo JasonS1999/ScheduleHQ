@@ -7,6 +7,7 @@ class Shift {
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? publishedAt;
 
   Shift({
     this.id,
@@ -17,6 +18,7 @@ class Shift {
     this.notes,
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.publishedAt,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
@@ -29,6 +31,7 @@ class Shift {
     String? notes,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? publishedAt,
   }) {
     return Shift(
       id: id ?? this.id,
@@ -39,6 +42,7 @@ class Shift {
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
+      publishedAt: publishedAt ?? this.publishedAt,
     );
   }
 
@@ -61,6 +65,7 @@ class Shift {
       'notes': notes,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      'publishedAt': publishedAt?.toIso8601String(),
     };
   }
 
@@ -68,7 +73,7 @@ class Shift {
     // Try to read date components first (new DST-safe format)
     DateTime? startTime;
     DateTime? endTime;
-    
+
     if (map['startDate'] != null && map['startHour'] != null && map['startMinute'] != null) {
       // Parse date components (DST-safe)
       final startDateParts = (map['startDate'] as String).split('-');
@@ -79,7 +84,7 @@ class Shift {
         map['startHour'] as int,
         map['startMinute'] as int,
       );
-      
+
       final endDateParts = (map['endDate'] as String).split('-');
       endTime = DateTime(
         int.parse(endDateParts[0]), // year
@@ -93,7 +98,7 @@ class Shift {
       startTime = DateTime.parse(map['startTime'] as String);
       endTime = DateTime.parse(map['endTime'] as String);
     }
-    
+
     return Shift(
       id: map['id'] as int?,
       employeeId: map['employeeId'] as int,
@@ -103,6 +108,9 @@ class Shift {
       notes: map['notes'] as String?,
       createdAt: DateTime.parse(map['createdAt'] as String),
       updatedAt: DateTime.parse(map['updatedAt'] as String),
+      publishedAt: map['publishedAt'] != null
+          ? DateTime.parse(map['publishedAt'] as String)
+          : null,
     );
   }
 

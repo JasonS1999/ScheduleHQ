@@ -6,6 +6,7 @@ import '../../services/app_colors.dart';
 import '../../utils/app_constants.dart';
 import '../../utils/dialog_helper.dart';
 import '../../utils/snackbar_helper.dart';
+import '../common/employee_avatar.dart';
 import 'time_off_type_badge.dart';
 import 'denial_reason_dialog.dart';
 
@@ -52,7 +53,6 @@ class RequestCard extends StatelessWidget {
     final endDate = endDateStr != null ? DateTime.tryParse(endDateStr) : null;
 
     final dateRangeString = _formatDateRange(startDate, endDate);
-    final initials = _getInitials(employeeName);
     final jobCode = employee?.jobCode ?? '';
     final avatarColor = approvalProvider.getJobCodeColor(jobCode);
 
@@ -71,17 +71,11 @@ class RequestCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Avatar
-            CircleAvatar(
+            EmployeeAvatar(
+              name: employeeName,
+              imageUrl: employee?.profileImageURL,
               radius: 22,
               backgroundColor: avatarColor,
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
             ),
             const SizedBox(width: 16),
 
@@ -281,12 +275,5 @@ class RequestCard extends StatelessWidget {
     if (end == null || end == start) return startStr;
     final endStr = '${end.month}/${end.day}/${end.year}';
     return '$startStr - $endStr';
-  }
-
-  String _getInitials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 }

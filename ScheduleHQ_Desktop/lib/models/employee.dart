@@ -8,6 +8,7 @@ class Employee {
   // Firebase sync fields
   final String? email;
   final String? uid; // Firebase Auth UID
+  final String? profileImageURL; // Profile picture URL from Firebase Storage
 
   // Vacation tracking
   final int vacationWeeksAllowed;
@@ -21,6 +22,7 @@ class Employee {
     required this.jobCode,
     this.email,
     this.uid,
+    this.profileImageURL,
     this.vacationWeeksAllowed = 0,
     this.vacationWeeksUsed = 0,
   });
@@ -43,6 +45,7 @@ class Employee {
     String? jobCode,
     String? email,
     String? uid,
+    String? profileImageURL,
     int? vacationWeeksAllowed,
     int? vacationWeeksUsed,
   }) {
@@ -54,6 +57,7 @@ class Employee {
       jobCode: jobCode ?? this.jobCode,
       email: email ?? this.email,
       uid: uid ?? this.uid,
+      profileImageURL: profileImageURL ?? this.profileImageURL,
       vacationWeeksAllowed:
           vacationWeeksAllowed ?? this.vacationWeeksAllowed,
       vacationWeeksUsed: vacationWeeksUsed ?? this.vacationWeeksUsed,
@@ -69,6 +73,7 @@ class Employee {
       'jobCode': jobCode,
       'email': email,
       'uid': uid,
+      'profileImageURL': profileImageURL,
       'vacationWeeksAllowed': vacationWeeksAllowed,
       'vacationWeeksUsed': vacationWeeksUsed,
     };
@@ -83,6 +88,7 @@ class Employee {
       jobCode: map['jobCode'],
       email: map['email'],
       uid: map['uid'],
+      profileImageURL: map['profileImageURL'],
       vacationWeeksAllowed: map['vacationWeeksAllowed'] ?? 0,
       vacationWeeksUsed: map['vacationWeeksUsed'] ?? 0,
     );

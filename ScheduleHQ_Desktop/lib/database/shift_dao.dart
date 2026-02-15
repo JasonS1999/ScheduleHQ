@@ -24,6 +24,7 @@ class ShiftDao {
         notes TEXT,
         createdAt TEXT NOT NULL,
         updatedAt TEXT NOT NULL,
+        publishedAt TEXT,
         FOREIGN KEY (employeeId) REFERENCES employees(id) ON DELETE CASCADE
       )
     ''');
@@ -244,5 +245,46 @@ class ShiftDao {
     AutoSyncService.instance.onShiftsChanged();
     
     return result;
+  }
+
+  /// Mark a list of shifts as published by setting their publishedAt timestamp
+  Future<void> markAsPublished(List<int> shiftIds) async {
+    if (shiftIds.isEmpty) return;
+    final db = await _db;
+    final now = DateTime.now().toIso8601String();
+    final batch = db.batch();
+    for (final id in shiftIds) {
+      batch.update(
+        'shifts',
+        {'publishedAt': now},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Clear publishedAt for shifts in a date range, optionally filtered by employee IDs
+  Future<void> clearPublishedAt({
+    required DateTime start,
+    required DateTime end,
+    List<int>? employeeIds,
+  }) async {
+    final db = await _db;
+    String where = 'startTime >= ? AND startTime < ?';
+    List<dynamic> whereArgs = [start.toIso8601String(), end.toIso8601String()];
+
+    if (employeeIds != null && employeeIds.isNotEmpty) {
+      final placeholders = employeeIds.map((_) => '?').join(',');
+      where += ' AND employeeId IN ($placeholders)';
+      whereArgs.addAll(employeeIds);
+    }
+
+    await db.update(
+      'shifts',
+      {'publishedAt': null},
+      where: where,
+      whereArgs: whereArgs,
+    );
   }
 }

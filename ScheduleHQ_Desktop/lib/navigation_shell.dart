@@ -8,11 +8,13 @@ import 'pages/analytics_page.dart';
 import 'pages/approval_queue_page.dart';
 import 'pages/pnl_page.dart';
 import 'providers/auth_provider.dart' as app_auth;
+import 'providers/employee_provider.dart';
 import 'services/app_colors.dart';
 import 'services/store_update_service.dart';
 import 'utils/app_constants.dart';
 import 'utils/snackbar_helper.dart';
 import 'utils/dialog_helper.dart';
+import 'widgets/common/employee_avatar.dart';
 
 class NavigationShell extends StatefulWidget {
   const NavigationShell({super.key});
@@ -26,7 +28,7 @@ class _NavigationShellState extends State<NavigationShell>
   int _index = 0;
   bool _updateAvailable = false;
   bool _checkingUpdate = false;
-  bool _collapsed = false;
+  bool _collapsed = true;
 
   late final AnimationController _sidebarController;
   late final Animation<double> _sidebarFade;
@@ -139,6 +141,7 @@ class _NavigationShellState extends State<NavigationShell>
                   duration: AppConstants.mediumAnimation,
                   curve: Curves.easeInOut,
                   width: _collapsed ? 72 : 220,
+                  clipBehavior: Clip.hardEdge,
                   decoration: BoxDecoration(
                     color: isDark
                         ? context.appColors.surfaceVariant
@@ -319,79 +322,81 @@ class _NavigationShellState extends State<NavigationShell>
   }
 
   Widget _buildUserInfoSection() {
-    return Consumer<app_auth.AuthProvider>(
-      builder: (context, authProvider, child) {
+    return Consumer2<app_auth.AuthProvider, EmployeeProvider>(
+      builder: (context, authProvider, employeeProvider, child) {
         final displayName = authProvider.userDisplayName ?? 'Manager';
-        final parts = displayName.trim().split(' ');
-        final initials = parts.length >= 2
-            ? '${parts.first[0]}${parts.last[0]}'.toUpperCase()
-            : displayName
-                .substring(0, displayName.length.clamp(0, 2))
-                .toUpperCase();
+        final currentUid = authProvider.currentUser?.uid;
 
-        final avatar = CircleAvatar(
-          radius: 20,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
-              letterSpacing: 0.5,
-            ),
-          ),
-        );
-
-        if (_collapsed) {
-          return Padding(
-            padding: const EdgeInsets.all(12),
-            child: Center(child: avatar),
-          );
+        // Find manager's employee record to get their profile image
+        String? photoUrl = authProvider.userPhotoURL;
+        if (currentUid != null) {
+          final self = employeeProvider.allEmployees
+              .where((e) => e.uid == currentUid)
+              .firstOrNull;
+          if (self?.profileImageURL != null) {
+            photoUrl = self!.profileImageURL;
+          }
         }
 
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppConstants.defaultPadding),
-          child: Row(
-            children: [
-              avatar,
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      displayName,
-                      style:
-                          Theme.of(context).textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: context.appColors.textPrimary,
-                                letterSpacing: -0.2,
-                              ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+        final avatar = EmployeeAvatar(
+          name: displayName,
+          imageUrl: photoUrl,
+          radius: 20,
+        );
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 150) {
+              return Padding(
+                padding: const EdgeInsets.all(12),
+                child: Center(child: avatar),
+              );
+            }
+
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              child: Row(
+                children: [
+                  avatar,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          displayName,
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: context.appColors.textPrimary,
+                                    letterSpacing: -0.2,
+                                  ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (authProvider.userEmail != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            authProvider.userEmail!,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: context.appColors.textTertiary,
+                                      fontSize: 11,
+                                      letterSpacing: 0.1,
+                                    ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
                     ),
-                    if (authProvider.userEmail != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        authProvider.userEmail!,
-                        style:
-                            Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: context.appColors.textTertiary,
-                                  fontSize: 11,
-                                  letterSpacing: 0.1,
-                                ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -479,57 +484,61 @@ class _NavigationShellState extends State<NavigationShell>
                 color: context.appColors.textSecondary,
               );
 
-        if (_collapsed) {
-          return Padding(
-            padding: const EdgeInsets.only(
-              bottom: AppConstants.defaultPadding,
-            ),
-            child: IconButton(
-              onPressed: onPressed,
-              icon: icon,
-              tooltip: 'Sign Out',
-              style: IconButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppConstants.radiusMedium),
-                  side: BorderSide(color: context.appColors.borderLight),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 150) {
+              return Padding(
+                padding: const EdgeInsets.only(
+                  bottom: AppConstants.defaultPadding,
                 ),
-              ),
-            ),
-          );
-        }
+                child: IconButton(
+                  onPressed: onPressed,
+                  icon: icon,
+                  tooltip: 'Sign Out',
+                  style: IconButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppConstants.radiusMedium),
+                      side: BorderSide(color: context.appColors.borderLight),
+                    ),
+                  ),
+                ),
+              );
+            }
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppConstants.defaultPadding,
-            0,
-            AppConstants.defaultPadding,
-            AppConstants.defaultPadding,
-          ),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: icon,
-              label: Text(
-                authProvider.isLoading ? 'Signing out...' : 'Sign Out',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: context.appColors.textSecondary,
-                  letterSpacing: 0.1,
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppConstants.defaultPadding,
+                0,
+                AppConstants.defaultPadding,
+                AppConstants.defaultPadding,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onPressed,
+                  icon: icon,
+                  label: Text(
+                    authProvider.isLoading ? 'Signing out...' : 'Sign Out',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: context.appColors.textSecondary,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    side: BorderSide(color: context.appColors.borderLight),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppConstants.radiusMedium),
+                    ),
+                  ),
                 ),
               ),
-              style: OutlinedButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                side: BorderSide(color: context.appColors.borderLight),
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppConstants.radiusMedium),
-                ),
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -538,118 +547,122 @@ class _NavigationShellState extends State<NavigationShell>
   Widget _buildUpdateButton() {
     final appColors = context.appColors;
 
-    if (_collapsed) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: AppConstants.smallPadding,
-        ),
-        child: _checkingUpdate
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : _updateAvailable
-                ? IconButton(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 150) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: AppConstants.smallPadding,
+            ),
+            child: _checkingUpdate
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : _updateAvailable
+                    ? IconButton(
+                        onPressed: _showUpdateDialog,
+                        icon: const Icon(Icons.system_update, size: 18),
+                        tooltip: 'Update Available',
+                        style: IconButton.styleFrom(
+                          backgroundColor: appColors.successForeground,
+                          foregroundColor: appColors.textOnSuccess,
+                        ),
+                      )
+                    : IconButton(
+                        onPressed: () =>
+                            _checkForUpdates(showDialogIfAvailable: true),
+                        icon: Icon(
+                          Icons.verified_outlined,
+                          size: 16,
+                          color: appColors.textTertiary,
+                        ),
+                        tooltip: 'v${StoreUpdateService.currentVersion}',
+                      ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppConstants.defaultPadding,
+            vertical: AppConstants.smallPadding,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_checkingUpdate)
+                const Padding(
+                  padding: EdgeInsets.all(8),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              else if (_updateAvailable)
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
                     onPressed: _showUpdateDialog,
-                    icon: const Icon(Icons.system_update, size: 18),
-                    tooltip: 'Update Available',
-                    style: IconButton.styleFrom(
+                    icon: const Icon(Icons.system_update, size: 16),
+                    label: const Text('Update Available'),
+                    style: FilledButton.styleFrom(
                       backgroundColor: appColors.successForeground,
                       foregroundColor: appColors.textOnSuccess,
-                    ),
-                  )
-                : IconButton(
-                    onPressed: () =>
-                        _checkForUpdates(showDialogIfAvailable: true),
-                    icon: Icon(
-                      Icons.verified_outlined,
-                      size: 16,
-                      color: appColors.textTertiary,
-                    ),
-                    tooltip: 'v${StoreUpdateService.currentVersion}',
-                  ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppConstants.defaultPadding,
-        vertical: AppConstants.smallPadding,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_checkingUpdate)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else if (_updateAvailable)
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _showUpdateDialog,
-                icon: const Icon(Icons.system_update, size: 16),
-                label: const Text('Update Available'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: appColors.successForeground,
-                  foregroundColor: appColors.textOnSuccess,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppConstants.radiusMedium),
-                  ),
-                ),
-              ),
-            )
-          else
-            InkWell(
-              onTap: () => _checkForUpdates(showDialogIfAvailable: true),
-              borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-              child: Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: appColors.surfaceContainer,
-                  borderRadius:
-                      BorderRadius.circular(AppConstants.radiusMedium),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.verified_outlined,
-                      size: 14,
-                      color: appColors.textTertiary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'v${StoreUpdateService.currentVersion}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: appColors.textTertiary,
-                        letterSpacing: 0.3,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppConstants.radiusMedium),
                       ),
                     ),
-                  ],
+                  ),
+                )
+              else
+                InkWell(
+                  onTap: () => _checkForUpdates(showDialogIfAvailable: true),
+                  borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+                  child: Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: appColors.surfaceContainer,
+                      borderRadius:
+                          BorderRadius.circular(AppConstants.radiusMedium),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.verified_outlined,
+                          size: 14,
+                          color: appColors.textTertiary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'v${StoreUpdateService.currentVersion}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: appColors.textTertiary,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 

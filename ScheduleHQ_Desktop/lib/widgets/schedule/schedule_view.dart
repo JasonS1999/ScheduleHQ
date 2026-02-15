@@ -13,6 +13,7 @@ import '../../database/shift_type_dao.dart';
 import '../../database/store_hours_dao.dart';
 import '../../database/tracked_employee_dao.dart';
 import '../../models/employee.dart';
+import '../common/employee_avatar.dart';
 import '../../models/time_off_entry.dart';
 import '../../models/shift_template.dart';
 import '../../models/weekly_template.dart';
@@ -172,6 +173,8 @@ class _ScheduleViewState extends State<ScheduleView> {
             end: s.endTime,
             text: s.label ?? '',
             notes: s.notes,
+            publishedAt: s.publishedAt,
+            updatedAt: s.updatedAt,
           ),
         )
         .toList();
@@ -496,6 +499,7 @@ class _ScheduleViewState extends State<ScheduleView> {
     );
 
     if (result == true && mounted) {
+      await _refreshShifts();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Schedule published to employees'),
@@ -795,7 +799,18 @@ class _ScheduleViewState extends State<ScheduleView> {
   final WeeklyTemplateDao _weeklyTemplateDao = WeeklyTemplateDao();
 
   Future<void> _autoFillFromTemplates(DateTime monthStart) async {
-    final monthEnd = DateTime(monthStart.year, monthStart.month + 1, 0);
+    // Calculate visible calendar grid range (includes overflow days from adjacent months)
+    final firstDayOfMonth = DateTime(monthStart.year, monthStart.month, 1);
+    final lastDayOfMonth = DateTime(monthStart.year, monthStart.month + 1, 0);
+    final viewStart = firstDayOfMonth.subtract(
+      Duration(days: firstDayOfMonth.weekday % 7),
+    );
+    final daysUntilSaturday = (6 - lastDayOfMonth.weekday % 7) % 7;
+    final viewEnd = DateTime(
+      lastDayOfMonth.year,
+      lastDayOfMonth.month,
+      lastDayOfMonth.day + daysUntilSaturday,
+    );
 
     // Get employees who have weekly templates
     final employeeIdsWithTemplates = await _weeklyTemplateDao
@@ -874,11 +889,11 @@ class _ScheduleViewState extends State<ScheduleView> {
     for (final employeeId in selectedEmployeeIds) {
       final employeeTemplates = templates[employeeId] ?? [];
 
-      // Iterate every day in the month and apply the matching template entry
+      // Iterate every day in the visible calendar grid and apply the matching template entry
       for (
-        var day = monthStart;
-        !day.isAfter(monthEnd);
-        day = day.add(const Duration(days: 1))
+        var day = viewStart;
+        !day.isAfter(viewEnd);
+        day = DateTime(day.year, day.month, day.day + 1)
       ) {
         final dayOfWeek = day.weekday % 7; // 0=Sun, 1=Mon, ..., 6=Sat
         final template = employeeTemplates
@@ -914,13 +929,13 @@ class _ScheduleViewState extends State<ScheduleView> {
           }
         }
 
-        // Handle OFF days - create a shift with "OFF" label
+        // Handle OFF days - create a shift with "OFF" label using 4AM-3:59AM format
         if (template.isOff) {
           newShifts.add(
             Shift(
               employeeId: employeeId,
-              startTime: DateTime(day.year, day.month, day.day, 0, 0),
-              endTime: DateTime(day.year, day.month, day.day, 23, 59),
+              startTime: DateTime(day.year, day.month, day.day, 4, 0),
+              endTime: DateTime(day.year, day.month, day.day + 1, 3, 59),
               label: 'OFF',
             ),
           );
@@ -956,10 +971,10 @@ class _ScheduleViewState extends State<ScheduleView> {
           endMinute,
         );
 
-        // Handle overnight shifts
+        // Handle overnight shifts (use day+1 constructor to avoid DST issues)
         if (shiftEnd.isBefore(shiftStart) ||
             shiftEnd.isAtSameMomentAs(shiftStart)) {
-          shiftEnd = shiftEnd.add(const Duration(days: 1));
+          shiftEnd = DateTime(day.year, day.month, day.day + 1, endHour, endMinute);
         }
 
         newShifts.add(
@@ -1295,15 +1310,13 @@ class _ScheduleViewState extends State<ScheduleView> {
         if (_clipboard == null) return;
         final tod = _clipboard!['start'] as TimeOfDay;
         final dur = _clipboard!['duration'] as Duration;
-        DateTime start = DateTime(
-          day.year,
-          day.month,
-          day.day,
-          tod.hour,
-          tod.minute,
-        );
-        if (tod.hour == 0 || tod.hour == 1)
-          start = start.add(const Duration(days: 1));
+        DateTime start;
+        if (tod.hour == 0 || tod.hour == 1) {
+          // Use day+1 constructor to avoid DST issues
+          start = DateTime(day.year, day.month, day.day + 1, tod.hour, tod.minute);
+        } else {
+          start = DateTime(day.year, day.month, day.day, tod.hour, tod.minute);
+        }
         final end = start.add(dur);
 
         final hasConflict = await _shiftDao.hasConflict(employeeId, start, end);
@@ -1333,13 +1346,8 @@ class _ScheduleViewState extends State<ScheduleView> {
           // Calculate 4:00 AM start and 3:59 AM next day end
           final day = oldShift.id != null ? oldShift.start : newStart;
           final offStart = DateTime(day.year, day.month, day.day, 4, 0);
-          final offEnd = DateTime(
-            day.year,
-            day.month,
-            day.day,
-            3,
-            59,
-          ).add(const Duration(days: 1));
+          // Use day+1 constructor to avoid DST issues
+          final offEnd = DateTime(day.year, day.month, day.day + 1, 3, 59);
 
           if (oldShift.id != null) {
             // Update existing shift to OFF
@@ -2098,10 +2106,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
               int.parse(endParts[0]),
               int.parse(endParts[1]),
             );
-            // Handle overnight shifts (end time before start time)
+            // Handle overnight shifts (use day+1 constructor to avoid DST issues)
             if (shiftEnd.isBefore(shiftStart) ||
                 shiftEnd.isAtSameMomentAs(shiftStart)) {
-              shiftEnd = shiftEnd.add(const Duration(days: 1));
+              shiftEnd = DateTime(day.year, day.month, day.day + 1, int.parse(endParts[0]), int.parse(endParts[1]));
             }
 
             await _shiftDao.insert(
@@ -2312,13 +2320,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       final offShift = ShiftPlaceholder(
         employeeId: employeeId,
         start: DateTime(day.year, day.month, day.day, 4, 0),
-        end: DateTime(
-          day.year,
-          day.month,
-          day.day,
-          3,
-          59,
-        ).add(const Duration(days: 1)),
+        // Use day+1 constructor to avoid DST issues
+        end: DateTime(day.year, day.month, day.day + 1, 3, 59),
         text: 'OFF',
       );
       // Use a temporary placeholder to signal this is a new shift
@@ -2932,17 +2935,11 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
   }
 
   DateTime _timeOfDayToDateTime(DateTime day, TimeOfDay tod) {
-    DateTime result = DateTime(
-      day.year,
-      day.month,
-      day.day,
-      tod.hour,
-      tod.minute,
-    );
+    // Use day + 1 constructor instead of .add(Duration(days: 1)) to avoid DST issues
     if (tod.hour == 0 || tod.hour == 1) {
-      result = result.add(const Duration(days: 1));
+      return DateTime(day.year, day.month, day.day + 1, tod.hour, tod.minute);
     }
-    return result;
+    return DateTime(day.year, day.month, day.day, tod.hour, tod.minute);
   }
 
   Widget _buildShiftChip(
@@ -2962,7 +2959,13 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
         ? _getShiftTypeColor(runnerShiftType)
         : null;
 
-    return Container(
+    // Determine publish state for real shifts (not time-off entries)
+    // Published shifts are dimmed; unpublished/modified shifts stay normal
+    final isPublished = shift.timeOffEntryId == null &&
+        shift.publishedAt != null &&
+        (shift.updatedAt == null || !shift.updatedAt!.isAfter(shift.publishedAt!));
+
+    Widget chip = Container(
       decoration: BoxDecoration(
         color: isSelected
             ? Theme.of(context).colorScheme.primary.softBg
@@ -3008,6 +3011,11 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
         ],
       ),
     );
+
+    if (isPublished) {
+      return Opacity(opacity: 0.45, child: chip);
+    }
+    return chip;
   }
 
   Widget _buildMonthlyEmployeeCell({
@@ -3437,18 +3445,29 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                     width: 2,
                   ),
                 ),
-                child: Center(
-                  child: Text(
-                    employee.displayName,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: fg,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EmployeeAvatar(
+                      name: employee.displayName,
+                      imageUrl: employee.profileImageURL,
+                      radius: 12,
+                      backgroundColor: fg.withOpacity(0.2),
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
+                    const SizedBox(height: 2),
+                    Text(
+                      employee.displayName,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: fg,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             );
@@ -3901,6 +3920,8 @@ class ShiftPlaceholder {
   final String? notes; // Shift-specific notes
   final int? timeOffEntryId; // Database ID of the TimeOffEntry (null for shifts)
   final String? vacationGroupId; // Links multi-day vacation blocks
+  final DateTime? publishedAt; // When this shift was last published
+  final DateTime? updatedAt; // When this shift was last modified
 
   ShiftPlaceholder({
     this.id,
@@ -3911,6 +3932,8 @@ class ShiftPlaceholder {
     this.notes,
     this.timeOffEntryId,
     this.vacationGroupId,
+    this.publishedAt,
+    this.updatedAt,
   });
 
   @override
@@ -4107,19 +4130,11 @@ class _MonthlyRunnerSearchDialogState
                           tileColor: isCurrentRunner
                               ? widget.shiftColor.subtle
                               : null,
-                          leading: CircleAvatar(
+                          leading: EmployeeAvatar(
+                            name: emp.displayName,
+                            imageUrl: emp.profileImageURL,
                             radius: 14,
                             backgroundColor: widget.shiftColor.softBg,
-                            child: Text(
-                              emp.displayName.isNotEmpty
-                                  ? emp.displayName[0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: widget.shiftColor,
-                              ),
-                            ),
                           ),
                           title: Text(
                             emp.displayName,

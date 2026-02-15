@@ -18,7 +18,8 @@ Future<void> _onCreate(Database db, int version) async {
       email TEXT,
       uid TEXT,
       vacationWeeksAllowed INTEGER DEFAULT 0,
-      vacationWeeksUsed INTEGER DEFAULT 0
+      vacationWeeksUsed INTEGER DEFAULT 0,
+      profileImageURL TEXT
     )
   ''');
 
@@ -125,6 +126,7 @@ Future<void> _onCreate(Database db, int version) async {
       notes TEXT,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
+      publishedAt TEXT,
       FOREIGN KEY (employeeId) REFERENCES employees(id) ON DELETE CASCADE
     )
   ''');
@@ -390,7 +392,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 34,
+      version: 36,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -937,6 +939,22 @@ class AppDatabase {
             await db.delete('time_off', where: 'id = ?', whereArgs: [id]);
           }
           log('Migration 34: Expanded ${rangeEntries.length} range entries to individual days', name: 'AppDatabase');
+        }
+        if (oldVersion < 35) {
+          final columns = await db.rawQuery('PRAGMA table_info(employees)');
+          final hasProfileImageURL = columns.any((col) => col['name'] == 'profileImageURL');
+          if (!hasProfileImageURL) {
+            await db.execute('ALTER TABLE employees ADD COLUMN profileImageURL TEXT');
+          }
+          log('Migration 35: Added profileImageURL column to employees', name: 'AppDatabase');
+        }
+        if (oldVersion < 36) {
+          final columns = await db.rawQuery('PRAGMA table_info(shifts)');
+          final hasPublishedAt = columns.any((col) => col['name'] == 'publishedAt');
+          if (!hasPublishedAt) {
+            await db.execute('ALTER TABLE shifts ADD COLUMN publishedAt TEXT');
+          }
+          log('Migration 36: Added publishedAt column to shifts', name: 'AppDatabase');
         }
       },
     );

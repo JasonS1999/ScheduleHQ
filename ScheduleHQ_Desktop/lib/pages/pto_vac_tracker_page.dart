@@ -9,6 +9,7 @@ import '../providers/time_off_provider.dart';
 import '../utils/loading_state_mixin.dart';
 import '../widgets/common/loading_indicator.dart';
 import '../widgets/common/error_message.dart';
+import '../widgets/common/employee_avatar.dart';
 
 class PtoVacTrackerPage extends StatefulWidget {
   const PtoVacTrackerPage({super.key});
@@ -215,9 +216,24 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
                       DataColumn(label: Text("Remaining")),
                     ],
                     rows: rows.map((row) {
+                      final emp = row['employee'] as Employee?;
                       return DataRow(
                         cells: [
-                          DataCell(Text(row['name'] ?? '')),
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                EmployeeAvatar(
+                                  name: row['name'] ?? '',
+                                  imageUrl: emp?.profileImageURL,
+                                  jobCode: emp?.jobCode,
+                                  radius: 14,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(row['name'] ?? ''),
+                              ],
+                            ),
+                          ),
                           DataCell(Text("${row['allowance']}h")),
                           DataCell(Text("${row['carryover']}h")),
                           DataCell(Text("${row['used']}h")),
@@ -246,6 +262,7 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
       try {
         final pto = await timeOffProvider.calculatePto(employee, settings);
         summaries.add({
+          'employee': employee,
           'name': employee.displayName,
           'allowance': pto['allowance'] ?? 0,
           'carryover': pto['carryover'] ?? 0,
@@ -452,9 +469,23 @@ class _PtoVacTrackerPageState extends State<PtoVacTrackerPage>
         children: [
           Expanded(
             flex: 2,
-            child: Text(
-              employee.displayName,
-              style: const TextStyle(fontWeight: FontWeight.w500),
+            child: Row(
+              children: [
+                EmployeeAvatar(
+                  name: employee.displayName,
+                  imageUrl: employee.profileImageURL,
+                  jobCode: employee.jobCode,
+                  radius: 14,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    employee.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(child: Text("Allowed: $allowed")),

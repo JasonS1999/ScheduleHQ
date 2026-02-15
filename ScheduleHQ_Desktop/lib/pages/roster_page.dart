@@ -15,6 +15,7 @@ import '../services/firestore_sync_service.dart';
 import 'employee_availability_page.dart';
 import 'weekly_template_dialog.dart';
 import '../widgets/csv_import_dialog.dart';
+import '../widgets/common/employee_avatar.dart';
 
 class RosterPage extends StatefulWidget {
   const RosterPage({super.key});
@@ -180,7 +181,7 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
   }
 
   Color _resolveJobCodeColor(String jobCode) {
-    final jobCodeProvider = context.read<JobCodeProvider>();
+    final jobCodeProvider = context.watch<JobCodeProvider>();
     final codes = jobCodeProvider.codes;
     final groups = jobCodeProvider.groups;
 
@@ -244,8 +245,8 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
           DataColumn(label: Text('Name')),
           DataColumn(label: Text('Job Code')),
           DataColumn(label: Text('Email')),
-          DataColumn(label: Text('Vacation')),
-          DataColumn(label: Text('Actions')),
+          DataColumn(label: Expanded(child: Center(child: Text('Vacation')))),
+          DataColumn(label: Expanded(child: Center(child: Text('Actions')))),
         ],
         rows: employeeProvider.items.map((employee) {
           final bg = _resolveJobCodeColor(employee.jobCode);
@@ -255,54 +256,70 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
           return DataRow(
             onSelectChanged: (_) => _showEditEmployeeDialog(employee),
             cells: [
-              DataCell(Text(employee.displayName)),
               DataCell(
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EmployeeAvatar(
+                      name: employee.displayName,
+                      imageUrl: employee.profileImageURL,
+                      radius: 16,
+                      jobCode: employee.jobCode,
                     ),
-                    decoration: BoxDecoration(
-                      color: bg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      employee.jobCode,
-                      style: TextStyle(
-                        color: fg,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    const SizedBox(width: 8),
+                    Text(employee.displayName),
+                  ],
+                ),
+              ),
+              DataCell(
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    employee.jobCode,
+                    style: TextStyle(
+                      color: fg,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ),
               DataCell(Text(employee.email ?? 'No email')),
               DataCell(
-                Text(
-                  '${employee.vacationWeeksAllowed} weeks',
+                Center(
+                  child: Text(
+                    '${employee.vacationWeeksAllowed} weeks',
+                  ),
                 ),
               ),
               DataCell(
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      onPressed: () => _showWeeklyTemplateForEmployee(employee),
-                      icon: const Icon(Icons.calendar_view_week),
-                      tooltip: 'Weekly Template',
-                    ),
-                    IconButton(
-                      onPressed: () => _showAvailabilityPage(employee),
-                      icon: const Icon(Icons.calendar_today),
-                      tooltip: 'View Availability',
-                    ),
-                    IconButton(
-                      onPressed: () => _deleteEmployee(employee),
-                      icon: const Icon(Icons.delete),
-                      tooltip: 'Delete Employee',
-                    ),
-                  ],
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () => _showWeeklyTemplateForEmployee(employee),
+                        icon: const Icon(Icons.calendar_view_week),
+                        tooltip: 'Weekly Template',
+                      ),
+                      IconButton(
+                        onPressed: () => _showAvailabilityPage(employee),
+                        icon: const Icon(Icons.calendar_today),
+                        tooltip: 'View Availability',
+                      ),
+                      IconButton(
+                        onPressed: () => _deleteEmployee(employee),
+                        icon: const Icon(Icons.delete),
+                        tooltip: 'Delete Employee',
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

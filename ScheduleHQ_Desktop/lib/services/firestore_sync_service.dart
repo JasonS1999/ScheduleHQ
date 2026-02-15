@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:schedulehq_desktop/database/app_database.dart';
 import 'package:schedulehq_desktop/database/time_off_dao.dart';
+import 'package:schedulehq_desktop/database/shift_dao.dart';
 import 'package:schedulehq_desktop/models/employee.dart';
 import 'package:schedulehq_desktop/models/shift.dart';
 import 'package:schedulehq_desktop/models/time_off_entry.dart';
@@ -562,23 +563,32 @@ class FirestoreSyncService {
         final data = doc.data();
         final localId = data['localId'] as int?;
         final uid = data['uid'] as String?;
+        final profileImageURL = data['profileImageURL'] as String?;
 
-        // Only sync valid Firebase UIDs
-        if (localId != null && _isValidFirebaseUid(uid)) {
-          // Update local database with the UID
-          final result = await db.update(
-            'employees',
-            {'uid': uid},
-            where: 'id = ? AND (uid IS NULL OR uid != ?)',
-            whereArgs: [localId, uid],
-          );
+        if (localId != null) {
+          final updateFields = <String, dynamic>{};
 
-          if (result > 0) {
-            updatedCount++;
-            log(
-              'Synced UID for employee $localId',
-              name: 'FirestoreSyncService',
+          // Sync valid Firebase UIDs
+          if (_isValidFirebaseUid(uid)) {
+            updateFields['uid'] = uid;
+          }
+
+          // Sync profile image URL
+          if (profileImageURL != null) {
+            updateFields['profileImageURL'] = profileImageURL;
+          }
+
+          if (updateFields.isNotEmpty) {
+            final result = await db.update(
+              'employees',
+              updateFields,
+              where: 'id = ?',
+              whereArgs: [localId],
             );
+
+            if (result > 0) {
+              updatedCount++;
+            }
           }
         }
       }
@@ -670,6 +680,7 @@ class FirestoreSyncService {
       int publishedCount = 0;
       int skippedNoUid = 0;
       final Set<String> publishedUids = {};
+      final List<int> publishedShiftIds = [];
 
       // Process each month
       for (final entry in shiftsByMonth.entries) {
@@ -713,11 +724,15 @@ class FirestoreSyncService {
           });
 
           publishedCount++;
+          publishedShiftIds.add(shift.id!);
           publishedUids.add(employee.uid!);
         }
 
         await batch.commit();
       }
+
+      // Stamp publishedAt locally for all successfully published shifts
+      await ShiftDao().markAsPublished(publishedShiftIds);
 
       log(
         'Published $publishedCount shifts to Firestore (skipped $skippedNoUid without UID)',
@@ -814,6 +829,13 @@ class FirestoreSyncService {
           deletedCount += batchCount;
         }
       }
+
+      // Clear publishedAt locally for unpublished shifts
+      await ShiftDao().clearPublishedAt(
+        start: startDate,
+        end: endDate.add(const Duration(days: 1)),
+        employeeIds: employeeIds,
+      );
 
       log(
         'Unpublished (deleted) $deletedCount shifts from Firestore',
@@ -1082,24 +1104,6 @@ class FirestoreSyncService {
 
   // ============== TIME-OFF REQUESTS (from employees) ==============
 
-  /// Listen to pending time-off requests from employees.
-  /// Now uses the unified timeOff collection.
-  Stream<List<TimeOffRequest>> watchPendingRequests() {
-    final timeOffRef = _timeOffRef;
-    if (timeOffRef == null) {
-      return Stream.value([]);
-    }
-
-    return timeOffRef
-        .where('status', isEqualTo: 'pending')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => TimeOffRequest.fromFirestore(doc))
-              .toList(),
-        );
-  }
-
   /// Approve a time-off request.
   /// Updates the entry in the unified timeOff collection.
   Future<void> approveTimeOffRequest(String requestId) async {
@@ -1336,6 +1340,7 @@ class FirestoreSyncService {
           'jobCode': data['jobCode'],
           'email': data['email'],
           'uid': data['uid'],
+          'profileImageURL': data['profileImageURL'],
           'vacationWeeksAllowed': data['vacationWeeksAllowed'] ?? 0,
           'vacationWeeksUsed': data['vacationWeeksUsed'] ?? 0,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -1855,124 +1860,148 @@ class FirestoreSyncService {
     };
   }
 
-  // ============== REAL-TIME TIME-OFF LISTENER (Cloud to Local) ==============
+  // ============== TIME-OFF POLLING (Cloud to Local) ==============
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-      _timeOffListenerSubscription;
+  Timer? _timeOffPollTimer;
   Timer? _timeOffDebounce;
+  Map<String, Map<String, dynamic>> _lastKnownTimeOffDocs = {};
 
-  /// Start listening for approved time-off changes in Firestore and sync to local DB.
+  /// Start polling for approved time-off changes in Firestore and sync to local DB.
+  /// Uses .get() instead of .snapshots() to avoid platform thread crash on Windows desktop.
   /// [onChanged] is called (debounced) whenever changes are applied locally.
   void startTimeOffListener(void Function() onChanged) {
     final timeOffRef = _timeOffRef;
     if (timeOffRef == null) {
-      log('Cannot start time-off listener - not logged in',
+      log('Cannot start time-off polling - not logged in',
           name: 'FirestoreSyncService');
       return;
     }
 
-    // Don't start a duplicate listener
-    if (_timeOffListenerSubscription != null) {
-      log('Time-off listener already active', name: 'FirestoreSyncService');
+    if (_timeOffPollTimer != null) {
+      log('Time-off poll timer already active', name: 'FirestoreSyncService');
       return;
     }
 
-    log('Starting real-time time-off listener', name: 'FirestoreSyncService');
+    log('Starting time-off polling', name: 'FirestoreSyncService');
 
-    _timeOffListenerSubscription = timeOffRef
-        .where('status', isEqualTo: 'approved')
-        .snapshots()
-        .listen(
-      (snapshot) async {
-        if (snapshot.docChanges.isEmpty) return;
-
-        try {
-          final db = await AppDatabase.instance.db;
-          int changesApplied = 0;
-
-          for (final change in snapshot.docChanges) {
-            final data = change.doc.data();
-            if (data == null) continue;
-
-            if (change.type == DocumentChangeType.removed) {
-              final localId = data['localId'] as int?;
-              if (localId != null) {
-                final deleted = await db.delete(
-                  'time_off',
-                  where: 'id = ?',
-                  whereArgs: [localId],
-                );
-                if (deleted > 0) changesApplied++;
-              }
-            } else {
-              // Added or modified — use shared helper
-              final map = _firestoreDocToLocalMap(data);
-              if (map == null) continue;
-
-              final employeeId = map['employeeId'] as int;
-              final dateStr = map['date'] as String;
-
-              // Check if an entry already exists for this (employeeId, date)
-              final existing = await db.query(
-                'time_off',
-                columns: ['id'],
-                where: 'employeeId = ? AND date = ?',
-                whereArgs: [employeeId, dateStr],
-                limit: 1,
-              );
-
-              if (existing.isNotEmpty) {
-                // Update the existing row to preserve its local id
-                final existingId = existing.first['id'] as int;
-                final updateMap = Map<String, dynamic>.from(map);
-                updateMap.remove('id');
-                await db.update(
-                  'time_off',
-                  updateMap,
-                  where: 'id = ?',
-                  whereArgs: [existingId],
-                );
-              } else {
-                await db.insert(
-                  'time_off',
-                  map,
-                  conflictAlgorithm: ConflictAlgorithm.replace,
-                );
-              }
-              changesApplied++;
-            }
-          }
-
-          if (changesApplied > 0) {
-            log(
-              'Applied $changesApplied time-off changes from cloud',
-              name: 'FirestoreSyncService',
-            );
-            // Debounce the UI callback
-            _timeOffDebounce?.cancel();
-            _timeOffDebounce = Timer(
-              const Duration(milliseconds: 300),
-              onChanged,
-            );
-          }
-        } catch (e) {
-          log('Error processing time-off listener snapshot: $e',
-              name: 'FirestoreSyncService');
-        }
-      },
-      onError: (error) {
-        log('Time-off listener error: $error', name: 'FirestoreSyncService');
-      },
+    // Run immediately, then periodically
+    _pollTimeOff(timeOffRef, onChanged);
+    _timeOffPollTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _pollTimeOff(timeOffRef, onChanged),
     );
   }
 
-  /// Stop listening for time-off changes from Firestore.
+  Future<void> _pollTimeOff(
+    CollectionReference<Map<String, dynamic>> timeOffRef,
+    void Function() onChanged,
+  ) async {
+    try {
+      final snapshot = await timeOffRef
+          .where('status', isEqualTo: 'approved')
+          .get();
+
+      final currentDocs = <String, Map<String, dynamic>>{};
+      for (final doc in snapshot.docs) {
+        currentDocs[doc.id] = doc.data();
+      }
+
+      final db = await AppDatabase.instance.db;
+      int changesApplied = 0;
+
+      // Detect removed docs
+      for (final oldId in _lastKnownTimeOffDocs.keys) {
+        if (!currentDocs.containsKey(oldId)) {
+          final oldData = _lastKnownTimeOffDocs[oldId]!;
+          final localId = oldData['localId'] as int?;
+          if (localId != null) {
+            final deleted = await db.delete(
+              'time_off',
+              where: 'id = ?',
+              whereArgs: [localId],
+            );
+            if (deleted > 0) changesApplied++;
+          }
+        }
+      }
+
+      // Detect added or modified docs
+      for (final entry in currentDocs.entries) {
+        final docId = entry.key;
+        final data = entry.value;
+        final oldData = _lastKnownTimeOffDocs[docId];
+
+        // Skip if unchanged
+        if (oldData != null && _mapsEqual(oldData, data)) continue;
+
+        final map = _firestoreDocToLocalMap(data);
+        if (map == null) continue;
+
+        final employeeId = map['employeeId'] as int;
+        final dateStr = map['date'] as String;
+
+        final existing = await db.query(
+          'time_off',
+          columns: ['id'],
+          where: 'employeeId = ? AND date = ?',
+          whereArgs: [employeeId, dateStr],
+          limit: 1,
+        );
+
+        if (existing.isNotEmpty) {
+          final existingId = existing.first['id'] as int;
+          final updateMap = Map<String, dynamic>.from(map);
+          updateMap.remove('id');
+          await db.update(
+            'time_off',
+            updateMap,
+            where: 'id = ?',
+            whereArgs: [existingId],
+          );
+        } else {
+          await db.insert(
+            'time_off',
+            map,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        changesApplied++;
+      }
+
+      _lastKnownTimeOffDocs = currentDocs;
+
+      if (changesApplied > 0) {
+        log(
+          'Applied $changesApplied time-off changes from cloud',
+          name: 'FirestoreSyncService',
+        );
+        _timeOffDebounce?.cancel();
+        _timeOffDebounce = Timer(
+          const Duration(milliseconds: 300),
+          onChanged,
+        );
+      }
+    } catch (e) {
+      log('Error polling time-off data: $e', name: 'FirestoreSyncService');
+    }
+  }
+
+  bool _mapsEqual(Map<String, dynamic> a, Map<String, dynamic> b) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (a[key] != b[key]) return false;
+    }
+    return true;
+  }
+
+  /// Stop polling for time-off changes from Firestore.
   void stopTimeOffListener() {
-    _timeOffListenerSubscription?.cancel();
-    _timeOffListenerSubscription = null;
+    _timeOffPollTimer?.cancel();
+    _timeOffPollTimer = null;
     _timeOffDebounce?.cancel();
     _timeOffDebounce = null;
-    log('Stopped real-time time-off listener', name: 'FirestoreSyncService');
+    _lastKnownTimeOffDocs.clear();
+    log('Stopped time-off polling', name: 'FirestoreSyncService');
   }
 }
 
