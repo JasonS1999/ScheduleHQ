@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../services/app_colors.dart';
 import '../utils/app_constants.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +23,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _isLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
+  String _appVersion = '';
 
   late final AnimationController _entranceController;
   late final Animation<double> _fadeAnimation;
@@ -47,10 +49,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     ));
     _entranceController.forward();
 
+    _loadVersion();
+
     // Auto-focus email field after entrance animation
     Future.delayed(const Duration(milliseconds: 900), () {
       if (mounted) _emailFocusNode.requestFocus();
     });
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _appVersion = info.version;
+      });
+    }
   }
 
   @override
@@ -463,7 +476,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             // Version footer
                             const SizedBox(height: 32),
                             Text(
-                              'v${AppConstants.appVersion}',
+                              'v$_appVersion',
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: context.appColors.textTertiary,
                               ),

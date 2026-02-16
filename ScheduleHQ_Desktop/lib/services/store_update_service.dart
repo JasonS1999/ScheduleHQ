@@ -15,10 +15,10 @@ class StoreUpdateService {
 
   // Package Family Name from Partner Center
   static const String _packageFamilyName =
-      'JasonSjogren.ScheduleHQ_<hash>'; // TODO: Replace with actual PFN
+      'JasonSjogren.ScheduleHQ'; 
 
   // Current app version (should match pubspec.yaml)
-  static const String currentVersion = '2.7.0';
+  static const String currentVersion = '3.0.0';
 
   /// Cached update info
   static bool _updateAvailable = false;

@@ -12,7 +12,7 @@ class UpdateService {
   static const String _repo = 'ScheduleHQ';
 
   // Current app version (should match pubspec.yaml)
-  static const String currentVersion = '2.7.0';
+  static const String currentVersion = '3.0.0';
 
   /// Cached update info
   static String? _latestVersion;
