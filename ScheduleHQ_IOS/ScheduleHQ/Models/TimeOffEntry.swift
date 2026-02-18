@@ -12,7 +12,7 @@ enum TimeOffType: String, CaseIterable {
     static func fromRawValue(_ raw: String) -> TimeOffType {
         switch raw {
         case "pto": return .pto
-        case "vac": return .vacation
+        case "vac", "vacation": return .vacation
         case "sick", "off", "req", "requested": return .requested
         default: return .requested
         }
