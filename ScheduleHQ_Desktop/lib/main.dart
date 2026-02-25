@@ -19,6 +19,8 @@ import 'providers/analytics_provider.dart';
 import 'providers/approval_provider.dart';
 import 'providers/job_code_provider.dart';
 import 'providers/store_settings_provider.dart';
+import 'providers/onboarding_provider.dart';
+import 'providers/notification_provider.dart';
 import 'services/app_colors.dart';
 import 'services/auto_sync_service.dart';
 import 'services/firestore_sync_service.dart';
@@ -91,6 +93,16 @@ class MyApp extends StatelessWidget {
         // Store Settings provider
         ChangeNotifierProvider<StoreSettingsProvider>(
           create: (_) => StoreSettingsProvider(),
+        ),
+
+        // Onboarding provider
+        ChangeNotifierProvider<OnboardingProvider>(
+          create: (_) => OnboardingProvider(),
+        ),
+
+        // Notification provider
+        ChangeNotifierProvider<NotificationProvider>(
+          create: (_) => NotificationProvider(),
         ),
       ],
       child: Selector<SettingsProvider, String>(
@@ -249,6 +261,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
       _currentUid = uid;
       // Stop previous listener when switching accounts
       FirestoreSyncService.instance.stopTimeOffListener();
+      if (mounted) {
+        Provider.of<NotificationProvider>(context, listen: false).stopPolling();
+      }
     }
     if (!_dbInitialized) {
       await AppDatabase.instance.initForManager(uid);
@@ -290,6 +305,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
         await scheduleProvider.initialize();
         await jobCodeProvider.initialize();
 
+        // Initialize onboarding state
+        final onboardingProvider = Provider.of<OnboardingProvider>(
+          context,
+          listen: false,
+        );
+        await onboardingProvider.initialize();
+
+        // Initialize and start notification polling
+        final notificationProvider = Provider.of<NotificationProvider>(
+          context,
+          listen: false,
+        );
+        await notificationProvider.initialize();
+        notificationProvider.startPolling();
+
         // Sync profile image URLs from Firestore in the background (non-blocking)
         FirestoreSyncService.instance.syncEmployeeUidsFromFirestore().then((_) {
           if (mounted) {
@@ -318,6 +348,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void dispose() {
     FirestoreSyncService.instance.stopTimeOffListener();
+    Provider.of<NotificationProvider>(context, listen: false).stopPolling();
     super.dispose();
   }
 

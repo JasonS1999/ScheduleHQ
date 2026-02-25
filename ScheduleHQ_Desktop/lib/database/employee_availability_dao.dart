@@ -150,16 +150,29 @@ class EmployeeAvailabilityDao {
           'available': true,
           'reason': 'Available during shift time (${pattern.startTime} - ${pattern.endTime})',
           'type': type,
+          'startTime': pattern.startTime,
+          'endTime': pattern.endTime,
         };
       } else {
         return {
           'available': false,
           'reason': 'Outside available time (${pattern.startTime} - ${pattern.endTime})',
           'type': type,
+          'startTime': pattern.startTime,
+          'endTime': pattern.endTime,
         };
       }
     }
 
+    if (pattern.startTime != null && pattern.endTime != null) {
+      return {
+        'available': true,
+        'reason': 'Available (${pattern.startTime} - ${pattern.endTime})',
+        'type': type,
+        'startTime': pattern.startTime,
+        'endTime': pattern.endTime,
+      };
+    }
     return {
       'available': true,
       'reason': 'Available',

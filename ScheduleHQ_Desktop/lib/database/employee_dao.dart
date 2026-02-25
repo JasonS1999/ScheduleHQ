@@ -6,7 +6,7 @@ import 'app_database.dart';
 class EmployeeDao {
   Future<List<Employee>> getEmployees() async {
     final db = await AppDatabase.instance.db;
-    final result = await db.query('employees', orderBy: 'name ASC');
+    final result = await db.query('employees', orderBy: 'firstName ASC');
     return result.map((row) => Employee.fromMap(row)).toList();
   }
 

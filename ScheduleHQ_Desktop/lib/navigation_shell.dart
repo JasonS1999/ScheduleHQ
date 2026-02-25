@@ -9,12 +9,17 @@ import 'pages/approval_queue_page.dart';
 import 'pages/pnl_page.dart';
 import 'providers/auth_provider.dart' as app_auth;
 import 'providers/employee_provider.dart';
+import 'providers/onboarding_provider.dart';
 import 'services/app_colors.dart';
 import 'services/store_update_service.dart';
 import 'utils/app_constants.dart';
 import 'utils/snackbar_helper.dart';
 import 'utils/dialog_helper.dart';
 import 'widgets/common/employee_avatar.dart';
+import 'widgets/onboarding/welcome_carousel.dart';
+import 'providers/notification_provider.dart';
+import 'widgets/navigation/notification_badge.dart';
+import 'widgets/navigation/notification_panel.dart';
 
 class NavigationShell extends StatefulWidget {
   const NavigationShell({super.key});
@@ -33,6 +38,9 @@ class _NavigationShellState extends State<NavigationShell>
   late final AnimationController _sidebarController;
   late final Animation<double> _sidebarFade;
   late final Animation<Offset> _sidebarSlide;
+
+  // Notification panel is rendered in-tree via Stack (not OverlayEntry)
+  // to avoid RenderFollowerLayer layout issues across render subtrees.
 
   final List<Widget Function()> _pageBuilders = [
     () => const SchedulePage(),
@@ -64,6 +72,33 @@ class _NavigationShellState extends State<NavigationShell>
     ));
     _sidebarController.forward();
     _checkForUpdates();
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+      if (onboarding.shouldShowWelcome) {
+        await WelcomeCarousel.show(context);
+        if (!mounted) return;
+        await onboarding.markWelcomeCompleted();
+        // Navigate to Settings page after welcome carousel
+        if (mounted) {
+          setState(() => _index = 6);
+        }
+      }
+    });
+  }
+
+  Future<void> _relaunchTutorial() async {
+    final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+    await onboarding.resetAllOnboarding();
+    if (!mounted) return;
+    await WelcomeCarousel.show(context);
+    if (!mounted) return;
+    await onboarding.markWelcomeCompleted();
+    setState(() => _index = 6);
   }
 
   @override
@@ -130,141 +165,160 @@ class _NavigationShellState extends State<NavigationShell>
     final isDark = context.isDarkMode;
 
     return Scaffold(
-      body: Row(
+      body: Stack(
         children: [
-          if (isWide)
-            FadeTransition(
-              opacity: _sidebarFade,
-              child: SlideTransition(
-                position: _sidebarSlide,
-                child: AnimatedContainer(
-                  duration: AppConstants.mediumAnimation,
-                  curve: Curves.easeInOut,
-                  width: _collapsed ? 72 : 220,
-                  clipBehavior: Clip.hardEdge,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? context.appColors.surfaceVariant
-                        : context.appColors.surfaceContainer,
-                    border: isDark
-                        ? Border(
-                            right: BorderSide(
-                              color: context.appColors.borderLight,
-                            ),
-                          )
-                        : null,
-                    boxShadow: isDark
-                        ? null
-                        : [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(2, 0),
-                            ),
-                          ],
-                  ),
-                  child: Column(
-                    children: [
-                      // User info section with avatar
-                      _buildUserInfoSection(),
-                      // Collapse toggle
-                      _buildCollapseToggle(),
-                      // Padded divider
-                      _buildInternalDivider(),
-                      // Navigation rail
-                      Expanded(
-                        child: NavigationRail(
-                          selectedIndex: _index,
-                          onDestinationSelected: (i) =>
-                              setState(() => _index = i),
-                          labelType: _collapsed
-                              ? NavigationRailLabelType.none
-                              : NavigationRailLabelType.all,
-                          backgroundColor: Colors.transparent,
-                          indicatorColor:
-                              Theme.of(context).colorScheme.primaryContainer,
-                          indicatorShape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppConstants.radiusLarge,
-                            ),
-                          ),
-                          selectedIconTheme: IconThemeData(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                            size: 22,
-                          ),
-                          unselectedIconTheme: IconThemeData(
-                            color: context.appColors.textSecondary,
-                            size: 22,
-                          ),
-                          destinations: const [
-                            NavigationRailDestination(
-                              icon: Icon(Icons.calendar_month_outlined),
-                              selectedIcon: Icon(Icons.calendar_month),
-                              label: Text("Schedule"),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.people_outlined),
-                              selectedIcon: Icon(Icons.people),
-                              label: Text("Roster"),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.beach_access_outlined),
-                              selectedIcon: Icon(Icons.beach_access),
-                              label: Text("PTO / VAC"),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.pending_actions_outlined),
-                              selectedIcon: Icon(Icons.pending_actions),
-                              label: Text("Time Off"),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.analytics_outlined),
-                              selectedIcon: Icon(Icons.analytics),
-                              label: Text("Analytics"),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.account_balance_outlined),
-                              selectedIcon: Icon(Icons.account_balance),
-                              label: Text("P&L"),
-                            ),
-                            NavigationRailDestination(
-                              icon: Icon(Icons.settings_outlined),
-                              selectedIcon: Icon(Icons.settings),
-                              label: Text("Settings"),
-                            ),
-                          ],
-                        ),
+          Row(
+            children: [
+              if (isWide)
+                FadeTransition(
+                  opacity: _sidebarFade,
+                  child: SlideTransition(
+                    position: _sidebarSlide,
+                    child: AnimatedContainer(
+                      duration: AppConstants.mediumAnimation,
+                      curve: Curves.easeInOut,
+                      width: _collapsed ? 72 : 220,
+                      clipBehavior: Clip.hardEdge,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? context.appColors.surfaceVariant
+                            : context.appColors.surfaceContainer,
+                        border: isDark
+                            ? Border(
+                                right: BorderSide(
+                                  color: context.appColors.borderLight,
+                                ),
+                              )
+                            : null,
+                        boxShadow: isDark
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(2, 0),
+                                ),
+                              ],
                       ),
-                      // Bottom section
-                      _buildInternalDivider(),
-                      _buildUpdateButton(),
-                      _buildLogoutButton(),
-                    ],
+                      child: Column(
+                        children: [
+                          // User info section with avatar
+                          _buildUserInfoSection(),
+                          // Collapse toggle
+                          _buildCollapseToggle(),
+                          // Padded divider
+                          _buildInternalDivider(),
+                          // Navigation rail
+                          Expanded(
+                            child: NavigationRail(
+                              selectedIndex: _index,
+                              onDestinationSelected: (i) =>
+                                  setState(() => _index = i),
+                              labelType: _collapsed
+                                  ? NavigationRailLabelType.none
+                                  : NavigationRailLabelType.all,
+                              backgroundColor: Colors.transparent,
+                              indicatorColor:
+                                  Theme.of(context).colorScheme.primaryContainer,
+                              indicatorShape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppConstants.radiusLarge,
+                                ),
+                              ),
+                              selectedIconTheme: IconThemeData(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                                size: 22,
+                              ),
+                              unselectedIconTheme: IconThemeData(
+                                color: context.appColors.textSecondary,
+                                size: 22,
+                              ),
+                              destinations: const [
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.calendar_month_outlined),
+                                  selectedIcon: Icon(Icons.calendar_month),
+                                  label: Text("Schedule"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.people_outlined),
+                                  selectedIcon: Icon(Icons.people),
+                                  label: Text("Roster"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.beach_access_outlined),
+                                  selectedIcon: Icon(Icons.beach_access),
+                                  label: Text("PTO / VAC"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.pending_actions_outlined),
+                                  selectedIcon: Icon(Icons.pending_actions),
+                                  label: Text("Time Off"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.analytics_outlined),
+                                  selectedIcon: Icon(Icons.analytics),
+                                  label: Text("Analytics"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.account_balance_outlined),
+                                  selectedIcon: Icon(Icons.account_balance),
+                                  label: Text("P&L"),
+                                ),
+                                NavigationRailDestination(
+                                  icon: Icon(Icons.settings_outlined),
+                                  selectedIcon: Icon(Icons.settings),
+                                  label: Text("Settings"),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Bottom section
+                          _buildInternalDivider(),
+                          _buildHelpButton(),
+                          _buildUpdateButton(),
+                          _buildLogoutButton(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Content area with page transition
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: AppConstants.shortAnimation,
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    return FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_index),
+                    child: _pageBuilders[_index](),
                   ),
                 ),
               ),
-            ),
+            ],
+          ),
 
-          // Content area with page transition
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: AppConstants.shortAnimation,
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (Widget child, Animation<double> animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: child,
+          // Notification panel — rendered in-tree to share render subtree
+          if (isWide)
+            Consumer<NotificationProvider>(
+              builder: (context, notifProvider, _) {
+                if (!notifProvider.isPanelOpen) return const SizedBox.shrink();
+                final sidebarWidth = _collapsed ? 72.0 : 220.0;
+                return Positioned(
+                  left: sidebarWidth + 4,
+                  top: 56,
+                  child: const NotificationPanel(),
                 );
               },
-              child: KeyedSubtree(
-                key: ValueKey<int>(_index),
-                child: _pageBuilders[_index](),
-              ),
             ),
-          ),
         ],
       ),
 
@@ -338,10 +392,19 @@ class _NavigationShellState extends State<NavigationShell>
           }
         }
 
-        final avatar = EmployeeAvatar(
+        final rawAvatar = EmployeeAvatar(
           name: displayName,
           imageUrl: photoUrl,
           radius: 20,
+        );
+
+        final avatar = Consumer<NotificationProvider>(
+          builder: (ctx, notifProvider, _) => NotificationBadge(
+            avatar: rawAvatar,
+            unreadCount: notifProvider.unreadCount,
+            isAnimating: notifProvider.newNotificationArrived,
+            onTap: notifProvider.togglePanel,
+          ),
         );
 
         return LayoutBuilder(
@@ -431,6 +494,60 @@ class _NavigationShellState extends State<NavigationShell>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHelpButton() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 150) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: AppConstants.smallPadding,
+            ),
+            child: IconButton(
+              onPressed: _relaunchTutorial,
+              icon: Icon(
+                Icons.help_outline,
+                size: 16,
+                color: context.appColors.textTertiary,
+              ),
+              tooltip: 'Getting Started Guide',
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppConstants.defaultPadding,
+            vertical: AppConstants.smallPadding,
+          ),
+          child: SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: _relaunchTutorial,
+              icon: Icon(
+                Icons.help_outline,
+                size: 16,
+                color: context.appColors.textTertiary,
+              ),
+              label: Text(
+                'Getting Started',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 12,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -392,7 +392,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 36,
+      version: 37,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -955,6 +955,44 @@ class AppDatabase {
             await db.execute('ALTER TABLE shifts ADD COLUMN publishedAt TEXT');
           }
           log('Migration 36: Added publishedAt column to shifts', name: 'AppDatabase');
+        }
+        if (oldVersion < 37) {
+          // Remove legacy 'name' column (NOT NULL) from employees table.
+          // Migration 30 added firstName/lastName/nickname but left the old
+          // 'name' column in place, causing NOT NULL failures on INSERT.
+          final columns = await db.rawQuery('PRAGMA table_info(employees)');
+          final hasNameCol = columns.any((col) => col['name'] == 'name');
+          if (hasNameCol) {
+            await db.execute('PRAGMA foreign_keys=OFF');
+            await db.execute('''
+              CREATE TABLE employees_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firstName TEXT,
+                lastName TEXT,
+                nickname TEXT,
+                jobCode TEXT,
+                email TEXT,
+                uid TEXT,
+                vacationWeeksAllowed INTEGER DEFAULT 0,
+                vacationWeeksUsed INTEGER DEFAULT 0,
+                profileImageURL TEXT
+              )
+            ''');
+            // Copy data, falling back to old 'name' column for firstName
+            await db.execute('''
+              INSERT INTO employees_new (id, firstName, lastName, nickname, jobCode, email, uid, vacationWeeksAllowed, vacationWeeksUsed, profileImageURL)
+              SELECT id, COALESCE(firstName, name), lastName, nickname, jobCode, email, uid, vacationWeeksAllowed, vacationWeeksUsed, profileImageURL
+              FROM employees
+            ''');
+            await db.execute('DROP TABLE employees');
+            await db.execute('ALTER TABLE employees_new RENAME TO employees');
+            await db.execute('''
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_email
+              ON employees(email) WHERE email IS NOT NULL
+            ''');
+            await db.execute('PRAGMA foreign_keys=ON');
+            log('Migration 37: Removed legacy name column from employees', name: 'AppDatabase');
+          }
         }
       },
     );

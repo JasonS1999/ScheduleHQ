@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/employee_provider.dart';
 import '../providers/job_code_provider.dart';
+import '../providers/onboarding_provider.dart';
 import '../models/job_code_settings.dart';
 import '../models/job_code_group.dart';
 import '../services/app_colors.dart';
@@ -16,6 +17,8 @@ import 'employee_availability_page.dart';
 import 'weekly_template_dialog.dart';
 import '../widgets/csv_import_dialog.dart';
 import '../widgets/common/employee_avatar.dart';
+import '../widgets/onboarding/coach_mark_controller.dart';
+import '../widgets/onboarding/coach_mark_overlay.dart';
 
 class RosterPage extends StatefulWidget {
   const RosterPage({super.key});
@@ -25,14 +28,61 @@ class RosterPage extends StatefulWidget {
 }
 
 class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
+  CoachMarkController? _coachMarkController;
+
+  // Coach mark target keys
+  final GlobalKey _addEmployeeButtonKey = GlobalKey(debugLabel: 'addEmployeeBtn');
+  final GlobalKey _csvImportMenuKey = GlobalKey(debugLabel: 'csvImportMenu');
 
   @override
   void initState() {
     super.initState();
     // Initialize providers if needed
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeData();
+      _initializeData().then((_) {
+        if (!mounted) return;
+        final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+        if (onboarding.shouldShowRosterCoach) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) _startRosterCoachMarks();
+          });
+        }
+      });
     });
+  }
+
+  void _startRosterCoachMarks() {
+    _coachMarkController = CoachMarkController(
+      steps: [
+        CoachMarkStep(
+          targetKey: _addEmployeeButtonKey,
+          title: 'Add Your Team Members',
+          description: 'Click here to add employees. Enter their name, job code, email, and vacation allowance. After adding an employee, you can set up their weekly template and availability from the employee\'s row menu.',
+          preferredPosition: TooltipPosition.below,
+        ),
+        CoachMarkStep(
+          targetKey: _csvImportMenuKey,
+          title: 'Bulk Import from CSV',
+          description: 'Have a spreadsheet? Use the menu to import multiple employees at once from a CSV file.',
+          preferredPosition: TooltipPosition.below,
+        ),
+      ],
+      onComplete: () {
+        final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+        onboarding.markRosterCoachCompleted();
+      },
+      onSkip: () {
+        final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+        onboarding.markRosterCoachCompleted();
+      },
+    );
+    _coachMarkController!.start(context);
+  }
+
+  @override
+  void dispose() {
+    _coachMarkController?.dispose();
+    super.dispose();
   }
 
   Future<void> _initializeData() async {
@@ -71,12 +121,14 @@ class _RosterPageState extends State<RosterPage> with LoadingStateMixin {
 
           // Add employee button
           IconButton(
+            key: _addEmployeeButtonKey,
             onPressed: _showAddEmployeeDialog,
             icon: const Icon(Icons.person_add),
             tooltip: 'Add Employee',
           ),
 
           PopupMenuButton<String>(
+            key: _csvImportMenuKey,
             onSelected: _handleMenuAction,
             itemBuilder: (context) => [
               const PopupMenuItem(

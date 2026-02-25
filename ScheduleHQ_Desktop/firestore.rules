@@ -1,137 +1,129 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // Helper function to check manager role
-    // Uses exists() first to avoid errors when document doesn't exist
     function isManager() {
-      return request.auth != null && 
+      return request.auth != null &&
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "manager";
     }
-    
-    // Helper function to check if user owns this employee record
+
+    // Helper function to check if user owns this employee record (by email)
     function isOwnEmployee(email) {
       return request.auth != null && request.auth.token.email == email;
     }
-    
-    // Users collection - MUST come first so managers can create their own profile
-    // Any authenticated user can create/update their OWN user document
-    // This allows first-time manager setup
+
+    // Users collection - any authenticated user can create/update their OWN user document
     match /users/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || isManager());
       allow create: if request.auth != null && request.auth.uid == uid;
       allow update: if request.auth != null && (request.auth.uid == uid || isManager());
     }
-    
-    // Manager Settings - each manager can only access their own settings
+
+    // Manager Settings - manager can write, any authenticated user can read
+    // (employees need to read shift types for leaderboard)
     match /managerSettings/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid && isManager();
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid && isManager();
     }
-    
+
     // Global settings - only managers can read/write auth code settings
-    // The Cloud Function handles public creation requests
     match /settings/managerAuthCode {
       allow read, write: if isManager();
     }
 
     // ============== PER-MANAGER DATA ==============
-    // Each manager has their own subcollections for employees, shifts, time-off, etc.
-    
+    // All data is isolated per manager UID. Any authenticated user who knows the
+    // manager UID (i.e., is part of that store) can read. Only the manager can write.
+
     match /managers/{managerUid} {
       // Manager can access their own root document
       allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
-      
-      // Employees subcollection - manager writes, employees read own
+
+      // Employees subcollection - any authenticated user can read (employees
+      // need to see team names and profile pictures on the schedule and leaderboard).
+      // Manager can write any field. Employees can update ONLY their own
+      // profileImageURL (matched by uid or email on the document).
       match /employees/{docId} {
-        allow read: if request.auth != null && 
-                      (request.auth.uid == managerUid || 
-                       isOwnEmployee(resource.data.email));
-        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
-      }
-      
-      // Shifts subcollection - manager writes, employees read own shifts
-      match /shifts/{docId} {
-        allow read: if request.auth != null && 
-                      (request.auth.uid == managerUid || 
-                       resource.data.employeeUid == request.auth.uid);
-        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
-      }
-      
-      // Schedules collection - contains monthly subcollections with shifts
-      // Path: managers/{managerUid}/schedules/{YYYY-MM}/shifts/{docId}
-      match /schedules/{monthKey} {
-        // Allow manager to read/write the month document itself
-        allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
-        
-        // Shifts within each month - manager writes, employees read own published shifts
-        match /shifts/{docId} {
-          allow read: if request.auth != null && 
-                        (request.auth.uid == managerUid || 
-                         resource.data.employeeUid == request.auth.uid);
-          allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
-        }
-      }
-      
-      // Month-based schedules subcollection: managers/{managerUid}/schedules/{month}/shifts
-      match /schedules/{monthId} {
         allow read: if request.auth != null;
-        
-        match /shifts/{shiftId} {
-          // Managers can read all shifts, employees can read their own
-          allow read: if request.auth != null && 
-                        (request.auth.uid == managerUid || 
-                         resource.data.employeeUid == request.auth.uid);
+        allow create, delete: if request.auth != null && request.auth.uid == managerUid && isManager();
+        allow update: if request.auth != null &&
+                        (
+                          // Manager can update anything
+                          (request.auth.uid == managerUid && isManager()) ||
+                          // Employee can update only profileImageURL on their own record
+                          (
+                            (resource.data.uid == request.auth.uid ||
+                             isOwnEmployee(resource.data.email)) &&
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['profileImageURL'])
+                          )
+                        );
+      }
+
+      // Shifts subcollection (legacy direct collection)
+      // Any authenticated user can read - data is already isolated per manager
+      match /shifts/{docId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
+      }
+
+      // Schedules: managers/{managerUid}/schedules/{YYYY-MM}/shifts/{docId}
+      // Employees need to read the month doc and all shifts within it.
+      // NOTE: shift docs created by the desktop app use internal employee IDs, not Firebase UIDs,
+      // so we allow any authenticated user to read rather than filtering by employeeUid.
+      match /schedules/{monthKey} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
+
+        match /shifts/{docId} {
+          allow read: if request.auth != null;
           allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
         }
       }
-      
-      // Time off entries - manager writes, employees can create own entries
-      // Employees can also update/delete their own PENDING entries
+
+      // Time off entries
+      // - Any authenticated user can READ (employee needs to see their own entries)
+      // - Any authenticated user can CREATE (employee submits a request from mobile app)
+      // - Only the manager can UPDATE/DELETE arbitrary entries
+      // - Employees can cancel their own PENDING entries (matched by Firebase UID)
       match /timeOff/{docId} {
-        allow read: if request.auth != null && 
-                      (request.auth.uid == managerUid || 
-                       resource.data.employeeUid == request.auth.uid);
-        // Manager can do anything, employee can only create their own entries
-        allow create: if request.auth != null && 
-                        (request.auth.uid == managerUid || 
-                         request.resource.data.employeeUid == request.auth.uid);
-        // Manager can update/delete anything, employee can only update/delete their own PENDING entries
-        allow update, delete: if request.auth != null && 
-                        (request.auth.uid == managerUid || 
-                         (resource.data.employeeUid == request.auth.uid && 
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth != null &&
+                        (request.auth.uid == managerUid ||
+                         (resource.data.employeeUid == request.auth.uid &&
                           resource.data.status == 'pending'));
       }
-      
+
       // Shift runners - manager writes, employees can read
       match /shiftRunners/{docId} {
         allow read: if request.auth != null;
         allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
-      
+
       // Employee availability - manager only
       match /employeeAvailability/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
-      
+
       // Weekly templates - manager only
       match /weeklyTemplates/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
-      
+
       // Shift templates - manager only
       match /shiftTemplates/{docId} {
         allow read, write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
-      
+
       // Schedule notes - manager writes, employees can read
       match /scheduleNotes/{docId} {
         allow read: if request.auth != null;
         allow write: if request.auth != null && request.auth.uid == managerUid && isManager();
       }
-      
+
       // Shift Manager Reports - manager writes (via Cloud Function), employees can read
-      // Used for leaderboard and personal metrics views
       match /shiftManagerReports/{docId} {
         allow read: if request.auth != null;
         allow write: if request.auth != null && request.auth.uid == managerUid && isManager();

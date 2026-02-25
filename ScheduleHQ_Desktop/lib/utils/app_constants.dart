@@ -106,6 +106,17 @@ class AppConstants {
   static const String lastSyncTimeKey = 'last_sync_time';
   static const String autoSyncEnabledKey = 'auto_sync_enabled';
 
+  // Onboarding Keys
+  static const String onboardingWelcomeCompletedKey = 'onboarding_welcome_completed';
+  static const String onboardingSettingsCoachCompletedKey = 'onboarding_settings_coach_completed';
+  static const String onboardingRosterCoachCompletedKey = 'onboarding_roster_coach_completed';
+  static const String onboardingScheduleCoachCompletedKey = 'onboarding_schedule_coach_completed';
+  static const String onboardingTimeOffCoachCompletedKey = 'onboarding_time_off_coach_completed';
+
+  // Notification Keys
+  static const String notificationsKey = 'notifications_v1';
+  static const String seenNotificationIdsKey = 'seen_notification_ids_v1';
+
   // Validation Constants
   static const int minPasswordLength = 8;
   static const int maxNameLength = 100;

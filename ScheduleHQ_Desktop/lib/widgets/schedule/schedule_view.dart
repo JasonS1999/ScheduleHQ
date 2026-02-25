@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../database/employee_dao.dart';
 import '../../database/time_off_dao.dart';
 import '../../database/employee_availability_dao.dart';
@@ -29,6 +30,9 @@ import '../../services/schedule_pdf_service.dart';
 import '../../services/firestore_sync_service.dart';
 import '../../services/notification_sender_service.dart';
 import '../../utils/dialog_helper.dart';
+import '../../providers/onboarding_provider.dart';
+import '../onboarding/coach_mark_controller.dart';
+import '../onboarding/coach_mark_overlay.dart';
 import 'time_off_cell_dialog.dart';
 
 // Custom intents for keyboard shortcuts
@@ -116,15 +120,77 @@ class _ScheduleViewState extends State<ScheduleView> {
   int _shiftRunnerRefreshKey = 0;
   bool _showRunners = true;
 
+  // Coach mark support
+  CoachMarkController? _coachMarkController;
+  final GlobalKey _moreOptionsKey = GlobalKey(debugLabel: 'moreOptions');
+  final GlobalKey _publishKey = GlobalKey(debugLabel: 'publishBtn');
+  final GlobalKey _printExportKey = GlobalKey(debugLabel: 'printExport');
+  final GlobalKey _showRunnersKey = GlobalKey(debugLabel: 'showRunners');
+
   @override
   void initState() {
     super.initState();
     _date = widget.initialDate;
     _loadEmployees();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+      if (onboarding.shouldShowScheduleCoach) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) _startScheduleCoachMarks();
+        });
+      }
+    });
+  }
+
+  void _startScheduleCoachMarks() {
+    _coachMarkController = CoachMarkController(
+      steps: [
+        CoachMarkStep(
+          targetKey: _moreOptionsKey,
+          title: 'Auto-Fill from Templates',
+          description:
+              "Use 'Auto-Fill from Templates' to instantly populate the entire month's schedule based on each employee's weekly template. This is the fastest way to build a schedule!",
+          preferredPosition: TooltipPosition.below,
+        ),
+        CoachMarkStep(
+          targetKey: _printExportKey,
+          title: 'Print & Export',
+          description:
+              'Print your schedule or export it as a PDF. Choose Standard format for employees or Manager format with additional details.',
+          preferredPosition: TooltipPosition.below,
+        ),
+        CoachMarkStep(
+          targetKey: _publishKey,
+          title: 'Publish to Employees',
+          description:
+              'When your schedule is ready, publish it to make it visible in the employee mobile app. Employees will be notified of their shifts.',
+          preferredPosition: TooltipPosition.below,
+        ),
+        CoachMarkStep(
+          targetKey: _showRunnersKey,
+          title: 'Shift Runners',
+          description:
+              'Toggle shift runners to see who is responsible for running each shift. Assign runners by right-clicking on the schedule grid.',
+          preferredPosition: TooltipPosition.below,
+        ),
+      ],
+      onComplete: () {
+        final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+        onboarding.markScheduleCoachCompleted();
+      },
+      onSkip: () {
+        final onboarding = Provider.of<OnboardingProvider>(context, listen: false);
+        onboarding.markScheduleCoachCompleted();
+      },
+    );
+    _coachMarkController!.start(context);
   }
 
   @override
   void dispose() {
+    _coachMarkController?.dispose();
     super.dispose();
   }
 
@@ -362,10 +428,13 @@ class _ScheduleViewState extends State<ScheduleView> {
           ? startDate.subtract(const Duration(days: 7)) // Include previous week
           : startDate;
 
+      // Calculate the end of the last displayed week (may extend into next month)
+      final dataEndDate = startDate.add(Duration(days: weekCount * 7 - 1));
+
       // Load shift runners for extended range if needed
       final shiftRunners = await _shiftRunnerDao.getForDateRange(
         dataStartDate,
-        lastDay,
+        dataEndDate,
       );
 
       // Load shifts for the extended range if this is a 4-week month
@@ -1157,6 +1226,7 @@ class _ScheduleViewState extends State<ScheduleView> {
         ),
         const SizedBox(width: 8),
         PopupMenuButton<String>(
+          key: _printExportKey,
           icon: const Icon(Icons.print),
           tooltip: 'Print/Export Schedule',
           onSelected: (value) => _handlePrintExport(value),
@@ -1195,6 +1265,7 @@ class _ScheduleViewState extends State<ScheduleView> {
         ),
         // Publish to Employees button
         Tooltip(
+          key: _publishKey,
           message: 'Publish schedule to employee app',
           child: IconButton(
             icon: const Icon(Icons.cloud_upload),
@@ -1202,6 +1273,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           ),
         ),
         Tooltip(
+          key: _showRunnersKey,
           message: _showRunners ? 'Hide Runners' : 'Show Runners',
           child: IconButton(
             icon: Icon(
@@ -1214,6 +1286,7 @@ class _ScheduleViewState extends State<ScheduleView> {
           ),
         ),
         PopupMenuButton<String>(
+          key: _moreOptionsKey,
           icon: const Icon(Icons.more_vert),
           tooltip: 'More Options',
           onSelected: (value) => _handleMonthAction(value),
@@ -2485,6 +2558,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
     final reason = availability['reason'] as String;
     final type = availability['type'] as String;
     final timeOffEntry = availability['timeOffEntry'] as TimeOffEntry?;
+    final availStartTime = availability['startTime'] as String?;
+    final availEndTime = availability['endTime'] as String?;
 
     Color bannerColor = context.appColors.successForeground;
     if (type == 'time-off') {
@@ -2498,25 +2573,86 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
 
     if (!context.mounted) return;
 
-    final times = _allowedTimes();
-    int selStart = times.indexWhere(
-      (t) => t.hour == shift.start.hour && t.minute == shift.start.minute,
-    );
-    int selEnd = times.indexWhere(
-      (t) => t.hour == shift.end.hour && t.minute == shift.end.minute,
-    );
-    if (selStart == -1) selStart = 0;
-    if (selEnd == -1) selEnd = times.length - 1;
+    TimeOfDay selStart = TimeOfDay(hour: shift.start.hour, minute: shift.start.minute);
+    TimeOfDay selEnd = TimeOfDay(hour: shift.end.hour, minute: shift.end.minute);
 
     ShiftTemplate? selectedTemplate;
     String? selectedRunnerShift;
     final notesController = TextEditingController(text: shift.notes ?? '');
+    final startController = TextEditingController(text: _formatTimeOfDay(selStart));
+    final endController = TextEditingController(text: _formatTimeOfDay(selEnd));
+    String? startError;
+    String? endError;
+    bool controllersDisposed = false;
+
+    // Parse time input flexibly: "1030am", "10:30", "1030", "17:30", "1730", "530p", etc.
+    TimeOfDay? parseTime(String input) {
+      final trimmed = input.trim().toLowerCase();
+      if (trimmed.isEmpty) return null;
+
+      int? hour;
+      int? minute;
+      bool? isPm;
+
+      // Extract AM/PM suffix if present
+      String digits = trimmed;
+      if (digits.endsWith('am') || digits.endsWith('a')) {
+        isPm = false;
+        digits = digits.replaceFirst(RegExp(r'a\.?m\.?$|a$'), '').trim();
+      } else if (digits.endsWith('pm') || digits.endsWith('p')) {
+        isPm = true;
+        digits = digits.replaceFirst(RegExp(r'p\.?m\.?$|p$'), '').trim();
+      }
+
+      // Try formats: "10:30", "17:30", "10 30", "1030", "1730", "10", "17"
+      final colonMatch = RegExp(r'^(\d{1,2})[:\s](\d{2})$').firstMatch(digits);
+      if (colonMatch != null) {
+        hour = int.parse(colonMatch.group(1)!);
+        minute = int.parse(colonMatch.group(2)!);
+      } else if (RegExp(r'^\d{3,4}$').hasMatch(digits)) {
+        // "1030", "530", "1730"
+        final len = digits.length;
+        hour = int.parse(digits.substring(0, len - 2));
+        minute = int.parse(digits.substring(len - 2));
+      } else if (RegExp(r'^\d{1,2}$').hasMatch(digits)) {
+        // Just a number like "10", "5", "17"
+        hour = int.parse(digits);
+        minute = 0;
+      }
+
+      if (hour == null || minute == null) return null;
+      if (minute != 0 && minute != 30) return null;
+
+      // Military / 24-hour time: if no AM/PM suffix and hour is 13-23 or 0,
+      // treat as 24-hour format directly
+      if (isPm == null && (hour >= 13 || hour == 0)) {
+        if (hour > 23) return null;
+        return TimeOfDay(hour: hour, minute: minute);
+      }
+
+      // For 12-hour values without AM/PM, infer: 1-6 => PM, 7-12 => AM
+      if (isPm == null) {
+        if (hour >= 1 && hour <= 6) {
+          isPm = true;
+        } else {
+          isPm = false;
+        }
+      }
+
+      if (hour < 1 || hour > 12) return null;
+
+      int h = hour;
+      if (!isPm) {
+        if (h == 12) h = 0;
+      } else {
+        if (h != 12) h += 12;
+      }
+      return TimeOfDay(hour: h, minute: minute);
+    }
 
     // Helper to check if the selected shift conflicts with time off
-    bool shiftOverlapsTimeOff(int startIndex, int endIndex) {
+    bool shiftOverlapsTimeOff(TimeOfDay shiftStart, TimeOfDay shiftEnd) {
       if (timeOffEntry == null) return false;
-      final shiftStart = times[startIndex];
-      final shiftEnd = times[endIndex];
       final shiftStartDt = _timeOfDayToDateTime(day, shiftStart);
       final shiftEndDt = _timeOfDayToDateTime(day, shiftEnd);
       final overlaps = timeOffEntry.overlapsWithShift(shiftStartDt, shiftEndDt);
@@ -2530,11 +2666,54 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       return overlaps;
     }
 
+    // Helper to check if the selected shift conflicts with availability pattern
+    bool shiftConflictsWithAvailability(TimeOfDay shiftStart, TimeOfDay shiftEnd) {
+      if (type == 'time-off' || availStartTime == null || availEndTime == null) return false;
+      final shiftStartStr = '${shiftStart.hour.toString().padLeft(2, '0')}:${shiftStart.minute.toString().padLeft(2, '0')}';
+      final shiftEndStr = '${shiftEnd.hour.toString().padLeft(2, '0')}:${shiftEnd.minute.toString().padLeft(2, '0')}';
+
+      int toMinutes(String time) {
+        final parts = time.split(':');
+        return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      }
+
+      final shiftStartMins = toMinutes(shiftStartStr);
+      final shiftEndMins = toMinutes(shiftEndStr);
+      final availStartMins = toMinutes(availStartTime);
+      final availEndMins = toMinutes(availEndTime);
+
+      return shiftStartMins < availStartMins || shiftEndMins > availEndMins;
+    }
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            // Compute banner state reactively based on current shift selection
+            final hasAvailConflict = shiftConflictsWithAvailability(selStart, selEnd);
+            Color currentBannerColor;
+            String currentBannerText;
+            IconData currentBannerIcon;
+
+            if (type == 'time-off') {
+              currentBannerColor = bannerColor;
+              currentBannerText = reason;
+              currentBannerIcon = Icons.event_busy;
+            } else if (!isAvailable) {
+              currentBannerColor = bannerColor;
+              currentBannerText = reason;
+              currentBannerIcon = Icons.warning;
+            } else if (hasAvailConflict) {
+              currentBannerColor = context.appColors.warningForeground;
+              currentBannerText = 'Shift is outside available time ($availStartTime - $availEndTime)';
+              currentBannerIcon = Icons.warning;
+            } else {
+              currentBannerColor = context.appColors.successForeground;
+              currentBannerText = reason;
+              currentBannerIcon = Icons.check_circle;
+            }
+
             return AlertDialog(
               title: const Text('Edit Shift'),
               content: Row(
@@ -2583,23 +2762,14 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                   ),
                                 ),
                                 onPressed: () {
-                                  int startIdx = times.indexWhere(
-                                    (t) =>
-                                        t.hour == startHour &&
-                                        t.minute == startMin,
-                                  );
-                                  if (startIdx == -1) startIdx = 0;
-
-                                  int endIdx = times.indexWhere(
-                                    (t) =>
-                                        t.hour == endHour && t.minute == endMin,
-                                  );
-                                  if (endIdx == -1) endIdx = times.length - 1;
-
                                   setDialogState(() {
                                     selectedTemplate = template;
-                                    selStart = startIdx;
-                                    selEnd = endIdx;
+                                    selStart = TimeOfDay(hour: startHour, minute: startMin);
+                                    selEnd = TimeOfDay(hour: endHour, minute: endMin);
+                                    startController.text = _formatTimeOfDay(selStart);
+                                    endController.text = _formatTimeOfDay(selEnd);
+                                    startError = null;
+                                    endError = null;
                                   });
                                 },
                                 child: Column(
@@ -2634,27 +2804,23 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: bannerColor.softBg,
-                            border: Border.all(color: bannerColor),
+                            color: currentBannerColor.softBg,
+                            border: Border.all(color: currentBannerColor),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(
                             children: [
                               Icon(
-                                type == 'time-off'
-                                    ? Icons.event_busy
-                                    : (isAvailable
-                                          ? Icons.check_circle
-                                          : Icons.warning),
-                                color: bannerColor,
+                                currentBannerIcon,
+                                color: currentBannerColor,
                                 size: 20,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  reason,
+                                  currentBannerText,
                                   style: TextStyle(
-                                    color: bannerColor,
+                                    color: currentBannerColor,
                                     fontSize: 12,
                                   ),
                                 ),
@@ -2663,48 +2829,118 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        DropdownButton<int>(
-                          value: selStart,
-                          isExpanded: true,
-                          items: times.asMap().entries.map((e) {
-                            return DropdownMenuItem(
-                              value: e.key,
-                              child: Text(_formatTimeOfDay(e.value)),
-                            );
-                          }).toList(),
-                          onChanged: (v) {
-                            setDialogState(() {
-                              selStart = v!;
-                              if (selStart >= selEnd)
-                                selEnd = (selStart + 1).clamp(
-                                  0,
-                                  times.length - 1,
-                                );
-                              selectedTemplate = null;
-                            });
+                        Focus(
+                          onFocusChange: (hasFocus) {
+                            if (!hasFocus && !controllersDisposed) {
+                              final parsed = parseTime(startController.text);
+                              if (parsed != null) {
+                                setDialogState(() {
+                                  selStart = parsed;
+                                  startError = null;
+                                  startController.text = _formatTimeOfDay(selStart);
+                                });
+                              }
+                            }
                           },
+                          child: TextField(
+                            controller: startController,
+                            decoration: InputDecoration(
+                              labelText: 'Start Time',
+                              hintText: 'e.g. 1030am, 10:30, 5p',
+                              errorText: startError,
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            style: const TextStyle(fontSize: 12),
+                            onChanged: (v) {
+                              setDialogState(() {
+                                final parsed = parseTime(v);
+                                if (parsed != null) {
+                                  selStart = parsed;
+                                  startError = null;
+                                  selectedTemplate = null;
+                                } else if (v.trim().isNotEmpty) {
+                                  startError = 'Try: 1030am, 10:30, 5p';
+                                }
+                              });
+                            },
+                            onSubmitted: (v) {
+                              final parsed = parseTime(v);
+                              if (parsed != null) {
+                                setDialogState(() {
+                                  selStart = parsed;
+                                  startError = null;
+                                  startController.text = _formatTimeOfDay(selStart);
+                                });
+                              }
+                            },
+                            onTap: () {
+                              startController.selection = TextSelection(
+                                baseOffset: 0,
+                                extentOffset: startController.text.length,
+                              );
+                            },
+                          ),
                         ),
                         const SizedBox(height: 8),
-                        DropdownButton<int>(
-                          value: selEnd,
-                          isExpanded: true,
-                          items: times.asMap().entries.map((e) {
-                            return DropdownMenuItem(
-                              value: e.key,
-                              child: Text(_formatTimeOfDay(e.value)),
-                            );
-                          }).toList(),
-                          onChanged: (v) {
-                            setDialogState(() {
-                              selEnd = v!;
-                              if (selEnd <= selStart)
-                                selStart = (selEnd - 1).clamp(
-                                  0,
-                                  times.length - 1,
-                                );
-                              selectedTemplate = null;
-                            });
+                        Focus(
+                          onFocusChange: (hasFocus) {
+                            if (!hasFocus && !controllersDisposed) {
+                              final parsed = parseTime(endController.text);
+                              if (parsed != null) {
+                                setDialogState(() {
+                                  selEnd = parsed;
+                                  endError = null;
+                                  endController.text = _formatTimeOfDay(selEnd);
+                                });
+                              }
+                            }
                           },
+                          child: TextField(
+                            controller: endController,
+                            decoration: InputDecoration(
+                              labelText: 'End Time',
+                              hintText: 'e.g. 530pm, 5:30, 10a',
+                              errorText: endError,
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                            style: const TextStyle(fontSize: 12),
+                            onChanged: (v) {
+                              setDialogState(() {
+                                final parsed = parseTime(v);
+                                if (parsed != null) {
+                                  selEnd = parsed;
+                                  endError = null;
+                                  selectedTemplate = null;
+                                } else if (v.trim().isNotEmpty) {
+                                  endError = 'Try: 530pm, 5:30, 10a';
+                                }
+                              });
+                            },
+                            onSubmitted: (v) {
+                              final parsed = parseTime(v);
+                              if (parsed != null) {
+                                setDialogState(() {
+                                  selEnd = parsed;
+                                  endError = null;
+                                  endController.text = _formatTimeOfDay(selEnd);
+                                });
+                              }
+                            },
+                            onTap: () {
+                              endController.selection = TextSelection(
+                                baseOffset: 0,
+                                extentOffset: endController.text.length,
+                              );
+                            },
+                          ),
                         ),
                         const SizedBox(height: 12),
                         // Shift Notes
@@ -2760,14 +2996,14 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                                           orElse: () => null,
                                         );
                                     if (shiftTypeObj != null) {
-                                      selStart = _findTimeIndex(
-                                        times,
-                                        shiftTypeObj.defaultShiftStart,
-                                      );
-                                      selEnd = _findTimeIndex(
-                                        times,
-                                        shiftTypeObj.defaultShiftEnd,
-                                      );
+                                      final sParts = shiftTypeObj.defaultShiftStart.split(':');
+                                      selStart = TimeOfDay(hour: int.parse(sParts[0]), minute: int.parse(sParts[1]));
+                                      startController.text = _formatTimeOfDay(selStart);
+                                      final eParts = shiftTypeObj.defaultShiftEnd.split(':');
+                                      selEnd = TimeOfDay(hour: int.parse(eParts[0]), minute: int.parse(eParts[1]));
+                                      endController.text = _formatTimeOfDay(selEnd);
+                                      startError = null;
+                                      endError = null;
                                     }
                                   }
                                 });
@@ -2848,6 +3084,30 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       if (confirmed != true) return;
                     }
 
+                    // Check if shift conflicts with availability pattern and confirm
+                    if (shiftConflictsWithAvailability(selStart, selEnd)) {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Scheduling Conflict'),
+                          content: Text(
+                            'This shift is outside the employee\'s available time ($availStartTime - $availEndTime). Are you sure?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('No'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Yes'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed != true) return;
+                    }
+
                     // Save shift runner if selected
                     if (selectedRunnerShift != null) {
                       await _shiftRunnerDao.upsert(
@@ -2860,8 +3120,8 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
                       _loadShiftRunnerData(); // Reload to update UI
                     }
 
-                    final newStart = _timeOfDayToDateTime(day, times[selStart]);
-                    final newEnd = _timeOfDayToDateTime(day, times[selEnd]);
+                    final newStart = _timeOfDayToDateTime(day, selStart);
+                    final newEnd = _timeOfDayToDateTime(day, selEnd);
                     final notes = notesController.text.trim();
                     if (!newEnd.isAfter(newStart)) {
                       Navigator.pop(context, {
@@ -2886,7 +3146,10 @@ class _MonthlyScheduleViewState extends State<MonthlyScheduleView> {
       },
     );
 
+    controllersDisposed = true;
     notesController.dispose();
+    startController.dispose();
+    endController.dispose();
 
     if (result != null && widget.onUpdateShift != null) {
       // Handle "OFF" button

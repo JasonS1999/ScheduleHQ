@@ -697,8 +697,6 @@ class SchedulePdfService {
               if (runnerColor != null) {
                 // Use a lighter version of the shift runner color for readability
                 cellBgColor = _lightenPdfColor(runnerColor, 0.5);
-              } else if (targetMonth != null && day.month != targetMonth) {
-                cellBgColor = PdfColors.grey100;
               }
 
               return _padCell(
@@ -1313,9 +1311,7 @@ class SchedulePdfService {
 
       // Day column with special coloring for weekends
       PdfColor dayBgColor;
-      if (isOutOfMonth) {
-        dayBgColor = PdfColors.grey300;
-      } else if (day.weekday == 0) {
+      if (day.weekday == 0) {
         // Sunday - light orange/peach
         dayBgColor = PdfColor.fromHex('#FFDAB9'); // Peach
       } else {
@@ -1404,8 +1400,6 @@ class SchedulePdfService {
           if (runnerColor != null) {
             // Only highlight cells if the employee is a shift runner
             cellBgColor = _lightenPdfColor(runnerColor, 0.4);
-          } else if (isOutOfMonth) {
-            cellBgColor = PdfColors.grey200;
           }
 
           // Format display text - convert OFF to "-"
@@ -1476,7 +1470,7 @@ class SchedulePdfService {
         _padCellManager(
           pw.Text(note?.note ?? '', style: reminderStyle, maxLines: 2),
           align: pw.Alignment.centerLeft,
-          bgColor: isOutOfMonth ? PdfColors.grey200 : null,
+          bgColor: null,
           border: reminderBorder,
         ),
       );

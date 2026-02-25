@@ -34,6 +34,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
 
   Future<void> _loadAutoSyncSetting() async {
     final settings = await _settingsDao.getSettings();
+    if (!mounted) return;
     setState(() {
       _autoSyncEnabled = settings.autoSyncEnabled;
     });
@@ -43,6 +44,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
     setState(() => _isLoading = true);
     try {
       await _autoSyncService.setAutoSyncEnabled(enabled);
+      if (!mounted) return;
       setState(() {
         _autoSyncEnabled = enabled;
         _isLoading = false;
@@ -52,6 +54,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
         _isSuccess = true;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _statusMessage = 'Error changing auto-sync setting: $e';
@@ -69,6 +72,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
           .getCloudSettingsLastUpdated();
       final hasData = await _dataSyncService.hasCloudData();
 
+      if (!mounted) return;
       setState(() {
         _hasCloudSettings = hasSettings;
         _hasCloudData = hasData;
@@ -76,6 +80,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _statusMessage = 'Error checking cloud status: $e';
@@ -95,6 +100,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
       await _settingsSyncService.uploadAllSettings();
       await _dataSyncService.uploadAllDataToCloud();
       await _checkCloudStatus();
+      if (!mounted) return;
       setState(() {
         _statusMessage =
             'All settings and data uploaded to cloud successfully!';
@@ -102,6 +108,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _statusMessage = 'Error uploading to cloud: $e';
         _isSuccess = false;
@@ -135,6 +142,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
     );
 
     if (confirmed != true) return;
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -145,6 +153,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
       // Download both settings and data
       final settingsResult = await _settingsSyncService.downloadAllSettings();
       await _dataSyncService.downloadAllDataFromCloud();
+      if (!mounted) return;
       setState(() {
         _statusMessage = settingsResult.success
             ? 'All settings and data downloaded from cloud successfully!'
@@ -153,6 +162,7 @@ class _CloudSyncTabState extends State<CloudSyncTab> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _statusMessage = 'Error downloading from cloud: $e';
         _isSuccess = false;
