@@ -9,8 +9,6 @@ class Settings {
   final int scheduleStartDay;
   final bool blockOverlaps; // If true, block creating vacations that overlap existing time off
   final bool autoSyncEnabled; // If true, automatically sync data to cloud on changes
-  final bool requestDeadlineEnabled; // If true, restrict employee request submissions by deadline
-  final int requestDeadlineDay; // Day of prior month by which requests must be submitted (1-28)
 
   const Settings({
     required this.id,
@@ -23,8 +21,6 @@ class Settings {
     required this.scheduleStartDay,
     required this.blockOverlaps,
     this.autoSyncEnabled = false,
-    this.requestDeadlineEnabled = false,
-    this.requestDeadlineDay = 15,
   });
 
   // ---------------------------------------------------------------------------
@@ -42,8 +38,6 @@ class Settings {
       scheduleStartDay: map['scheduleStartDay'] as int,
       blockOverlaps: (map['blockOverlaps'] ?? 0) == 1,
       autoSyncEnabled: (map['autoSyncEnabled'] ?? 0) == 1,
-      requestDeadlineEnabled: (map['requestDeadlineEnabled'] ?? 0) == 1,
-      requestDeadlineDay: map['requestDeadlineDay'] as int? ?? 15,
     );
   }
 
@@ -63,8 +57,6 @@ class Settings {
       'scheduleStartDay': scheduleStartDay,
       'blockOverlaps': blockOverlaps ? 1 : 0,
       'autoSyncEnabled': autoSyncEnabled ? 1 : 0,
-      'requestDeadlineEnabled': requestDeadlineEnabled ? 1 : 0,
-      'requestDeadlineDay': requestDeadlineDay,
     };
   }
 
@@ -82,8 +74,6 @@ class Settings {
     int? scheduleStartDay,
     bool? blockOverlaps,
     bool? autoSyncEnabled,
-    bool? requestDeadlineEnabled,
-    int? requestDeadlineDay,
   }) {
     return Settings(
       id: id ?? this.id,
@@ -99,9 +89,6 @@ class Settings {
       scheduleStartDay: scheduleStartDay ?? this.scheduleStartDay,
       blockOverlaps: blockOverlaps ?? this.blockOverlaps,
       autoSyncEnabled: autoSyncEnabled ?? this.autoSyncEnabled,
-      requestDeadlineEnabled:
-          requestDeadlineEnabled ?? this.requestDeadlineEnabled,
-      requestDeadlineDay: requestDeadlineDay ?? this.requestDeadlineDay,
     );
   }
 
@@ -117,9 +104,7 @@ Settings(
   minimumHoursBetweenShifts: $minimumHoursBetweenShifts,
   inventoryDay: $inventoryDay,
   scheduleStartDay: $scheduleStartDay,
-  blockOverlaps: $blockOverlaps,
-  requestDeadlineEnabled: $requestDeadlineEnabled,
-  requestDeadlineDay: $requestDeadlineDay
+  blockOverlaps: $blockOverlaps
 )
 ''';
   }

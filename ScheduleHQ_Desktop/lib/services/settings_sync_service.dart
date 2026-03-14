@@ -359,8 +359,6 @@ class SettingsSyncService {
       'inventoryDay': settings.inventoryDay,
       'scheduleStartDay': settings.scheduleStartDay,
       'blockOverlaps': settings.blockOverlaps,
-      'requestDeadlineEnabled': settings.requestDeadlineEnabled,
-      'requestDeadlineDay': settings.requestDeadlineDay,
     };
   }
 
@@ -375,8 +373,6 @@ class SettingsSyncService {
       inventoryDay: map['inventoryDay'] as int? ?? 1,
       scheduleStartDay: map['scheduleStartDay'] as int? ?? 1,
       blockOverlaps: map['blockOverlaps'] as bool? ?? false,
-      requestDeadlineEnabled: map['requestDeadlineEnabled'] as bool? ?? false,
-      requestDeadlineDay: map['requestDeadlineDay'] as int? ?? 15,
     );
   }
 
