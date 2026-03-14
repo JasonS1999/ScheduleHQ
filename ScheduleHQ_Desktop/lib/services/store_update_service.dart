@@ -18,7 +18,7 @@ class StoreUpdateService {
       'JasonSjogren.ScheduleHQ'; 
 
   // Current app version (should match pubspec.yaml)
-  static const String currentVersion = '3.0.0';
+  static const String currentVersion = '3.1.0';
 
   /// Cached update info
   static bool _updateAvailable = false;
