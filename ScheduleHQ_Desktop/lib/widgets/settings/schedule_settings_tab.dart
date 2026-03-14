@@ -213,6 +213,56 @@ class _ScheduleSettingsTabState extends State<ScheduleSettingsTab> {
             },
           ),
 
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 16),
+
+          // Request Deadline
+          const Text(
+            "Request Deadline",
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "When enabled, employees must submit time-off requests by the specified day "
+            "of the month before the target month. This restriction only applies to the "
+            "iOS app — managers can still add and edit requests freely from this app.",
+            style: TextStyle(color: context.appColors.textSecondary),
+          ),
+
+          SwitchListTile(
+            title: const Text('Enable request deadline'),
+            subtitle: const Text(
+              'Restrict when employees can submit time-off requests',
+            ),
+            value: _settings!.requestDeadlineEnabled,
+            onChanged: (v) {
+              setState(() {
+                _settings = _settings!.copyWith(requestDeadlineEnabled: v);
+              });
+            },
+          ),
+
+          if (_settings!.requestDeadlineEnabled)
+            DropdownButtonFormField<int>(
+              value: _settings!.requestDeadlineDay,
+              decoration: const InputDecoration(
+                labelText: "Deadline Day of Month",
+                helperText:
+                    "Employees must submit requests by this day of the prior month",
+              ),
+              items: List.generate(28, (i) => i + 1)
+                  .map(
+                    (d) => DropdownMenuItem(value: d, child: Text('Day $d')),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                setState(() {
+                  _settings = _settings!.copyWith(requestDeadlineDay: v);
+                });
+              },
+            ),
+
           const SizedBox(height: 24),
 
           ElevatedButton(

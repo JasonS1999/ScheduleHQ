@@ -19,9 +19,21 @@ struct TimeOffRequestSheet: View {
     @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
     @ObservedObject private var timeOffManager = TimeOffManager.shared
+    @ObservedObject private var managerSettings = ManagerSettingsProvider.shared
     
-    // Supported request types for employees - Day Off first
-    private let availableTypes: [TimeOffType] = [.requested, .pto, .vacation]
+    // Supported request types filtered by employee eligibility
+    private var availableTypes: [TimeOffType] {
+        var types: [TimeOffType] = [.requested]
+        if let employee = authManager.employee {
+            if managerSettings.hasPTO(forJobCode: employee.jobCode) {
+                types.append(.pto)
+            }
+            if employee.vacationWeeksAllowed > 0 {
+                types.append(.vacation)
+            }
+        }
+        return types
+    }
     
     init(editingEntry: TimeOffEntry? = nil) {
         self.editingEntry = editingEntry
@@ -75,7 +87,21 @@ struct TimeOffRequestSheet: View {
                     TextField("Add any notes for your manager...", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
                 }
-                
+
+                // Deadline error
+                if let deadlineError = deadlineErrorMessage {
+                    Section {
+                        HStack(alignment: .top) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text(deadlineError)
+                                .font(.callout)
+                                .foregroundStyle(.red)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
                 // Offline indicator
                 if !networkMonitor.isConnected {
                     Section {
@@ -106,7 +132,7 @@ struct TimeOffRequestSheet: View {
                             submitRequest()
                         }
                     }
-                    .disabled(isSubmitting)
+                    .disabled(isSubmitting || deadlineErrorMessage != nil)
                 }
             }
             .onAppear {
@@ -128,7 +154,7 @@ struct TimeOffRequestSheet: View {
     }
     
     // MARK: - Calculated Hours
-    
+
     private var calculatedHours: Int {
         switch requestType {
         case .pto:
@@ -143,10 +169,30 @@ struct TimeOffRequestSheet: View {
             return 8
         }
     }
+
+    // MARK: - Deadline Validation
+
+    private var deadlineErrorMessage: String? {
+        if requestType == .vacation {
+            return ManagerSettingsProvider.deadlineError(
+                for: selectedDate,
+                endDate: endDate,
+                deadlineDay: managerSettings.requestDeadlineDay,
+                deadlineEnabled: managerSettings.requestDeadlineEnabled
+            )
+        } else {
+            return ManagerSettingsProvider.deadlineError(
+                for: selectedDate,
+                deadlineDay: managerSettings.requestDeadlineDay,
+                deadlineEnabled: managerSettings.requestDeadlineEnabled
+            )
+        }
+    }
     
     // MARK: - Submit
     
     private func submitRequest() {
+        guard deadlineErrorMessage == nil else { return }
         guard let employee = authManager.employee,
               let employeeId = employee.id ?? authManager.employeeLocalId else { return }
         
@@ -178,6 +224,7 @@ struct TimeOffRequestSheet: View {
     // MARK: - Update
     
     private func updateRequest() {
+        guard deadlineErrorMessage == nil else { return }
         guard let entry = editingEntry else { return }
         
         isSubmitting = true

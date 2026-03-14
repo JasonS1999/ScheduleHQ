@@ -8,6 +8,7 @@ struct MainTabView: View {
     @ObservedObject private var offlineQueueManager = OfflineQueueManager.shared
     @ObservedObject private var scheduleManager = ScheduleManager.shared
     @ObservedObject private var timeOffManager = TimeOffManager.shared
+    @ObservedObject private var managerSettings = ManagerSettingsProvider.shared
     
     @Environment(\.colorScheme) private var colorScheme
     
@@ -85,10 +86,12 @@ struct MainTabView: View {
         .onAppear {
             scheduleManager.startListening()
             timeOffManager.startListening()
+            managerSettings.startListening()
         }
         .onDisappear {
             scheduleManager.stopListening()
             timeOffManager.stopListening()
+            managerSettings.stopListening()
         }
     }
 }

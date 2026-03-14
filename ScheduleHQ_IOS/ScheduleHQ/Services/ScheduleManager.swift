@@ -3,6 +3,7 @@ import FirebaseFirestore
 import Combine
 
 /// Manages schedule data and Firestore listeners for shifts
+@MainActor
 final class ScheduleManager: ObservableObject {
     static let shared = ScheduleManager()
     
@@ -73,14 +74,23 @@ final class ScheduleManager: ObservableObject {
     /// Shifts grouped by date for display
     var shiftsByDate: [(date: Date, shifts: [Shift], timeOff: [TimeOffEntry])] {
         let dates = currentWeekStart.datesInWeek
-        
+
         return dates.map { date in
             let dayShifts = shifts.filter { $0.isOnDate(date) }
             let dayTimeOff = timeOffEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
             return (date: date, shifts: dayShifts, timeOff: dayTimeOff)
         }
     }
-    
+
+    func shiftsByDate(for weekStart: Date) -> [(date: Date, shifts: [Shift], timeOff: [TimeOffEntry])] {
+        let dates = weekStart.datesInWeek
+        return dates.map { date in
+            let dayShifts = shifts.filter { $0.isOnDate(date) }
+            let dayTimeOff = timeOffEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
+            return (date: date, shifts: dayShifts, timeOff: dayTimeOff)
+        }
+    }
+
     // MARK: - Team Schedule
     
     /// Represents a shift with the employee's name for team schedule display
@@ -523,5 +533,249 @@ final class ScheduleManager: ObservableObject {
                 self.scheduleNotes = filteredNotes
             }
         }
+    }
+    
+    // MARK: - Month View Support
+    
+    /// Current month being viewed in calendar
+    @Published private(set) var currentMonth: Date = Date().startOfMonth
+    
+    /// Shifts for the current month
+    @Published private(set) var monthShifts: [Shift] = []
+    
+    /// Time off entries for the current month
+    @Published private(set) var monthTimeOffEntries: [TimeOffEntry] = []
+    
+    /// Shift runners for the current month
+    @Published private(set) var monthShiftRunners: [ShiftRunner] = []
+    
+    /// Schedule notes for the current month
+    @Published private(set) var monthScheduleNotes: [ScheduleNote] = []
+    
+    /// Whether month data is loading
+    @Published private(set) var isMonthLoading: Bool = false
+    
+    /// Separate listeners for month data
+    private var monthShiftsListener: ListenerRegistration?
+    private var monthTimeOffListener: ListenerRegistration?
+    private var monthRunnersListener: ListenerRegistration?
+    private var monthNotesListener: ListenerRegistration?
+    
+    // MARK: - Month Navigation
+    
+    /// Navigate to the previous month
+    func goToPreviousMonth() {
+        currentMonth = currentMonth.previousMonthStart
+        restartMonthListeners()
+    }
+    
+    /// Navigate to the next month
+    func goToNextMonth() {
+        currentMonth = currentMonth.nextMonthStart
+        restartMonthListeners()
+    }
+    
+    /// Navigate to the current month
+    func goToCurrentMonth() {
+        currentMonth = Date().startOfMonth
+        restartMonthListeners()
+    }
+    
+    /// Whether currently viewing the current month
+    var isViewingCurrentMonth: Bool {
+        Calendar.current.isDate(currentMonth, equalTo: Date(), toGranularity: .month)
+    }
+    
+    /// Formatted month display (e.g., "February 2026")
+    var monthDisplay: String {
+        currentMonth.monthYearFormatted
+    }
+    
+    // MARK: - Month Data Grouped by Date
+    
+    /// Month data grouped by date for calendar display
+    var monthDataByDate: [Date: (shifts: [Shift], timeOff: [TimeOffEntry], isRunner: Bool, runnerShiftType: String?)] {
+        let calendar = Calendar.current
+        var result: [Date: (shifts: [Shift], timeOff: [TimeOffEntry], isRunner: Bool, runnerShiftType: String?)] = [:]
+        
+        let currentUserName = authManager.employee?.name.lowercased()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
+        for date in currentMonth.datesInMonth {
+            let dayShifts = monthShifts.filter { $0.isOnDate(date) }
+            let dayTimeOff = monthTimeOffEntries.filter { calendar.isDate($0.date, inSameDayAs: date) }
+            
+            // Check runner status
+            let dateStr = dateFormatter.string(from: date)
+            var isRunner = false
+            var runnerShiftType: String? = nil
+            
+            if let userName = currentUserName {
+                if let runner = monthShiftRunners.first(where: {
+                    $0.date == dateStr && $0.runnerName.lowercased() == userName
+                }) {
+                    isRunner = true
+                    runnerShiftType = runner.shiftType
+                }
+            }
+            
+            result[date] = (shifts: dayShifts, timeOff: dayTimeOff, isRunner: isRunner, runnerShiftType: runnerShiftType)
+        }
+        
+        return result
+    }
+    
+    // MARK: - Month Listeners
+    
+    /// Start listening to month-level data
+    func startMonthListening() {
+        guard let managerUid = authManager.managerUid,
+              let currentUid = authManager.currentUser?.uid else {
+            return
+        }
+        
+        stopMonthListening()
+        isMonthLoading = true
+        
+        let monthFormatter = DateFormatter()
+        monthFormatter.dateFormat = "yyyy-MM"
+        let monthStr = monthFormatter.string(from: currentMonth)
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let monthStartStr = dateFormatter.string(from: currentMonth.startOfMonth)
+        let monthEndStr = dateFormatter.string(from: currentMonth.endOfMonth)
+        
+        // Fetch shifts from schedules/{YYYY-MM}/shifts — the whole month in one query
+        let shiftsRef = db.collection("managers")
+            .document(managerUid)
+            .collection("schedules")
+            .document(monthStr)
+            .collection("shifts")
+        
+        monthShiftsListener = shiftsRef.addSnapshotListener { [weak self, currentUid] snapshot, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isMonthLoading = false
+                
+                if let error = error {
+                    print("❌ Month shifts error: \(error)")
+                    return
+                }
+                
+                guard let documents = snapshot?.documents else {
+                    self.monthShifts = []
+                    return
+                }
+                
+                // Filter by current user's UID
+                let filteredShifts = documents.compactMap { doc -> Shift? in
+                    let data = doc.data()
+                    guard let shiftEmployeeUid = data["employeeUid"] as? String,
+                          shiftEmployeeUid == currentUid else {
+                        return nil
+                    }
+                    return try? doc.data(as: Shift.self)
+                }.sorted { $0.startTime < $1.startTime }
+                
+                self.monthShifts = filteredShifts
+            }
+        }
+        
+        // Time off for the month
+        let employeeLocalId = authManager.employeeLocalId
+        let monthStart = currentMonth.startOfMonth
+        let monthEnd = currentMonth.endOfMonth
+        
+        monthTimeOffListener = db.collection("managers")
+            .document(managerUid)
+            .collection("timeOff")
+            .addSnapshotListener { [weak self, monthStart, monthEnd, employeeLocalId] snapshot, error in
+                Task { @MainActor in
+                    guard let documents = snapshot?.documents else {
+                        self?.monthTimeOffEntries = []
+                        return
+                    }
+                    
+                    let filtered = documents.compactMap { doc -> TimeOffEntry? in
+                        guard let entry = try? doc.data(as: TimeOffEntry.self) else { return nil }
+                        guard let empId = employeeLocalId, entry.employeeId == empId else { return nil }
+                        if entry.date >= monthStart && entry.date <= monthEnd {
+                            return entry
+                        }
+                        return nil
+                    }.sorted { $0.date < $1.date }
+                    
+                    self?.monthTimeOffEntries = filtered
+                }
+            }
+        
+        // Shift runners for the month
+        monthRunnersListener = db.collection("managers")
+            .document(managerUid)
+            .collection("shiftRunners")
+            .addSnapshotListener { [weak self, monthStartStr, monthEndStr] snapshot, error in
+                Task { @MainActor in
+                    guard let documents = snapshot?.documents else {
+                        self?.monthShiftRunners = []
+                        return
+                    }
+                    
+                    let filtered = documents.compactMap { doc -> ShiftRunner? in
+                        guard let runner = try? doc.data(as: ShiftRunner.self) else { return nil }
+                        guard runner.date >= monthStartStr && runner.date <= monthEndStr else { return nil }
+                        return runner
+                    }
+                    
+                    self?.monthShiftRunners = filtered
+                }
+            }
+        
+        // Schedule notes for the month
+        monthNotesListener = db.collection("managers")
+            .document(managerUid)
+            .collection("scheduleNotes")
+            .addSnapshotListener { [weak self, monthStartStr, monthEndStr] snapshot, error in
+                Task { @MainActor in
+                    guard let documents = snapshot?.documents else {
+                        self?.monthScheduleNotes = []
+                        return
+                    }
+                    
+                    let filtered = documents.compactMap { doc -> ScheduleNote? in
+                        guard let note = try? doc.data(as: ScheduleNote.self) else { return nil }
+                        guard note.date >= monthStartStr && note.date <= monthEndStr else { return nil }
+                        return note
+                    }
+                    
+                    self?.monthScheduleNotes = filtered
+                }
+            }
+    }
+    
+    /// Stop month listeners
+    func stopMonthListening() {
+        monthShiftsListener?.remove()
+        monthShiftsListener = nil
+        monthTimeOffListener?.remove()
+        monthTimeOffListener = nil
+        monthRunnersListener?.remove()
+        monthRunnersListener = nil
+        monthNotesListener?.remove()
+        monthNotesListener = nil
+    }
+    
+    /// Restart month listeners
+    private func restartMonthListeners() {
+        startMonthListening()
+    }
+    
+    /// Get schedule note for a date from month data
+    func getMonthScheduleNote(forDate date: Date) -> String? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateStr = dateFormatter.string(from: date)
+        return monthScheduleNotes.first { $0.date == dateStr }?.note
     }
 }

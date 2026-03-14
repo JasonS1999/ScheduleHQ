@@ -121,6 +121,20 @@ final class TimeOffManager: ObservableObject {
             .sorted { $0.date < $1.date }
     }
 
+    /// Vacation weeks used, computed from approved vacation entries (40 h = 1 week)
+    var vacationWeeksUsed: Int {
+        var seenDates: Set<String> = []
+        var totalHours = 0
+        for entry in allTimeOff where entry.timeOffType == .vacation && entry.status == .approved {
+            let dateKey = Calendar.current.startOfDay(for: entry.date)
+            let dedupeKey = "\(entry.employeeId)_\(dateKey.timeIntervalSince1970)"
+            guard !seenDates.contains(dedupeKey) else { continue }
+            seenDates.insert(dedupeKey)
+            totalHours += entry.hours
+        }
+        return totalHours / 40
+    }
+
     // MARK: - Grouped Computed Properties
 
     /// Pending requests grouped by vacationGroupId

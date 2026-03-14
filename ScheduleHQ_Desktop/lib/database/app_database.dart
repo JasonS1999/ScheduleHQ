@@ -40,7 +40,9 @@ Future<void> _onCreate(Database db, int version) async {
       inventoryDay INTEGER NOT NULL DEFAULT 0,
       scheduleStartDay INTEGER NOT NULL DEFAULT 0,
       blockOverlaps INTEGER NOT NULL DEFAULT 0,
-      autoSyncEnabled INTEGER NOT NULL DEFAULT 0
+      autoSyncEnabled INTEGER NOT NULL DEFAULT 0,
+      requestDeadlineEnabled INTEGER NOT NULL DEFAULT 0,
+      requestDeadlineDay INTEGER NOT NULL DEFAULT 15
     )
   ''');
 
@@ -392,7 +394,7 @@ class AppDatabase {
 
     _db = await openDatabase(
       path,
-      version: 37,
+      version: 38,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -993,6 +995,11 @@ class AppDatabase {
             await db.execute('PRAGMA foreign_keys=ON');
             log('Migration 37: Removed legacy name column from employees', name: 'AppDatabase');
           }
+        }
+        if (oldVersion < 38) {
+          await db.execute('ALTER TABLE settings ADD COLUMN requestDeadlineEnabled INTEGER NOT NULL DEFAULT 0');
+          await db.execute('ALTER TABLE settings ADD COLUMN requestDeadlineDay INTEGER NOT NULL DEFAULT 15');
+          log('Migration 38: Added request deadline columns to settings', name: 'AppDatabase');
         }
       },
     );

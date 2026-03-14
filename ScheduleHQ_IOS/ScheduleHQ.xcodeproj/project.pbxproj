@@ -32,6 +32,7 @@
 		8A23DE6CCA08BAA24EE22D9C /* OfflineQueueManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */; };
 		9999D6B1E8B6550EC7F1DB25 /* AppUser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0307FE788D9CE086C375A92 /* AppUser.swift */; };
 		A8251BCD82DAADD4DF676BED /* TimeOffRequestCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFB889FFC9E86868F043952 /* TimeOffRequestCard.swift */; };
+		B46377E54B49DFF42C54E7A9 /* MonthCalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4388E9FE042EA731F2A399D4 /* MonthCalendarView.swift */; };
 		BE1ACAFBC8D3946E8C00B4E6 /* DayTeamScheduleSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8D6CAE99B7A0FB9D43907C9 /* DayTeamScheduleSheet.swift */; };
 		C86EDA36CDD1865C119F0CF1 /* EmployeeCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */; };
 		CBED82AEE8178E0DB896A205 /* LeaderboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D0CF0733E13F8D52429A8C1 /* LeaderboardView.swift */; };
@@ -46,6 +47,7 @@
 		E592F50A830F1D2064DE8CCC /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A86F846211FE53EF8CBE563 /* MainTabView.swift */; };
 		F4C25B981F6BE6EA8B181E62 /* ScheduleHQApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DB78F4FF757782641B82F7 /* ScheduleHQApp.swift */; };
 		F58AD54AF512C5A7DAE8F586 /* LeaderboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E78B2B17DE3DEEEB5849AB56 /* LeaderboardManager.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* ManagerSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6071829A1B2C3A4B5C6 /* ManagerSettingsProvider.swift */; };
 		FED0913D8BD596B6076699B2 /* ShiftCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87C97A32247DDD600B3359BE /* ShiftCard.swift */; };
 /* End PBXBuildFile section */
 
@@ -58,8 +60,10 @@
 		3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmployeeCache.swift; sourceTree = "<group>"; };
 		3DF510E566A734950B4C51D6 /* TimeOffEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffEntry.swift; sourceTree = "<group>"; };
 		3E039007796C297B7AC53558 /* TimeOffManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOffManager.swift; sourceTree = "<group>"; };
+		D4E5F6071829A1B2C3A4B5C6 /* ManagerSettingsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagerSettingsProvider.swift; sourceTree = "<group>"; };
 		3F1A23909951E3C4CE3B0317 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		42165C70E1E92C97580E9F0C /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		4388E9FE042EA731F2A399D4 /* MonthCalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonthCalendarView.swift; sourceTree = "<group>"; };
 		4CD6EA375E4CC67F83AA10D2 /* AlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertManager.swift; sourceTree = "<group>"; };
 		4D0CF0733E13F8D52429A8C1 /* LeaderboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeaderboardView.swift; sourceTree = "<group>"; };
 		4E235CCB563A79E438E41B6F /* ShiftManagerReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShiftManagerReport.swift; sourceTree = "<group>"; };
@@ -109,6 +113,7 @@
 			isa = PBXGroup;
 			children = (
 				E8D6CAE99B7A0FB9D43907C9 /* DayTeamScheduleSheet.swift */,
+				4388E9FE042EA731F2A399D4 /* MonthCalendarView.swift */,
 				AAEAB20480BFF2ECA17B060F /* ScheduleView.swift */,
 			);
 			path = Schedule;
@@ -155,6 +160,7 @@
 				3F1A23909951E3C4CE3B0317 /* AuthManager.swift */,
 				3DC9D9426D9A4A898BD8FF1D /* EmployeeCache.swift */,
 				E78B2B17DE3DEEEB5849AB56 /* LeaderboardManager.swift */,
+				D4E5F6071829A1B2C3A4B5C6 /* ManagerSettingsProvider.swift */,
 				99A6F9F5446FEED24918475E /* OfflineQueueManager.swift */,
 				E989165773E01AAD329A138E /* ProfileImageService.swift */,
 				8FC631F38D5D08E18B4AE4EA /* ScheduleManager.swift */,
@@ -345,7 +351,9 @@
 				CBED82AEE8178E0DB896A205 /* LeaderboardView.swift in Sources */,
 				3D53801AD2E9F47AB2C8A08B /* LoginView.swift in Sources */,
 				E592F50A830F1D2064DE8CCC /* MainTabView.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* ManagerSettingsProvider.swift in Sources */,
 				DA4BD14CCA246E564BB43F77 /* MetricLeaderboardView.swift in Sources */,
+				B46377E54B49DFF42C54E7A9 /* MonthCalendarView.swift in Sources */,
 				07F3603C545B193C34FA82F6 /* MyMetricsView.swift in Sources */,
 				5F9029B115770887D39C3473 /* NetworkMonitor.swift in Sources */,
 				8A23DE6CCA08BAA24EE22D9C /* OfflineQueueManager.swift in Sources */,
@@ -392,7 +400,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schedulehq.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
@@ -539,7 +547,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schedulehq.ios;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;

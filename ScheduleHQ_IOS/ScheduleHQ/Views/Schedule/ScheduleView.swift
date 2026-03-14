@@ -5,67 +5,100 @@ struct ScheduleView: View {
     @ObservedObject private var scheduleManager = ScheduleManager.shared
     @Environment(\.colorScheme) private var colorScheme
     
+    // View mode toggle
+    @State private var viewMode: ScheduleViewMode = .week
+    
     // State for team schedule sheet
     @State private var teamSchedulePresentation: TeamSchedulePresentation?
+
+    // Horizontal drag offset for live-swipe week navigation
+    @State private var dragOffset: CGFloat = 0
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background gradient - lighter and more vibrant
-                AppBackgroundGradient()
-                    .ignoresSafeArea()
-                
-                Group {
-                    if scheduleManager.isLoading {
-                        loadingView
-                    } else {
-                        scheduleList
-                    }
-                }
-            }
-            .navigationTitle("Schedule")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItemGroup(placement: .principal) {
-                    weekNavigationToolbar
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    if !scheduleManager.isViewingCurrentWeek {
-                        todayButton
-                    }
-                }
-            }
-            .refreshable {
-                await scheduleManager.refresh()
-            }
-            .gesture(
-                DragGesture(minimumDistance: 50, coordinateSpace: .local)
-                    .onEnded { value in
-                        // Swipe left (negative x) = next week
-                        // Swipe right (positive x) = previous week
-                        let horizontalAmount = value.translation.width
-                        let verticalAmount = value.translation.height
-                        
-                        // Only trigger if horizontal swipe is dominant
-                        if abs(horizontalAmount) > abs(verticalAmount) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if horizontalAmount < 0 {
-                                    // Swipe left - go to next week
-                                    scheduleManager.goToNextWeek()
-                                } else {
-                                    // Swipe right - go to previous week
-                                    scheduleManager.goToPreviousWeek()
-                                }
+            VStack(spacing: 0) {
+                scheduleControlBar
+
+                ZStack {
+                    AppBackgroundGradient()
+                        .ignoresSafeArea()
+
+                    Group {
+                        if viewMode == .week {
+                            if scheduleManager.isLoading {
+                                loadingView
+                            } else {
+                                swipeableWeekContent
+                            }
+                        } else {
+                            if scheduleManager.isMonthLoading {
+                                loadingView
+                            } else {
+                                MonthCalendarView()
                             }
                         }
                     }
-            )
+                }
+            }
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .refreshable {
+                await scheduleManager.refresh()
+            }
+            .onChange(of: viewMode) { newMode in
+                if newMode == .month {
+                    scheduleManager.startMonthListening()
+                } else {
+                    scheduleManager.stopMonthListening()
+                }
+            }
             .sheet(item: $teamSchedulePresentation) { presentation in
                 DayTeamScheduleSheet(date: presentation.date, teamShifts: presentation.shifts, dailyNote: presentation.dailyNote)
             }
         }
+    }
+
+    // MARK: - Schedule Control Bar
+
+    private var scheduleControlBar: some View {
+        VStack(alignment: .leading, spacing: AppTheme.Spacing.xs) {
+            // Row 1: Title + Picker only — Today moved to Row 2 to prevent hyphenation
+            HStack(spacing: AppTheme.Spacing.md) {
+                Text("Schedule")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundStyle(AppTheme.Colors.textPrimary)
+
+                Spacer()
+
+                Picker("View", selection: $viewMode) {
+                    ForEach(ScheduleViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 130)
+            }
+
+            // Row 2: Week navigation centered with Today on the right
+            if viewMode == .week {
+                HStack {
+                    // Non-interactive mirror of Today button to keep nav perfectly centered
+                    todayButton
+                        .opacity(0)
+                        .allowsHitTesting(false)
+                    Spacer()
+                    weekNavigationToolbar
+                    Spacer()
+                    todayButton
+                        .opacity(scheduleManager.isViewingCurrentWeek ? 0 : 1)
+                        .allowsHitTesting(!scheduleManager.isViewingCurrentWeek)
+                }
+            }
+        }
+        .padding(.horizontal, AppTheme.Spacing.lg)
+        .padding(.top, AppTheme.Spacing.sm)
+        .padding(.bottom, AppTheme.Spacing.sm)
     }
     
     // MARK: - Loading View
@@ -94,6 +127,7 @@ struct ScheduleView: View {
                 .font(AppTheme.Typography.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.white)
+                .lineLimit(1)
                 .padding(.horizontal, AppTheme.Spacing.md)
                 .padding(.vertical, AppTheme.Spacing.sm)
                 .background(
@@ -101,6 +135,7 @@ struct ScheduleView: View {
                         .fill(AppTheme.Gradients.primary)
                 )
         }
+        .fixedSize()
     }
     
     // MARK: - Week Navigation
@@ -145,21 +180,70 @@ struct ScheduleView: View {
         }
     }
     
-    // MARK: - Schedule List
-    
-    private var scheduleList: some View {
+    // MARK: - Swipeable Week Content
+
+    private var swipeableWeekContent: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let prevStart = scheduleManager.currentWeekStart.previousWeekStart
+            let nextStart = scheduleManager.currentWeekStart.nextWeekStart
+
+            HStack(spacing: 0) {
+                weekPanel(for: prevStart, days: scheduleManager.shiftsByDate(for: prevStart), showSummary: false)
+                    .frame(width: w)
+                weekPanel(for: scheduleManager.currentWeekStart, days: scheduleManager.shiftsByDate, showSummary: true)
+                    .frame(width: w)
+                weekPanel(for: nextStart, days: scheduleManager.shiftsByDate(for: nextStart), showSummary: false)
+                    .frame(width: w)
+            }
+            .offset(x: -w + dragOffset)
+            .gesture(
+                DragGesture(minimumDistance: 10)
+                    .onChanged { value in
+                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        dragOffset = value.translation.width
+                    }
+                    .onEnded { value in
+                        let threshold = w * 0.35
+                        if value.translation.width < -threshold {
+                            withAnimation(.easeOut(duration: 0.25)) { dragOffset = -w }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                scheduleManager.goToNextWeek()
+                                dragOffset = 0
+                            }
+                        } else if value.translation.width > threshold {
+                            withAnimation(.easeOut(duration: 0.25)) { dragOffset = w }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                                scheduleManager.goToPreviousWeek()
+                                dragOffset = 0
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { dragOffset = 0 }
+                        }
+                    }
+            )
+        }
+    }
+
+    // MARK: - Week Panel
+
+    private func weekPanel(
+        for weekStart: Date,
+        days: [(date: Date, shifts: [Shift], timeOff: [TimeOffEntry])],
+        showSummary: Bool
+    ) -> some View {
         ScrollView {
             LazyVStack(spacing: AppTheme.Spacing.md) {
-                // Week summary card at the top
-                weekSummaryCard
-                    .padding(.horizontal, AppTheme.Spacing.lg)
-                    .padding(.top, AppTheme.Spacing.sm)
-                
-                // Combined day cards - date + shift info in one card
-                ForEach(scheduleManager.shiftsByDate, id: \.date) { dayData in
+                if showSummary {
+                    weekSummaryCard
+                        .padding(.horizontal, AppTheme.Spacing.lg)
+                        .padding(.top, AppTheme.Spacing.sm)
+                }
+
+                ForEach(days, id: \.date) { dayData in
                     let runnerInfo = scheduleManager.isCurrentUserRunnerForDate(dayData.date)
                     let dailyNote = scheduleManager.getScheduleNote(forDate: dayData.date)
-                    
+
                     CombinedDayCard(
                         date: dayData.date,
                         shifts: dayData.shifts,
@@ -188,7 +272,7 @@ struct ScheduleView: View {
             .padding(.bottom, AppTheme.Spacing.xxl)
         }
     }
-    
+
     // MARK: - Week Summary Card
     
     private var weekSummaryCard: some View {

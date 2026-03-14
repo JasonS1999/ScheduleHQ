@@ -10,6 +10,7 @@ struct ProfileView: View {
     @ObservedObject private var authManager = AuthManager.shared
     @ObservedObject private var timeOffManager = TimeOffManager.shared
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    @ObservedObject private var managerSettings = ManagerSettingsProvider.shared
     
     private let alertManager = AlertManager.shared
     private let profileImageService = ProfileImageService.shared
@@ -26,13 +27,15 @@ struct ProfileView: View {
                         // Profile header
                         profileHeader
                         
-                        // Vacation balance card
-                        if let employee = authManager.employee {
-                            VacationBalanceCard(employee: employee)
+                        // Vacation balance card (only for eligible employees)
+                        if let employee = authManager.employee, employee.vacationWeeksAllowed > 0 {
+                            VacationBalanceCard(employee: employee, vacationWeeksUsed: timeOffManager.vacationWeeksUsed)
                         }
-                        
-                        // PTO summary card
-                        if let summary = timeOffManager.currentTrimesterSummary {
+
+                        // PTO summary card (only for job codes with PTO enabled)
+                        if let summary = timeOffManager.currentTrimesterSummary,
+                           let jobCode = authManager.employee?.jobCode,
+                           managerSettings.hasPTO(forJobCode: jobCode) {
                             PTOSummaryCard(summary: summary)
                         }
                         
@@ -231,7 +234,12 @@ struct ProfileView: View {
 
 struct VacationBalanceCard: View {
     let employee: Employee
-    
+    let vacationWeeksUsed: Int
+
+    private var vacationWeeksRemaining: Int {
+        max(0, employee.vacationWeeksAllowed - vacationWeeksUsed)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
@@ -241,11 +249,11 @@ struct VacationBalanceCard: View {
                 Text("Vacation Balance")
                     .fontWeight(.semibold)
             }
-            
+
             // Stats
             HStack {
                 VStack(spacing: 4) {
-                    Text("\(employee.vacationWeeksUsed)")
+                    Text("\(vacationWeeksUsed)")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundStyle(.secondary)
@@ -254,9 +262,9 @@ struct VacationBalanceCard: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
-                
+
                 VStack(spacing: 4) {
-                    Text("\(employee.vacationWeeksRemaining)")
+                    Text("\(vacationWeeksRemaining)")
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundStyle(.blue)

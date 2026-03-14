@@ -38,6 +38,19 @@ struct Shift: Codable, Identifiable, Equatable {
         return "\(formatter.string(from: startTime)) - \(formatter.string(from: endTime))"
     }
     
+    /// Compact time range for calendar cells (e.g., "6-2", "10-6", "2-10")
+    var compactTimeRange: String {
+        let calendar = Calendar.current
+        let startHour = calendar.component(.hour, from: startTime)
+        let endHour = calendar.component(.hour, from: endTime)
+        
+        // Use 12-hour format without AM/PM
+        let startDisplay = startHour > 12 ? startHour - 12 : (startHour == 0 ? 12 : startHour)
+        let endDisplay = endHour > 12 ? endHour - 12 : (endHour == 0 ? 12 : endHour)
+        
+        return "\(startDisplay)-\(endDisplay)"
+    }
+    
     /// Check if this shift is on the same day as a given date
     func isOnDate(_ targetDate: Date) -> Bool {
         Calendar.current.isDate(startTime, inSameDayAs: targetDate)
